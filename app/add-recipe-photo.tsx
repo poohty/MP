@@ -19,6 +19,7 @@ export default function AddRecipePhotoScreen() {
   const [extractedText, setExtractedText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [extractionProgress, setExtractionProgress] = useState('');
 
   const categoryOptions = [
     { label: 'Breakfast', value: 'Breakfast' },
@@ -40,7 +41,7 @@ export default function AddRecipePhotoScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
-      quality: 1,
+      quality: 0.7,
     });
     
     if (!result.canceled) {
@@ -60,7 +61,7 @@ export default function AddRecipePhotoScreen() {
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       aspect: [4, 3],
-      quality: 1,
+      quality: 0.7,
     });
     
     if (!result.canceled) {
@@ -72,117 +73,155 @@ export default function AddRecipePhotoScreen() {
   const extractTextFromImage = async (uri: string) => {
     try {
       setIsExtracting(true);
+      setExtractionProgress('Converting image...');
+      console.log('🔍 Starting recipe photo extraction...');
       
-      // Convert image to base64
       const response = await fetch(uri);
       const blob = await response.blob();
       const reader = new FileReader();
       
       reader.onload = async () => {
-        const base64data = reader.result?.toString().split(',')[1];
-        
-        if (!base64data) {
-          throw new Error('Failed to convert image to base64');
-        }
-        
-        // Call AI endpoint to extract text
-        const aiResponse = await fetch('https://toolkit.rork.com/text/llm/', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messages: [
-              {
-                role: 'system',
-                content: '🚨 ULTRA-PRECISE RECIPE EXTRACTION & CATEGORIZATION EXPERT 🚨\n\nYou are the MOST ACCURATE recipe content extractor. Your job is to extract ONLY the complete ingredients and step-by-step instructions from recipe images, then categorize with ABSOLUTE PRECISION.\n\n📋 EXTRACTION REQUIREMENTS:\n\n✅ EXTRACT EXACTLY (MANDATORY):\n\n🥘 INGREDIENTS SECTION:\n- Complete list of ALL ingredients with EXACT measurements\n- Include quantities, measurements, and any sub-sections\n- Format: "- [ingredient with exact measurement and preparation notes]"\n- Include ALL ingredient lists (for sauce, marinade, etc.)\n- Do NOT summarize or alter ingredients\n\n👨‍🍳 INSTRUCTIONS SECTION:\n- Step-by-step cooking instructions (numbered sequentially)\n- Each step exactly as described on the page\n- Include temperatures, times, and cooking methods\n- Do NOT combine or summarize steps\n- Format: "1. [detailed, actionable cooking step]"\n\n❌ DO NOT EXTRACT:\n- Personal stories, blog content, author bios\n- Nutritional information or disclaimers\n- Comments, reviews, ratings\n- Advertisement content\n- Social sharing buttons\n- Related recipe suggestions\n\n🚨 CATEGORIZATION RULES (ULTRA-STRICT):\n\n🥗 SALADS & SOUPS (HIGHEST PRIORITY - CHECK FIRST):\n- ANY recipe with: soup, stew, chili, bisque, chowder, broth, pho, ramen, gazpacho, minestrone, gumbo, borscht\n- ALL liquid-based dishes served in bowls\n- ALL salads (caesar, greek, cobb, coleslaw, pasta salad, etc.)\n\n🥞 BREAKFAST:\n- Pancakes, waffles, French toast, oatmeal, granola, breakfast bowls, egg dishes, muffins\n\n🍤 APPETIZER:\n- Small plates, dips, wings, sliders, finger foods\n\n🍖 MAIN COURSE:\n- Solid entrees (NOT liquid-based), meat dishes, pasta (NOT soup-like), pizza, burgers\n\n🍰 DESSERTS:\n- Cakes, cookies, pies, ice cream, puddings, sweet treats\n\n🎯 FORMAT RESPONSE AS:\nRECIPE TEXT:\n\nINGREDIENTS:\n- [exact ingredient with measurement]\n- [exact ingredient with measurement]\n\nINSTRUCTIONS:\n1. [detailed cooking step with temperatures/times]\n2. [detailed cooking step with temperatures/times]\n\nSUGGESTED CATEGORY: [category name]'
-              },
-              {
-                role: 'user',
-                content: [
-                  {
-                    type: 'text',
-                    text: '🚨 ULTRA-PRECISE RECIPE EXTRACTION & CATEGORIZATION\n\nExtract the COMPLETE recipe from this image with MAXIMUM ACCURACY. Focus ONLY on ingredients and cooking instructions.\n\n📋 CRITICAL EXTRACTION MISSION:\n\n🥘 INGREDIENTS EXTRACTION:\n- Find and extract the COMPLETE list of ALL ingredients\n- Include EXACT quantities, measurements, and preparation notes\n- Include ALL ingredient sub-sections (for sauce, marinade, etc.)\n- Do NOT summarize or alter any ingredient\n- Format each as: "- [ingredient with exact measurement]"\n\n👨‍🍳 INSTRUCTIONS EXTRACTION:\n- Find and extract ALL step-by-step cooking instructions\n- Number each step exactly as described (1, 2, 3...)\n- Include temperatures, cooking times, and methods\n- Do NOT combine or summarize steps\n- Each step must be actionable and complete\n\n🚨 CATEGORIZATION PROTOCOL (ULTRA-STRICT):\n\n1. 🥗 SOUP DETECTION (HIGHEST PRIORITY):\n   Scan for: soup, stew, chili, bisque, chowder, broth, pho, ramen, gazpacho, minestrone, gumbo, borscht\n   If ANY found → "Salads & Soups" (MANDATORY)\n\n2. 🥗 SALAD DETECTION:\n   Scan for: salad, caesar, greek, cobb, coleslaw\n   If found → "Salads & Soups"\n\n3. 🥞 BREAKFAST DETECTION:\n   Scan for: pancake, waffle, french toast, oatmeal, granola, breakfast, egg, omelet, muffin\n   If found → "Breakfast"\n\n4. 🍰 DESSERT DETECTION:\n   Scan for: cake, cookie, pie, dessert, sweet, chocolate, pudding, ice cream\n   If found → "Desserts"\n\n5. 🍤 APPETIZER DETECTION:\n   Scan for: appetizer, dip, wings, slider, finger food\n   If found → "Appetizer"\n\n6. DEFAULT: "Main Course"\n\n🎯 MANDATORY FORMAT:\nRECIPE TEXT:\n\nINGREDIENTS:\n- [exact ingredient with measurement]\n- [exact ingredient with measurement]\n\nINSTRUCTIONS:\n1. [detailed cooking step with temperatures/times]\n2. [detailed cooking step with temperatures/times]\n\nSUGGESTED CATEGORY: [category name]\n\n🚨 CRITICAL: Extract ONLY the recipe content. Ignore all other text on the image.'
-                  },
-                  {
-                    type: 'image',
-                    image: base64data
-                  }
-                ]
-              }
-            ]
-          }),
-        });
-        
-        const data = await aiResponse.json();
-        const completion = data.completion || 'Failed to extract text from image';
-        
-        // Parse AI response for category suggestion with enhanced validation
-        const categoryMatch = completion.match(/SUGGESTED CATEGORY:\s*(Breakfast|Appetizer|Salads & Soups|Main Course|Desserts)/i);
-        if (categoryMatch) {
-          const suggestedCategory = categoryMatch[1] as RecipeCategory;
-          setCategory(suggestedCategory);
-          console.log(`🤖 AI suggested category: ${suggestedCategory}`);
+        try {
+          const base64data = reader.result?.toString().split(',')[1];
           
-          // Additional validation for soup detection in extracted text
-          const recipeTextMatch = completion.match(/RECIPE TEXT:\s*([\s\S]*?)(?=\n\nSUGGESTED CATEGORY:|$)/i);
-          const recipeText = recipeTextMatch ? recipeTextMatch[1].trim().toLowerCase() : '';
-          
-          const soupKeywords = ['soup', 'stew', 'chili', 'bisque', 'chowder', 'broth', 'pho', 'ramen', 'gazpacho', 'minestrone'];
-          const hasSoupKeyword = soupKeywords.some(keyword => recipeText.includes(keyword));
-          
-          if (hasSoupKeyword && suggestedCategory !== 'Salads & Soups') {
-            console.log(`🚨 SOUP OVERRIDE: Found soup keyword in recipe text, forcing category to Salads & Soups`);
-            setCategory('Salads & Soups');
+          if (!base64data) {
+            throw new Error('Failed to convert image to base64');
           }
-        }
-        
-        // Extract recipe text (remove category suggestion from display)
-        const recipeTextMatch = completion.match(/RECIPE TEXT:\s*([\s\S]*?)(?=\n\nSUGGESTED CATEGORY:|$)/i);
-        let recipeText = recipeTextMatch ? recipeTextMatch[1].trim() : completion;
-        
-        // Ensure recipe text has proper formatting for ingredients and instructions
-        if (recipeText && !recipeText.includes('INGREDIENTS:') && !recipeText.includes('INSTRUCTIONS:')) {
-          // If the AI didn't format properly, try to structure it
-          const lines = recipeText.split('\n').filter((line: string) => line.trim());
-          let formattedText = '';
-          let inIngredients = false;
-          let inInstructions = false;
           
-          for (const line of lines) {
-            const trimmedLine = line.trim();
-            if (trimmedLine.match(/^\d+\./)) {
-              if (!inInstructions) {
-                formattedText += '\n\nINSTRUCTIONS:\n';
-                inInstructions = true;
-              }
-              formattedText += trimmedLine + '\n';
-            } else if (trimmedLine.startsWith('-') || trimmedLine.startsWith('•')) {
-              if (!inIngredients && !inInstructions) {
-                formattedText += 'INGREDIENTS:\n';
-                inIngredients = true;
-              }
-              formattedText += trimmedLine + '\n';
-            } else {
-              formattedText += trimmedLine + '\n';
+          console.log('✅ Image converted to base64');
+          setExtractionProgress('Analyzing recipe...');
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => {
+            controller.abort();
+            console.log('⏰ Request timeout after 45 seconds');
+          }, 45000);
+          
+          console.log('🤖 Sending to AI for extraction...');
+          const aiResponse = await fetch('https://toolkit.rork.com/text/llm/', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            signal: controller.signal,
+            body: JSON.stringify({
+              messages: [
+                {
+                  role: 'system',
+                  content: 'Extract recipe from image. Return:\nINGREDIENTS:\n- [each ingredient]\n\nINSTRUCTIONS:\n1. [each step]\n\nCATEGORY: [Breakfast|Appetizer|Salads & Soups|Main Course|Desserts]\n\nFor category: soup/stew/salad=Salads & Soups, sweet=Desserts, eggs/pancakes=Breakfast, small plates=Appetizer, else=Main Course'
+                },
+                {
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'Extract ingredients, instructions, and suggest category from this recipe photo'
+                    },
+                    {
+                      type: 'image',
+                      image: base64data
+                    }
+                  ]
+                }
+              ]
+            }),
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (!aiResponse.ok) {
+            throw new Error(`AI API error: ${aiResponse.status}`);
+          }
+          
+          console.log('✅ Received AI response');
+          setExtractionProgress('Processing results...');
+          
+          const data = await aiResponse.json();
+          const completion = data.completion || 'Failed to extract text from image';
+          console.log('📝 Extraction complete');
+          
+          const categoryMatch = completion.match(/CATEGORY:\s*(Breakfast|Appetizer|Salads & Soups|Main Course|Desserts)/i);
+          if (categoryMatch) {
+            const suggestedCategory = categoryMatch[1] as RecipeCategory;
+            setCategory(suggestedCategory);
+            console.log(`🤖 AI suggested category: ${suggestedCategory}`);
+            
+            const recipeTextMatch = completion.match(/RECIPE TEXT:\s*([\s\S]*?)(?=\n\nCATEGORY:|$)/i);
+            const recipeText = recipeTextMatch ? recipeTextMatch[1].trim().toLowerCase() : '';
+            
+            const soupKeywords = ['soup', 'stew', 'chili', 'bisque', 'chowder', 'broth', 'pho', 'ramen', 'gazpacho', 'minestrone'];
+            const hasSoupKeyword = soupKeywords.some(keyword => recipeText.includes(keyword));
+            
+            if (hasSoupKeyword && suggestedCategory !== 'Salads & Soups') {
+              console.log(`🚨 SOUP OVERRIDE: Found soup keyword, forcing category to Salads & Soups`);
+              setCategory('Salads & Soups');
             }
           }
           
-          if (formattedText.trim()) {
-            recipeText = formattedText.trim();
+          const recipeTextMatch = completion.match(/RECIPE TEXT:\s*([\s\S]*?)(?=\n\nCATEGORY:|$)/i);
+          let recipeText = recipeTextMatch ? recipeTextMatch[1].trim() : completion;
+          
+          if (recipeText && !recipeText.includes('INGREDIENTS:') && !recipeText.includes('INSTRUCTIONS:')) {
+            const lines = recipeText.split('\n').filter((line: string) => line.trim());
+            let formattedText = '';
+            let inIngredients = false;
+            let inInstructions = false;
+            
+            for (const line of lines) {
+              const trimmedLine = line.trim();
+              if (trimmedLine.match(/^\d+\./)) {
+                if (!inInstructions) {
+                  formattedText += '\n\nINSTRUCTIONS:\n';
+                  inInstructions = true;
+                }
+                formattedText += trimmedLine + '\n';
+              } else if (trimmedLine.startsWith('-') || trimmedLine.startsWith('•')) {
+                if (!inIngredients && !inInstructions) {
+                  formattedText += 'INGREDIENTS:\n';
+                  inIngredients = true;
+                }
+                formattedText += trimmedLine + '\n';
+              } else {
+                formattedText += trimmedLine + '\n';
+              }
+            }
+            
+            if (formattedText.trim()) {
+              recipeText = formattedText.trim();
+            }
+          }
+          
+          setExtractedText(recipeText);
+          setIsExtracting(false);
+          setExtractionProgress('');
+          
+          console.log(`✅ Successfully extracted recipe content (${recipeText.length} chars) and categorized as: ${category}`);
+          
+          Alert.alert(
+            '✅ Extraction Complete',
+            'Recipe text has been successfully extracted from the photo. Please review and save.',
+            [{ text: 'OK' }]
+          );
+        } catch (error) {
+          console.error('Error in onload handler:', error);
+          setExtractedText('Failed to extract text from image. Please try again or enter the recipe manually.');
+          setIsExtracting(false);
+          setExtractionProgress('');
+          
+          if (error instanceof Error && error.name === 'AbortError') {
+            Alert.alert(
+              'Request Timeout',
+              'The extraction took too long. Please try again with a clearer or smaller photo.',
+              [{ text: 'OK' }]
+            );
+          } else {
+            Alert.alert(
+              'Extraction Failed',
+              'Failed to extract text from image. Please try again or enter the recipe manually.',
+              [{ text: 'OK' }]
+            );
           }
         }
-        
-        setExtractedText(recipeText);
-        setIsExtracting(false);
-        
-        console.log(`✅ Successfully extracted recipe content (${recipeText.length} chars) and categorized as: ${category}`);
-        
-        Alert.alert(
-          'Extraction Complete',
-          'Recipe text has been successfully extracted. Please review and save.',
-          [{ text: 'OK' }]
-        );
       };
       
       reader.readAsDataURL(blob);
@@ -190,6 +229,7 @@ export default function AddRecipePhotoScreen() {
       console.error('Error extracting text:', error);
       setExtractedText('Failed to extract text from image. Please try again or enter the recipe manually.');
       setIsExtracting(false);
+      setExtractionProgress('');
       Alert.alert(
         'Extraction Failed',
         'Failed to extract text from image. Please try again or enter the recipe manually.',
@@ -248,7 +288,7 @@ export default function AddRecipePhotoScreen() {
       await addRecipe({
         name: name.trim(),
         category,
-        imageUri: thumbnailUri || imageUri || undefined, // Use thumbnail if provided, otherwise original image
+        imageUri: thumbnailUri || imageUri || undefined,
         content: extractedText,
       });
       
@@ -314,7 +354,6 @@ export default function AddRecipePhotoScreen() {
           onSelect={(value) => setCategory(value as RecipeCategory)}
         />
         
-        {/* Thumbnail Upload Section */}
         <View style={styles.thumbnailSection}>
           <Text style={styles.thumbnailLabel}>Recipe Thumbnail (Optional)</Text>
           <Text style={styles.thumbnailDescription}>
@@ -358,7 +397,11 @@ export default function AddRecipePhotoScreen() {
         {isExtracting ? (
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingText}>Extracting recipe text...</Text>
-            <Text style={styles.loadingSubtext}>This may take a few moments</Text>
+            {extractionProgress ? (
+              <Text style={styles.loadingSubtext}>{extractionProgress}</Text>
+            ) : (
+              <Text style={styles.loadingSubtext}>This may take up to 30 seconds</Text>
+            )}
           </View>
         ) : extractedText ? (
           <View style={styles.textContainer}>
@@ -428,19 +471,23 @@ const styles = StyleSheet.create({
     right: 8,
   },
   loadingContainer: {
-    padding: 16,
+    padding: 20,
     alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    marginVertical: 16,
   },
   loadingText: {
-    color: Colors.textSecondary,
+    color: Colors.primary,
     fontSize: 16,
     fontWeight: '600',
+    marginBottom: 8,
   },
   loadingSubtext: {
     color: Colors.textSecondary,
     fontSize: 14,
-    marginTop: 8,
-    opacity: 0.7,
+    marginTop: 4,
+    textAlign: 'center',
   },
   textContainer: {
     marginTop: 16,
