@@ -177,6 +177,12 @@ export default function AddRecipePhotoScreen() {
         setIsExtracting(false);
         
         console.log(`✅ Successfully extracted recipe content (${recipeText.length} chars) and categorized as: ${category}`);
+        
+        Alert.alert(
+          'Extraction Complete',
+          'Recipe text has been successfully extracted. Please review and save.',
+          [{ text: 'OK' }]
+        );
       };
       
       reader.readAsDataURL(blob);
@@ -184,7 +190,11 @@ export default function AddRecipePhotoScreen() {
       console.error('Error extracting text:', error);
       setExtractedText('Failed to extract text from image. Please try again or enter the recipe manually.');
       setIsExtracting(false);
-      Alert.alert('Error', 'Failed to extract text from image. Please try again or enter the recipe manually.');
+      Alert.alert(
+        'Extraction Failed',
+        'Failed to extract text from image. Please try again or enter the recipe manually.',
+        [{ text: 'OK' }]
+      );
     }
   };
 
@@ -348,6 +358,7 @@ export default function AddRecipePhotoScreen() {
         {isExtracting ? (
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingText}>Extracting recipe text...</Text>
+            <Text style={styles.loadingSubtext}>This may take a few moments</Text>
           </View>
         ) : extractedText ? (
           <View style={styles.textContainer}>
@@ -423,6 +434,13 @@ const styles = StyleSheet.create({
   loadingText: {
     color: Colors.textSecondary,
     fontSize: 16,
+    fontWeight: '600',
+  },
+  loadingSubtext: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    marginTop: 8,
+    opacity: 0.7,
   },
   textContainer: {
     marginTop: 16,
