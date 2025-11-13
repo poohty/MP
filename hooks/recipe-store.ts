@@ -580,33 +580,81 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
         category?: RecipeCategory;
       } = {};
       
-      // Split by section headers
-      const sections = result.split(/\n(?=[A-Z][A-Z ]+:)/); // Split on lines that start with CAPS:
+      // More robust parsing - handle both section headers and single-line fields
+      const lines = result.split('\n');
+      let currentSection: string | null = null;
+      let sectionContent: string[] = [];
       
-      for (const section of sections) {
-        const lines = section.split('\n');
-        const header = lines[0]?.toUpperCase();
-        const content = lines.slice(1).join('\n').trim();
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const upperLine = line.toUpperCase();
         
-        if (header?.includes('INGREDIENTS')) {
+        // Check if this is a section header (INGREDIENTS:, INSTRUCTIONS:, etc.)
+        if (upperLine.match(/^[A-Z][A-Z ]*:/) && !line.startsWith(' ')) {
+          // Save previous section if exists
+          if (currentSection && sectionContent.length > 0) {
+            const content = sectionContent.join('\n').trim();
+            if (currentSection === 'INGREDIENTS') {
+              extractedData.ingredients = content;
+            } else if (currentSection === 'NUTRITIONAL' || currentSection === 'NUTRITION') {
+              extractedData.nutritionalFacts = content;
+            } else if (currentSection === 'TIMES' || currentSection === 'TIME') {
+              extractedData.times = content;
+            } else if (currentSection === 'INSTRUCTIONS' || currentSection === 'DIRECTIONS') {
+              extractedData.instructions = content;
+            }
+          }
+          
+          // Start new section
+          const colonIndex = line.indexOf(':');
+          const header = line.substring(0, colonIndex).toUpperCase().trim();
+          const valueAfterColon = line.substring(colonIndex + 1).trim();
+          
+          // Handle single-line fields (IMAGE: url, CATEGORY: name)
+          if (header === 'IMAGE') {
+            const imageUrl = valueAfterColon;
+            if (imageUrl && imageUrl !== 'Not available' && imageUrl !== 'NONE' && 
+                (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
+              console.log(`✅ Found IMAGE in AI response: ${imageUrl}`);
+              extractedData.imageUrl = imageUrl;
+            } else {
+              console.log(`⚠️ Invalid or missing IMAGE in AI response: ${imageUrl}`);
+            }
+            currentSection = null;
+            sectionContent = [];
+          } else if (header === 'CATEGORY') {
+            const category = valueAfterColon;
+            const validCategories: RecipeCategory[] = ['Breakfast', 'Appetizer', 'Salads & Soups', 'Main Course', 'Desserts'];
+            if (validCategories.includes(category as RecipeCategory)) {
+              console.log(`✅ Found CATEGORY in AI response: ${category}`);
+              extractedData.category = category as RecipeCategory;
+            } else {
+              console.log(`⚠️ Invalid CATEGORY in AI response: ${category}`);
+            }
+            currentSection = null;
+            sectionContent = [];
+          } else {
+            // Multi-line section (INGREDIENTS, INSTRUCTIONS, etc.)
+            currentSection = header;
+            sectionContent = valueAfterColon ? [valueAfterColon] : [];
+          }
+        } else if (currentSection) {
+          // Add to current section
+          sectionContent.push(line);
+        }
+      }
+      
+      // Save last section if exists
+      if (currentSection && sectionContent.length > 0) {
+        const content = sectionContent.join('\n').trim();
+        if (currentSection === 'INGREDIENTS') {
           extractedData.ingredients = content;
-        } else if (header?.includes('NUTRITIONAL') || header?.includes('NUTRITION')) {
+        } else if (currentSection === 'NUTRITIONAL' || currentSection === 'NUTRITION') {
           extractedData.nutritionalFacts = content;
-        } else if (header?.includes('TIME')) {
+        } else if (currentSection === 'TIMES' || currentSection === 'TIME') {
           extractedData.times = content;
-        } else if (header?.includes('INSTRUCTIONS') || header?.includes('DIRECTIONS')) {
+        } else if (currentSection === 'INSTRUCTIONS' || currentSection === 'DIRECTIONS') {
           extractedData.instructions = content;
-        } else if (header?.includes('IMAGE')) {
-          const imageUrl = content.trim();
-          if (imageUrl && imageUrl !== 'Not available' && imageUrl.startsWith('http')) {
-            extractedData.imageUrl = imageUrl;
-          }
-        } else if (header?.includes('CATEGORY')) {
-          const category = content.trim();
-          const validCategories: RecipeCategory[] = ['Breakfast', 'Appetizer', 'Salads & Soups', 'Main Course', 'Desserts'];
-          if (validCategories.includes(category as RecipeCategory)) {
-            extractedData.category = category as RecipeCategory;
-          }
         }
       }
       
@@ -848,23 +896,36 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
             
             // Use extracted image or fallback
             if (extractedContent.imageUrl) {
+              console.log(`🖼️ AI extracted image URL: ${extractedContent.imageUrl}`);
               // Test if the extracted image is actually loadable
               try {
                 const testResponse = await fetch(extractedContent.imageUrl, { method: 'HEAD' });
                 if (testResponse.ok) {
-                  finalRecipe.imageUri = extractedContent.imageUrl;
-                  console.log('✅ Successfully extracted and verified recipe image');
+                  const contentType = testResponse.headers.get('content-type');
+                  if (contentType && contentType.startsWith('image/')) {
+                    finalRecipe.imageUri = extractedContent.imageUrl;
+                    console.log(`✅ Successfully extracted and verified recipe image: ${extractedContent.imageUrl}`);
+                    console.log(`📸 Recipe "${recipe.name}" now has imageUri: ${finalRecipe.imageUri}`);
+                  } else {
+                    console.log(`⚠️ Extracted URL is not an image (${contentType}), generating fallback...`);
+                    finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
+                    console.log(`📸 Recipe "${recipe.name}" using fallback imageUri: ${finalRecipe.imageUri}`);
+                  }
                 } else {
-                  console.log('⚠️ Extracted image not loadable, generating fallback...');
+                  console.log(`⚠️ Extracted image not loadable (HTTP ${testResponse.status}), generating fallback...`);
                   finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
+                  console.log(`📸 Recipe "${recipe.name}" using fallback imageUri: ${finalRecipe.imageUri}`);
                 }
-              } catch {
-                console.log('⚠️ Error testing extracted image, generating fallback...');
+              } catch (err) {
+                console.log(`⚠️ Error testing extracted image:`, err);
+                console.log('⚠️ Generating fallback...');
                 finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
+                console.log(`📸 Recipe "${recipe.name}" using fallback imageUri: ${finalRecipe.imageUri}`);
               }
             } else {
               console.log('⚠️ No image found in extraction, generating fallback...');
               finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
+              console.log(`📸 Recipe "${recipe.name}" using fallback imageUri: ${finalRecipe.imageUri}`);
             }
           } else {
             console.log('⚠️ Recipe content extraction failed, using fallback image...');
