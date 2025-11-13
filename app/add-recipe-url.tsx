@@ -412,22 +412,18 @@ Return ONLY ONE category: Breakfast, Appetizer, Salads & Soups, Main Course, or 
     setIsLoading(true);
     try {
       console.log('🔄 Starting recipe save process...');
-      
-      console.log('🤖 Step 1: AI categorizing recipe...');
-      const aiCategory = await categorizeRecipeWithAI(name.trim(), url.trim());
-      
-      console.log(`✅ Category determined: ${aiCategory}`);
-      console.log('💾 Step 2: Saving recipe with full content extraction...');
+      console.log(`📁 User selected category: ${category}`);
+      console.log('💾 Saving recipe with user-selected category...');
       
       await addRecipe({
         name: name.trim(),
-        category: aiCategory,
+        category: category,
         url: url.trim(),
       });
       
       console.log('✅ Recipe saved successfully!');
       
-      Alert.alert('Success', `Recipe added successfully and categorized as "${aiCategory}"`, [
+      Alert.alert('Success', `Recipe added to "${category}" successfully!`, [
         { text: 'OK', onPress: () => router.back() }
       ]);
     } catch (error) {
