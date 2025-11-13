@@ -1066,7 +1066,12 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
     try {
       console.log('🔄 Starting image re-extraction for recipes without images...');
       
-      const recipesWithoutImages = recipes.filter(recipe => recipe.url && !recipe.imageUri);
+      // Get fresh recipes from storage
+      const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
+      const storedRecipes = await AsyncStorage.getItem(storageKey);
+      const currentRecipes = storedRecipes ? JSON.parse(storedRecipes) : [];
+      
+      const recipesWithoutImages = currentRecipes.filter((recipe: Recipe) => recipe.url && !recipe.imageUri);
       console.log(`📊 Found ${recipesWithoutImages.length} recipes without images`);
       
       if (recipesWithoutImages.length === 0) {
@@ -1076,6 +1081,7 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
       
       let successCount = 0;
       let failedCount = 0;
+      let workingRecipes = [...currentRecipes]; // Working copy that gets updated
       
       for (let i = 0; i < recipesWithoutImages.length; i++) {
         const recipe = recipesWithoutImages[i];
@@ -1085,40 +1091,42 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
           const imageUri = await extractRecipeImage(recipe.name, recipe.url!, 2); // 2 retries for re-extraction
           
           if (imageUri) {
-            // Update the recipe with the new image
-            const updatedRecipe = { ...recipe, imageUri };
-            const updatedRecipes = recipes.map(r => r.id === recipe.id ? updatedRecipe : r);
-            await saveRecipes(updatedRecipes);
-            
-            successCount++;
+            // Update the recipe with the new image in the working copy
+            workingRecipes = workingRecipes.map(r => 
+              r.id === recipe.id ? { ...r, imageUri } : r
+            );
             console.log(`✅ [${i + 1}/${recipesWithoutImages.length}] Successfully extracted image for: "${recipe.name}"`);
+            console.log(`   Image URL: ${imageUri.substring(0, 100)}...`);
+            successCount++;
           } else {
             // If extraction fails, generate a fallback image
             console.log(`⚠️ Extraction failed, generating fallback for: "${recipe.name}"`);
             const fallbackImage = await generateFallbackImage(recipe.name, recipe.category);
-            const updatedRecipe = { ...recipe, imageUri: fallbackImage };
-            const updatedRecipes = recipes.map(r => r.id === recipe.id ? updatedRecipe : r);
-            await saveRecipes(updatedRecipes);
-            
-            successCount++; // Count fallback as success since recipe now has an image
+            workingRecipes = workingRecipes.map(r => 
+              r.id === recipe.id ? { ...r, imageUri: fallbackImage } : r
+            );
             console.log(`✅ [${i + 1}/${recipesWithoutImages.length}] Generated fallback image for: "${recipe.name}"`);
+            console.log(`   Fallback URL: ${fallbackImage.substring(0, 100)}...`);
+            successCount++; // Count fallback as success since recipe now has an image
           }
         } catch (error) {
           // Even on error, try to generate a fallback
           try {
             console.log(`⚠️ Error occurred, generating fallback for: "${recipe.name}"`, error);
             const fallbackImage = await generateFallbackImage(recipe.name, recipe.category);
-            const updatedRecipe = { ...recipe, imageUri: fallbackImage };
-            const updatedRecipes = recipes.map(r => r.id === recipe.id ? updatedRecipe : r);
-            await saveRecipes(updatedRecipes);
-            
-            successCount++; // Count fallback as success
+            workingRecipes = workingRecipes.map(r => 
+              r.id === recipe.id ? { ...r, imageUri: fallbackImage } : r
+            );
             console.log(`✅ [${i + 1}/${recipesWithoutImages.length}] Generated fallback after error for: "${recipe.name}"`);
+            successCount++; // Count fallback as success
           } catch (fallbackError) {
             failedCount++;
             console.log(`❌ [${i + 1}/${recipesWithoutImages.length}] Complete failure for: "${recipe.name}"`, fallbackError);
           }
         }
+        
+        // Save after EACH update so changes persist
+        await saveRecipes(workingRecipes);
         
         // Shorter delay between requests for speed
         if (i < recipesWithoutImages.length - 1) {
@@ -1127,19 +1135,25 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
       }
       
       console.log(`🎉 Image re-extraction complete: ${successCount} success, ${failedCount} failed`);
+      console.log(`📊 Final check: ${workingRecipes.filter((r: Recipe) => r.imageUri).length} recipes now have images`);
       return { success: successCount, failed: failedCount };
     } catch (error) {
       console.error('❌ Error during image re-extraction:', error);
       return { success: 0, failed: 0 };
     }
-  }, [recipes, extractRecipeImage, saveRecipes, generateFallbackImage]);
+  }, [user?.id, extractRecipeImage, saveRecipes, generateFallbackImage]);
 
   // Force re-extract images for ALL recipes (including ones that already have images)
   const forceReExtractAllImages = useCallback(async () => {
     try {
       console.log('🚀 FORCE re-extracting images for ALL recipes with URLs...');
       
-      const recipesWithUrls = recipes.filter(recipe => recipe.url);
+      // Get fresh recipes from storage
+      const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
+      const storedRecipes = await AsyncStorage.getItem(storageKey);
+      const currentRecipes = storedRecipes ? JSON.parse(storedRecipes) : [];
+      
+      const recipesWithUrls = currentRecipes.filter((recipe: Recipe) => recipe.url);
       console.log(`📊 Found ${recipesWithUrls.length} recipes with URLs to re-extract`);
       
       if (recipesWithUrls.length === 0) {
@@ -1149,6 +1163,7 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
       
       let successCount = 0;
       let failedCount = 0;
+      let workingRecipes = [...currentRecipes]; // Working copy that gets updated
       
       for (let i = 0; i < recipesWithUrls.length; i++) {
         const recipe = recipesWithUrls[i];
@@ -1158,40 +1173,42 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
           const imageUri = await extractRecipeImage(recipe.name, recipe.url!, 3); // 3 retries for force extraction
           
           if (imageUri) {
-            // Update the recipe with the new image
-            const updatedRecipe = { ...recipe, imageUri };
-            const updatedRecipes = recipes.map(r => r.id === recipe.id ? updatedRecipe : r);
-            await saveRecipes(updatedRecipes);
-            
-            successCount++;
+            // Update the recipe with the new image in the working copy
+            workingRecipes = workingRecipes.map(r => 
+              r.id === recipe.id ? { ...r, imageUri } : r
+            );
             console.log(`✅ [${i + 1}/${recipesWithUrls.length}] Successfully FORCE extracted image for: "${recipe.name}"`);
+            console.log(`   Image URL: ${imageUri.substring(0, 100)}...`);
+            successCount++;
           } else {
             // If extraction fails, generate a fallback image
             console.log(`⚠️ FORCE extraction failed, generating fallback for: "${recipe.name}"`);
             const fallbackImage = await generateFallbackImage(recipe.name, recipe.category);
-            const updatedRecipe = { ...recipe, imageUri: fallbackImage };
-            const updatedRecipes = recipes.map(r => r.id === recipe.id ? updatedRecipe : r);
-            await saveRecipes(updatedRecipes);
-            
-            successCount++; // Count fallback as success
+            workingRecipes = workingRecipes.map(r => 
+              r.id === recipe.id ? { ...r, imageUri: fallbackImage } : r
+            );
             console.log(`✅ [${i + 1}/${recipesWithUrls.length}] Generated fallback after FORCE extraction for: "${recipe.name}"`);
+            console.log(`   Fallback URL: ${fallbackImage.substring(0, 100)}...`);
+            successCount++; // Count fallback as success
           }
         } catch (error) {
           // Even on error, try to generate a fallback
           try {
             console.log(`⚠️ FORCE extraction error, generating fallback for: "${recipe.name}"`, error);
             const fallbackImage = await generateFallbackImage(recipe.name, recipe.category);
-            const updatedRecipe = { ...recipe, imageUri: fallbackImage };
-            const updatedRecipes = recipes.map(r => r.id === recipe.id ? updatedRecipe : r);
-            await saveRecipes(updatedRecipes);
-            
-            successCount++; // Count fallback as success
+            workingRecipes = workingRecipes.map(r => 
+              r.id === recipe.id ? { ...r, imageUri: fallbackImage } : r
+            );
             console.log(`✅ [${i + 1}/${recipesWithUrls.length}] Generated fallback after FORCE error for: "${recipe.name}"`);
+            successCount++; // Count fallback as success
           } catch (fallbackError) {
             failedCount++;
             console.log(`❌ [${i + 1}/${recipesWithUrls.length}] Complete FORCE failure for: "${recipe.name}"`, fallbackError);
           }
         }
+        
+        // Save after EACH update so changes persist
+        await saveRecipes(workingRecipes);
         
         // Shorter delay between requests for speed
         if (i < recipesWithUrls.length - 1) {
@@ -1200,12 +1217,13 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
       }
       
       console.log(`🎉 FORCE image re-extraction complete: ${successCount} success, ${failedCount} failed`);
+      console.log(`📊 Final check: ${workingRecipes.filter((r: Recipe) => r.imageUri).length} recipes now have images`);
       return { success: successCount, failed: failedCount };
     } catch (error) {
       console.error('❌ Error during FORCE image re-extraction:', error);
       return { success: 0, failed: 0 };
     }
-  }, [recipes, extractRecipeImage, saveRecipes, generateFallbackImage]);
+  }, [user?.id, extractRecipeImage, saveRecipes, generateFallbackImage]);
 
 
 
