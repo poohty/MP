@@ -73,7 +73,7 @@ export default function AddRecipePhotoScreen() {
   const extractTextFromImage = async (uri: string) => {
     try {
       setIsExtracting(true);
-      setExtractionProgress('Converting image...');
+      setExtractionProgress('📸 Preparing image...');
       console.log('🔍 Starting recipe photo extraction...');
       
       const response = await fetch(uri);
@@ -82,6 +82,7 @@ export default function AddRecipePhotoScreen() {
       
       reader.onload = async () => {
         try {
+          setExtractionProgress('🔄 Converting image format...');
           const base64data = reader.result?.toString().split(',')[1];
           
           if (!base64data) {
@@ -89,13 +90,7 @@ export default function AddRecipePhotoScreen() {
           }
           
           console.log('✅ Image converted to base64');
-          setExtractionProgress('Analyzing recipe...');
-          
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => {
-            controller.abort();
-            console.log('⏰ Request timeout after 45 seconds');
-          }, 45000);
+          setExtractionProgress('🤖 AI is reading the recipe text...');
           
           console.log('🤖 Sending to AI for extraction...');
           const aiResponse = await fetch('https://toolkit.rork.com/text/llm/', {
@@ -103,7 +98,6 @@ export default function AddRecipePhotoScreen() {
             headers: {
               'Content-Type': 'application/json',
             },
-            signal: controller.signal,
             body: JSON.stringify({
               messages: [
                 {
@@ -127,18 +121,18 @@ export default function AddRecipePhotoScreen() {
             }),
           });
           
-          clearTimeout(timeoutId);
-          
           if (!aiResponse.ok) {
             throw new Error(`AI API error: ${aiResponse.status}`);
           }
           
           console.log('✅ Received AI response');
-          setExtractionProgress('Processing results...');
+          setExtractionProgress('📝 Organizing recipe data...');
           
           const data = await aiResponse.json();
           const completion = data.completion || 'Failed to extract text from image';
           console.log('📝 Extraction complete');
+          
+          setExtractionProgress('🎯 Categorizing recipe...');
           
           const categoryMatch = completion.match(/CATEGORY:\s*(Breakfast|Appetizer|Salads & Soups|Main Course|Desserts)/i);
           if (categoryMatch) {
@@ -157,6 +151,8 @@ export default function AddRecipePhotoScreen() {
               setCategory('Salads & Soups');
             }
           }
+          
+          setExtractionProgress('✨ Finalizing...');
           
           const recipeTextMatch = completion.match(/RECIPE TEXT:\s*([\s\S]*?)(?=\n\nCATEGORY:|$)/i);
           let recipeText = recipeTextMatch ? recipeTextMatch[1].trim() : completion;
@@ -203,24 +199,16 @@ export default function AddRecipePhotoScreen() {
             [{ text: 'OK' }]
           );
         } catch (error) {
-          console.error('Error in onload handler:', error);
+          console.error('Error in extraction:', error);
           setExtractedText('Failed to extract text from image. Please try again or enter the recipe manually.');
           setIsExtracting(false);
           setExtractionProgress('');
           
-          if (error instanceof Error && error.name === 'AbortError') {
-            Alert.alert(
-              'Request Timeout',
-              'The extraction took too long. Please try again with a clearer or smaller photo.',
-              [{ text: 'OK' }]
-            );
-          } else {
-            Alert.alert(
-              'Extraction Failed',
-              'Failed to extract text from image. Please try again or enter the recipe manually.',
-              [{ text: 'OK' }]
-            );
-          }
+          Alert.alert(
+            '❌ Extraction Failed',
+            'Failed to extract text from image. Please try again with a clearer photo.',
+            [{ text: 'OK' }]
+          );
         }
       };
       
@@ -231,8 +219,8 @@ export default function AddRecipePhotoScreen() {
       setIsExtracting(false);
       setExtractionProgress('');
       Alert.alert(
-        'Extraction Failed',
-        'Failed to extract text from image. Please try again or enter the recipe manually.',
+        '❌ Extraction Failed',
+        'Failed to extract text from image. Please try again.',
         [{ text: 'OK' }]
       );
     }
@@ -396,12 +384,11 @@ export default function AddRecipePhotoScreen() {
         
         {isExtracting ? (
           <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Extracting recipe text...</Text>
+            <Text style={styles.loadingTitle}>✨ Extracting Recipe</Text>
             {extractionProgress ? (
-              <Text style={styles.loadingSubtext}>{extractionProgress}</Text>
-            ) : (
-              <Text style={styles.loadingSubtext}>This may take up to 30 seconds</Text>
-            )}
+              <Text style={styles.loadingProgress}>{extractionProgress}</Text>
+            ) : null}
+            <Text style={styles.loadingSubtext}>Please wait, this may take 15-30 seconds</Text>
           </View>
         ) : extractedText ? (
           <View style={styles.textContainer}>
@@ -471,21 +458,30 @@ const styles = StyleSheet.create({
     right: 8,
   },
   loadingContainer: {
-    padding: 20,
+    padding: 24,
     alignItems: 'center',
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: 16,
     marginVertical: 16,
+    borderWidth: 2,
+    borderColor: Colors.primary,
   },
-  loadingText: {
+  loadingTitle: {
+    color: Colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  loadingProgress: {
     color: Colors.primary,
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 8,
+    textAlign: 'center',
   },
   loadingSubtext: {
     color: Colors.textSecondary,
-    fontSize: 14,
+    fontSize: 13,
     marginTop: 4,
     textAlign: 'center',
   },

@@ -411,14 +411,21 @@ Return ONLY ONE category: Breakfast, Appetizer, Salads & Soups, Main Course, or 
     
     setIsLoading(true);
     try {
-      // Use AI to categorize the recipe
+      console.log('🔄 Starting recipe save process...');
+      
+      console.log('🤖 Step 1: AI categorizing recipe...');
       const aiCategory = await categorizeRecipeWithAI(name.trim(), url.trim());
+      
+      console.log(`✅ Category determined: ${aiCategory}`);
+      console.log('💾 Step 2: Saving recipe with full content extraction...');
       
       await addRecipe({
         name: name.trim(),
         category: aiCategory,
         url: url.trim(),
       });
+      
+      console.log('✅ Recipe saved successfully!');
       
       Alert.alert('Success', `Recipe added successfully and categorized as "${aiCategory}"`, [
         { text: 'OK', onPress: () => router.back() }
@@ -466,6 +473,14 @@ Return ONLY ONE category: Breakfast, Appetizer, Salads & Soups, Main Course, or 
           onSelect={(value) => setCategory(value as RecipeCategory)}
         />
         
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingTitle}>✨ Processing Recipe</Text>
+            <Text style={styles.loadingProgress}>🤖 Analyzing recipe content and extracting details...</Text>
+            <Text style={styles.loadingSubtext}>This may take 15-30 seconds</Text>
+          </View>
+        )}
+        
         <Button
           title="Save Recipe"
           onPress={handleSave}
@@ -499,5 +514,33 @@ const styles = StyleSheet.create({
   saveButton: {
     marginTop: 24,
     marginBottom: 32,
+  },
+  loadingContainer: {
+    padding: 24,
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    marginVertical: 16,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+  },
+  loadingTitle: {
+    color: Colors.text,
+    fontSize: 18,
+    fontWeight: '700' as const,
+    marginBottom: 12,
+  },
+  loadingProgress: {
+    color: Colors.primary,
+    fontSize: 16,
+    fontWeight: '600' as const,
+    marginBottom: 8,
+    textAlign: 'center' as const,
+  },
+  loadingSubtext: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    marginTop: 4,
+    textAlign: 'center' as const,
   },
 });
