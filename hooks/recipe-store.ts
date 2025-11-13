@@ -33,10 +33,19 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
               console.log(`⚠️ Recipe "${recipe.name}" has non-URL imageUri, removing: "${recipe.imageUri}"`);
               return { ...recipe, imageUri: undefined };
             }
+            // Valid imageUri - keep it
+            console.log(`✅ Recipe "${recipe.name}" has valid imageUri`);
+          } else {
+            console.log(`⚠️ Recipe "${recipe.name}" has NO imageUri`);
           }
           return recipe;
         });
         setRecipes(cleanedRecipes);
+        
+        // Log summary
+        const recipesWithImages = cleanedRecipes.filter((r: Recipe) => r.imageUri).length;
+        const recipesWithoutImages = cleanedRecipes.filter((r: Recipe) => !r.imageUri).length;
+        console.log(`📊 Loaded ${cleanedRecipes.length} recipes: ${recipesWithImages} with images, ${recipesWithoutImages} without`);
       } else {
         setRecipes([]);
       }

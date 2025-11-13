@@ -29,7 +29,9 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
   
   const handleImageLoad = () => {
     console.log(`✅ Image loaded successfully for: ${recipe.name}`);
-    setImageError(false);
+    if (imageError) {
+      setImageError(false);
+    }
   };
   
   const handleImageError = (e: any) => {
@@ -140,25 +142,17 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
       activeOpacity={0.9}
     >
       <View style={styles.imageContainer}>
-        {recipe.imageUri && !imageError ? (
-          <Image
-            key={`${recipe.id}-primary-${imageKey}`}
-            source={{ uri: recipe.imageUri, cache: 'force-cache' }}
-            style={styles.image}
-            resizeMode="cover"
-            onLoad={handleImageLoad}
-            onError={handleImageError}
-          />
-        ) : (
-          <Image
-            key={`${recipe.id}-fallback-${imageKey}`}
-            source={{ uri: getStableFallbackImage(), cache: 'reload' }}
-            style={styles.image}
-            resizeMode="cover"
-            onLoad={() => console.log(`Fallback loaded for: ${recipe.name}`)}
-            onError={(e) => console.log(`Fallback image also failed for: ${recipe.name}`, e?.nativeEvent)}
-          />
-        )}
+        <Image
+          key={recipe.imageUri && !imageError ? `${recipe.id}-primary-${imageKey}` : `${recipe.id}-fallback-${imageKey}`}
+          source={{ 
+            uri: recipe.imageUri && !imageError ? recipe.imageUri : getStableFallbackImage(), 
+            cache: recipe.imageUri && !imageError ? 'default' : 'reload'
+          }}
+          style={styles.image}
+          resizeMode="cover"
+          onLoad={handleImageLoad}
+          onError={handleImageError}
+        />
         
 
         <LinearGradient
