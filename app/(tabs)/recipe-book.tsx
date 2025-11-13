@@ -58,24 +58,62 @@ export default function RecipeBookScreen() {
 
   const handleForceReExtractAll = async () => {
     try {
+      const recipesWithUrls = recipes.filter(r => r.url).length;
+      
+      if (recipesWithUrls === 0) {
+        Alert.alert(
+          'No Recipes to Process',
+          'There are no recipes with URLs to re-extract images from.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      
       Alert.alert(
         '🔄 Force Re-Extract All Images',
-        'This will force re-extract images for ALL recipes with URLs, even if they already have images. This may take several minutes. Continue?',
+        `This will force re-extract images for ${recipesWithUrls} recipe${recipesWithUrls !== 1 ? 's' : ''} with URLs.\n\nThis process may take several minutes. You'll see progress updates.\n\nContinue?`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Force Re-Extract',
+            text: 'Start Re-Extract',
             style: 'destructive',
             onPress: async () => {
               setIsExtractingImages(true);
-              const result = await forceReExtractAllImages();
-              setIsExtractingImages(false);
+              setShowDebugMenu(false);
               
+              // Show progress alert
               Alert.alert(
-                'Force Re-Extraction Complete! 🎉',
-                `Successfully re-extracted ${result.success} images.${result.failed > 0 ? `\n\n⚠️ ${result.failed} failed.` : ''}`,
-                [{ text: 'OK' }]
+                '🔄 Re-Extracting Images',
+                `Processing ${recipesWithUrls} recipes...\n\nThis will run in the background. Check console logs for detailed progress.\n\nPlease wait...`,
+                []
               );
+              
+              try {
+                console.log(`🚀 Starting FORCE re-extraction for ${recipesWithUrls} recipes...`);
+                const result = await forceReExtractAllImages();
+                console.log(`✅ FORCE re-extraction complete: ${result.success} success, ${result.failed} failed`);
+                
+                // Refresh recipes to update UI
+                await refreshRecipes();
+                
+                setIsExtractingImages(false);
+                
+                // Show completion alert
+                Alert.alert(
+                  'Re-Extraction Complete! 🎉',
+                  `Successfully processed ${result.success} image${result.success !== 1 ? 's' : ''}.${result.failed > 0 ? `\n\n⚠️ ${result.failed} failed to extract.` : ''}\n\n✨ Your cookbook should now display all available images!`,
+                  [{ text: 'Great!' }]
+                );
+              } catch (error) {
+                console.error('❌ Error during force re-extraction:', error);
+                setIsExtractingImages(false);
+                
+                Alert.alert(
+                  'Re-Extraction Error',
+                  'An error occurred during the re-extraction process. Please try again.',
+                  [{ text: 'OK' }]
+                );
+              }
             }
           }
         ]

@@ -19,11 +19,22 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
   React.useEffect(() => {
     if (recipe.imageUri) {
       console.log(`✅ Recipe "${recipe.name}" HAS imageUri: ${recipe.imageUri.substring(0, 100)}...`);
-      // Reset image error state when imageUri changes
-      setImageError(false);
-      setImageKey(prev => prev + 1);
+      // Validate imageUri format
+      const trimmedUri = recipe.imageUri.trim();
+      if (!trimmedUri || trimmedUri === 'null' || trimmedUri === 'undefined' || trimmedUri.length < 10) {
+        console.log(`⚠️ Recipe "${recipe.name}" has INVALID imageUri, using fallback`);
+        setImageError(true);
+      } else if (!trimmedUri.startsWith('http://') && !trimmedUri.startsWith('https://')) {
+        console.log(`⚠️ Recipe "${recipe.name}" has NON-URL imageUri, using fallback`);
+        setImageError(true);
+      } else {
+        // Valid imageUri - reset error state and force reload
+        setImageError(false);
+        setImageKey(prev => prev + 1);
+      }
     } else {
       console.log(`⚠️ Recipe "${recipe.name}" has NO imageUri - using fallback`);
+      setImageError(true);
     }
   }, [recipe.name, recipe.imageUri]);
   
