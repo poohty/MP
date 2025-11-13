@@ -271,7 +271,19 @@ export default function RecipeDetailsScreen() {
     { label: 'Desserts', value: 'Desserts' },
   ];
 
-  const placeholderImage = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=400&auto=format&fit=crop';
+  const getStableFallbackImage = (recipe: Recipe) => {
+    const cleanName = recipe.name
+      .replace(/recipe/gi, '')
+      .replace(/[^a-zA-Z0-9\s]/g, '')
+      .trim()
+      .split(' ')
+      .slice(0, 3)
+      .join(' ');
+    
+    const stableId = recipe.id.slice(-6);
+    const searchTerm = encodeURIComponent(cleanName);
+    return `https://source.unsplash.com/featured/400x300/?${searchTerm},food,recipe&sig=${stableId}`;
+  };
 
   if (!recipe) {
     return (
@@ -310,7 +322,7 @@ export default function RecipeDetailsScreen() {
         <ScrollView style={styles.container}>
         <View style={styles.imageContainer}>
           <Image
-            source={{ uri: recipe.imageUri || placeholderImage }}
+            source={{ uri: recipe.imageUri || getStableFallbackImage(recipe) }}
             style={styles.image}
             resizeMode="cover"
           />

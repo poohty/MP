@@ -13,12 +13,29 @@ interface RecipeCardProps {
 }
 
 export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite }: RecipeCardProps) {
+  const [imageError, setImageError] = React.useState(false);
+  
   const handleImageLoad = () => {
-    // Image loaded successfully
+    setImageError(false);
   };
   
   const handleImageError = () => {
-    // Image failed to load, but we have fallback in source
+    console.log(`❌ Image failed to load for recipe: ${recipe.name}`, recipe.imageUri);
+    setImageError(true);
+  };
+  
+  const getStableFallbackImage = () => {
+    const cleanName = recipe.name
+      .replace(/recipe/gi, '')
+      .replace(/[^a-zA-Z0-9\s]/g, '')
+      .trim()
+      .split(' ')
+      .slice(0, 3)
+      .join(' ');
+    
+    const stableId = recipe.id.slice(-6);
+    const searchTerm = encodeURIComponent(cleanName);
+    return `https://source.unsplash.com/featured/400x300/?${searchTerm},food,recipe&sig=${stableId}`;
   };
   
   const getCategoryColor = () => {
@@ -108,7 +125,8 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
     >
       <View style={styles.imageContainer}>
         <Image
-          source={{ uri: recipe.imageUri || 'https://source.unsplash.com/featured/400x300/?food&sig=' + Date.now() }}
+          key={recipe.id}
+          source={{ uri: imageError ? getStableFallbackImage() : (recipe.imageUri || getStableFallbackImage()) }}
           style={styles.image}
           resizeMode="cover"
           onLoad={handleImageLoad}

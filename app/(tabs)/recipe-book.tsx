@@ -10,10 +10,11 @@ import Colors from '@/constants/colors';
 import { Plus, RefreshCw, Image } from 'lucide-react-native';
 
 export default function RecipeBookScreen() {
-  const { recipes, isLoading, debugStorage, deleteRecipe, toggleFavorite, refreshRecipes, reExtractImages } = useRecipes();
+  const { recipes, isLoading, debugStorage, deleteRecipe, toggleFavorite, refreshRecipes, reExtractImages, forceReExtractAllImages } = useRecipes();
   const [selectedCategory, setSelectedCategory] = useState<RecipeCategory>('Breakfast');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExtractingImages, setIsExtractingImages] = useState(false);
+  const [showDebugMenu, setShowDebugMenu] = useState(false);
 
   const filteredRecipes = recipes.filter(recipe => recipe.category === selectedCategory);
 
@@ -55,11 +56,40 @@ export default function RecipeBookScreen() {
     }
   };
 
+  const handleForceReExtractAll = async () => {
+    try {
+      Alert.alert(
+        '🔄 Force Re-Extract All Images',
+        'This will force re-extract images for ALL recipes with URLs, even if they already have images. This may take several minutes. Continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Force Re-Extract',
+            style: 'destructive',
+            onPress: async () => {
+              setIsExtractingImages(true);
+              const result = await forceReExtractAllImages();
+              setIsExtractingImages(false);
+              
+              Alert.alert(
+                'Force Re-Extraction Complete! 🎉',
+                `Successfully re-extracted ${result.success} images.${result.failed > 0 ? `\n\n⚠️ ${result.failed} failed.` : ''}`,
+                [{ text: 'OK' }]
+              );
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error force re-extracting images:', error);
+      setIsExtractingImages(false);
+    }
+  };
+  
   const handleExtractImages = async () => {
     try {
       setIsExtractingImages(true);
       
-      // Show immediate feedback that the process is starting
       const recipesWithoutImagesCount = recipes.filter(recipe => recipe.url && !recipe.imageUri).length;
       
       if (recipesWithoutImagesCount === 0) {
@@ -68,6 +98,7 @@ export default function RecipeBookScreen() {
           'All your recipes already have images.',
           [{ text: 'OK' }]
         );
+        setIsExtractingImages(false);
         return;
       }
       
@@ -108,8 +139,23 @@ export default function RecipeBookScreen() {
     }
   };
 
-  // Count recipes without images
   const recipesWithoutImages = recipes.filter(recipe => recipe.url && !recipe.imageUri).length;
+  const recipesWithImages = recipes.filter(recipe => recipe.imageUri).length;
+  const totalRecipes = recipes.length;
+  
+  const handleDebugMenu = () => {
+    setShowDebugMenu(true);
+    
+    Alert.alert(
+      '🛠️ Debug Menu',
+      `Total Recipes: ${totalRecipes}\nWith Images: ${recipesWithImages}\nWithout Images: ${recipesWithoutImages}`,
+      [
+        { text: 'Debug Storage', onPress: debugStorage },
+        { text: 'Force Re-Extract ALL', onPress: handleForceReExtractAll },
+        { text: 'Close', style: 'cancel', onPress: () => setShowDebugMenu(false) }
+      ]
+    );
+  };
 
   return (
     <GradientBackground>
@@ -140,7 +186,7 @@ export default function RecipeBookScreen() {
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.addButton, { marginRight: 8 }]}
-            onPress={debugStorage}
+            onPress={handleDebugMenu}
           >
             <Text style={styles.debugText}>Debug</Text>
           </TouchableOpacity>
