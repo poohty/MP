@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import Colors from '@/constants/colors';
@@ -303,6 +303,9 @@ export default function RecipeDetailsScreen() {
       <Stack.Screen 
         options={{ 
           title: recipe.name,
+          headerBackTitle: Platform.OS === 'ios' ? 'Back' : undefined,
+          headerBackVisible: true,
+          gestureEnabled: true,
           headerRight: () => (
             <View style={styles.headerButtons}>
               <TouchableOpacity 
