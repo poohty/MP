@@ -14,10 +14,14 @@ interface RecipeCardProps {
 
 export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite }: RecipeCardProps) {
   const [imageError, setImageError] = React.useState(false);
+  const [imageKey, setImageKey] = React.useState(0);
   
   React.useEffect(() => {
     if (recipe.imageUri) {
       console.log(`✅ Recipe "${recipe.name}" HAS imageUri: ${recipe.imageUri.substring(0, 100)}...`);
+      // Reset image error state when imageUri changes
+      setImageError(false);
+      setImageKey(prev => prev + 1);
     } else {
       console.log(`⚠️ Recipe "${recipe.name}" has NO imageUri - using fallback`);
     }
@@ -28,9 +32,10 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
     setImageError(false);
   };
   
-  const handleImageError = () => {
+  const handleImageError = (e: any) => {
     console.log(`❌ Image failed to load for recipe: ${recipe.name}`);
     console.log(`   Image URI: ${recipe.imageUri}`);
+    console.log(`   Error details:`, e?.nativeEvent);
     console.log(`   Using fallback image`);
     setImageError(true);
   };
@@ -137,8 +142,8 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
       <View style={styles.imageContainer}>
         {recipe.imageUri && !imageError ? (
           <Image
-            key={`${recipe.id}-primary`}
-            source={{ uri: recipe.imageUri }}
+            key={`${recipe.id}-primary-${imageKey}`}
+            source={{ uri: recipe.imageUri, cache: 'force-cache' }}
             style={styles.image}
             resizeMode="cover"
             onLoad={handleImageLoad}
@@ -146,12 +151,12 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
           />
         ) : (
           <Image
-            key={`${recipe.id}-fallback`}
-            source={{ uri: getStableFallbackImage() }}
+            key={`${recipe.id}-fallback-${imageKey}`}
+            source={{ uri: getStableFallbackImage(), cache: 'reload' }}
             style={styles.image}
             resizeMode="cover"
-            onLoad={handleImageLoad}
-            onError={() => console.log('Fallback image also failed')}
+            onLoad={() => console.log(`Fallback loaded for: ${recipe.name}`)}
+            onError={(e) => console.log(`Fallback image also failed for: ${recipe.name}`, e?.nativeEvent)}
           />
         )}
         

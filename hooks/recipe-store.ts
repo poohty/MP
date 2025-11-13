@@ -18,7 +18,25 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
       const storedRecipes = await AsyncStorage.getItem(storageKey);
       if (storedRecipes) {
         const parsedRecipes = JSON.parse(storedRecipes);
-        setRecipes(parsedRecipes);
+        // Validate and clean up image URIs
+        const cleanedRecipes = parsedRecipes.map((recipe: Recipe) => {
+          // Check if imageUri exists and is valid
+          if (recipe.imageUri) {
+            const trimmedUri = recipe.imageUri.trim();
+            // If imageUri is empty string, null, or invalid, remove it
+            if (!trimmedUri || trimmedUri === 'null' || trimmedUri === 'undefined' || trimmedUri.length < 10) {
+              console.log(`⚠️ Recipe "${recipe.name}" has invalid imageUri, removing: "${recipe.imageUri}"`);
+              return { ...recipe, imageUri: undefined };
+            }
+            // If imageUri doesn't start with http, remove it
+            if (!trimmedUri.startsWith('http://') && !trimmedUri.startsWith('https://')) {
+              console.log(`⚠️ Recipe "${recipe.name}" has non-URL imageUri, removing: "${recipe.imageUri}"`);
+              return { ...recipe, imageUri: undefined };
+            }
+          }
+          return recipe;
+        });
+        setRecipes(cleanedRecipes);
       } else {
         setRecipes([]);
       }
@@ -1153,7 +1171,23 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
       const storedRecipes = await AsyncStorage.getItem(storageKey);
       const currentRecipes = storedRecipes ? JSON.parse(storedRecipes) : [];
       
-      const recipesWithUrls = currentRecipes.filter((recipe: Recipe) => recipe.url);
+      // Clean up invalid imageUri values first
+      const cleanedRecipes = currentRecipes.map((recipe: Recipe) => {
+        if (recipe.imageUri) {
+          const trimmedUri = recipe.imageUri.trim();
+          if (!trimmedUri || trimmedUri === 'null' || trimmedUri === 'undefined' || trimmedUri.length < 10) {
+            console.log(`🧹 Cleaning invalid imageUri for "${recipe.name}": "${recipe.imageUri}"`);
+            return { ...recipe, imageUri: undefined };
+          }
+          if (!trimmedUri.startsWith('http://') && !trimmedUri.startsWith('https://')) {
+            console.log(`🧹 Cleaning non-URL imageUri for "${recipe.name}": "${recipe.imageUri}"`);
+            return { ...recipe, imageUri: undefined };
+          }
+        }
+        return recipe;
+      });
+      
+      const recipesWithUrls = cleanedRecipes.filter((recipe: Recipe) => recipe.url);
       console.log(`📊 Found ${recipesWithUrls.length} recipes with URLs to re-extract`);
       
       if (recipesWithUrls.length === 0) {
