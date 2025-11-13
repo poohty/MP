@@ -15,12 +15,23 @@ interface RecipeCardProps {
 export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite }: RecipeCardProps) {
   const [imageError, setImageError] = React.useState(false);
   
+  React.useEffect(() => {
+    if (recipe.imageUri) {
+      console.log(`✅ Recipe "${recipe.name}" HAS imageUri: ${recipe.imageUri.substring(0, 100)}...`);
+    } else {
+      console.log(`⚠️ Recipe "${recipe.name}" has NO imageUri - using fallback`);
+    }
+  }, [recipe.name, recipe.imageUri]);
+  
   const handleImageLoad = () => {
+    console.log(`✅ Image loaded successfully for: ${recipe.name}`);
     setImageError(false);
   };
   
   const handleImageError = () => {
-    console.log(`❌ Image failed to load for recipe: ${recipe.name}`, recipe.imageUri);
+    console.log(`❌ Image failed to load for recipe: ${recipe.name}`);
+    console.log(`   Image URI: ${recipe.imageUri}`);
+    console.log(`   Using fallback image`);
     setImageError(true);
   };
   
@@ -124,14 +135,25 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
       activeOpacity={0.9}
     >
       <View style={styles.imageContainer}>
-        <Image
-          key={recipe.id}
-          source={{ uri: imageError ? getStableFallbackImage() : (recipe.imageUri || getStableFallbackImage()) }}
-          style={styles.image}
-          resizeMode="cover"
-          onLoad={handleImageLoad}
-          onError={handleImageError}
-        />
+        {recipe.imageUri && !imageError ? (
+          <Image
+            key={`${recipe.id}-primary`}
+            source={{ uri: recipe.imageUri }}
+            style={styles.image}
+            resizeMode="cover"
+            onLoad={handleImageLoad}
+            onError={handleImageError}
+          />
+        ) : (
+          <Image
+            key={`${recipe.id}-fallback`}
+            source={{ uri: getStableFallbackImage() }}
+            style={styles.image}
+            resizeMode="cover"
+            onLoad={handleImageLoad}
+            onError={() => console.log('Fallback image also failed')}
+          />
+        )}
         
 
         <LinearGradient
