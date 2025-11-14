@@ -13,46 +13,10 @@ interface RecipeCardProps {
 }
 
 export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite }: RecipeCardProps) {
-  const [imageError, setImageError] = React.useState(false);
+  const [imageSource, setImageSource] = React.useState<string>('');
   const [imageKey, setImageKey] = React.useState(0);
-  const [retryCount, setRetryCount] = React.useState(0);
   
-  React.useEffect(() => {
-    if (recipe.imageUri) {
-      console.log(`✅ Recipe "${recipe.name}" HAS imageUri: ${recipe.imageUri.substring(0, 100)}...`);
-      setImageError(false);
-      setRetryCount(0);
-      setImageKey(prev => prev + 1);
-    } else {
-      console.log(`⚠️ Recipe "${recipe.name}" has NO imageUri - using fallback`);
-    }
-  }, [recipe.name, recipe.imageUri]);
-  
-  const handleImageLoad = () => {
-    console.log(`✅ Image loaded successfully for: ${recipe.name}`);
-    if (imageError) {
-      setImageError(false);
-    }
-  };
-  
-  const handleImageError = (e: any) => {
-    console.log(`❌ Image failed to load for recipe: ${recipe.name}`);
-    console.log(`   Image URI: ${recipe.imageUri}`);
-    console.log(`   Error details:`, e?.nativeEvent);
-    console.log(`   Retry count: ${retryCount}`);
-    
-    // Try to retry once before falling back
-    if (!imageError && retryCount < 1 && recipe.imageUri) {
-      console.log(`🔄 Retrying image load for: ${recipe.name}`);
-      setRetryCount(prev => prev + 1);
-      setImageKey(prev => prev + 1);
-    } else {
-      console.log(`   Using fallback image`);
-      setImageError(true);
-    }
-  };
-  
-  const getStableFallbackImage = () => {
+  const getStableFallbackImage = React.useCallback(() => {
     const cleanName = recipe.name
       .replace(/recipe/gi, '')
       .replace(/[^a-zA-Z0-9\s]/g, '')
@@ -64,7 +28,49 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
     const stableId = recipe.id.slice(-6);
     const searchTerm = encodeURIComponent(cleanName);
     return `https://source.unsplash.com/featured/400x300/?${searchTerm},food,recipe&sig=${stableId}`;
+  }, [recipe.id, recipe.name]);
+  
+  React.useEffect(() => {
+    const loadImage = async () => {
+      if (recipe.imageUri && recipe.imageUri.trim().length > 10) {
+        const trimmedUri = recipe.imageUri.trim();
+        
+        if (trimmedUri.startsWith('http://') || trimmedUri.startsWith('https://')) {
+          console.log(`✅ Recipe "${recipe.name}" HAS imageUri: ${trimmedUri.substring(0, 100)}...`);
+          setImageSource(trimmedUri);
+          return;
+        } else {
+          console.log(`⚠️ Recipe "${recipe.name}" has invalid imageUri (not HTTP/HTTPS): ${trimmedUri.substring(0, 50)}`);
+        }
+      } else {
+        console.log(`⚠️ Recipe "${recipe.name}" has NO imageUri or empty imageUri`);
+      }
+      
+      const fallback = getStableFallbackImage();
+      console.log(`📸 Using fallback image for "${recipe.name}": ${fallback.substring(0, 80)}...`);
+      setImageSource(fallback);
+    };
+    
+    loadImage();
+  }, [recipe.id, recipe.name, recipe.imageUri, getStableFallbackImage]);
+  
+  const handleImageLoad = () => {
+    console.log(`✅ Image loaded successfully for: ${recipe.name}`);
   };
+  
+  const handleImageError = (e: any) => {
+    console.log(`❌ Image failed to load for recipe: ${recipe.name}`);
+    console.log(`   Image URI: ${imageSource}`);
+    console.log(`   Error details:`, e?.nativeEvent);
+    console.log(`   Switching to fallback image`);
+    
+    const fallback = getStableFallbackImage();
+    console.log(`📸 Using fallback after error for "${recipe.name}": ${fallback.substring(0, 80)}...`);
+    setImageSource(fallback);
+    setImageKey(prev => prev + 1);
+  };
+  
+
   
   const getCategoryColor = () => {
     switch (recipe.category) {
@@ -152,17 +158,19 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
       activeOpacity={0.9}
     >
       <View style={styles.imageContainer}>
-        <Image
-          key={`${recipe.id}-${imageKey}-${retryCount}`}
-          source={{ 
-            uri: recipe.imageUri && !imageError ? recipe.imageUri : getStableFallbackImage(), 
-            cache: 'default'
-          }}
-          style={styles.image}
-          resizeMode="cover"
-          onLoad={handleImageLoad}
-          onError={handleImageError}
-        />
+        {imageSource ? (
+          <Image
+            key={`${recipe.id}-${imageKey}`}
+            source={{ 
+              uri: imageSource, 
+              cache: 'default'
+            }}
+            style={styles.image}
+            resizeMode="cover"
+            onLoad={handleImageLoad}
+            onError={handleImageError}
+          />
+        ) : null}
         
 
         <LinearGradient
