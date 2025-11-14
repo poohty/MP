@@ -15,11 +15,13 @@ interface RecipeCardProps {
 export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite }: RecipeCardProps) {
   const [imageError, setImageError] = React.useState(false);
   const [imageKey, setImageKey] = React.useState(0);
+  const [retryCount, setRetryCount] = React.useState(0);
   
   React.useEffect(() => {
     if (recipe.imageUri) {
       console.log(`✅ Recipe "${recipe.name}" HAS imageUri: ${recipe.imageUri.substring(0, 100)}...`);
       setImageError(false);
+      setRetryCount(0);
       setImageKey(prev => prev + 1);
     } else {
       console.log(`⚠️ Recipe "${recipe.name}" has NO imageUri - using fallback`);
@@ -34,10 +36,17 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
   };
   
   const handleImageError = (e: any) => {
-    if (!imageError) {
-      console.log(`❌ Image failed to load for recipe: ${recipe.name}`);
-      console.log(`   Image URI: ${recipe.imageUri}`);
-      console.log(`   Error details:`, e?.nativeEvent);
+    console.log(`❌ Image failed to load for recipe: ${recipe.name}`);
+    console.log(`   Image URI: ${recipe.imageUri}`);
+    console.log(`   Error details:`, e?.nativeEvent);
+    console.log(`   Retry count: ${retryCount}`);
+    
+    // Try to retry once before falling back
+    if (!imageError && retryCount < 1 && recipe.imageUri) {
+      console.log(`🔄 Retrying image load for: ${recipe.name}`);
+      setRetryCount(prev => prev + 1);
+      setImageKey(prev => prev + 1);
+    } else {
       console.log(`   Using fallback image`);
       setImageError(true);
     }
@@ -144,10 +153,10 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
     >
       <View style={styles.imageContainer}>
         <Image
-          key={recipe.imageUri && !imageError ? `${recipe.id}-primary-${imageKey}` : `${recipe.id}-fallback-${imageKey}`}
+          key={`${recipe.id}-${imageKey}-${retryCount}`}
           source={{ 
             uri: recipe.imageUri && !imageError ? recipe.imageUri : getStableFallbackImage(), 
-            cache: recipe.imageUri && !imageError ? 'default' : 'reload'
+            cache: 'default'
           }}
           style={styles.image}
           resizeMode="cover"

@@ -141,7 +141,7 @@ export default function UploadBookmarksScreen() {
         
         // Minimal delay between requests for speed
         if (i < potentialRecipes.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 50)); // Reduced from 100ms to 50ms
+          await new Promise(resolve => setTimeout(resolve, 20)); // Reduced to 20ms for faster import
         }
       }
       
@@ -455,7 +455,7 @@ export default function UploadBookmarksScreen() {
       // Step 1: Fetch the actual webpage HTML content first with shorter timeout
       console.log(`📥 Fetching webpage HTML from: ${url}`);
       const webpageController = new AbortController();
-      const webpageTimeoutId = setTimeout(() => webpageController.abort(), 8000); // Reduced from 10s to 8s
+      const webpageTimeoutId = setTimeout(() => webpageController.abort(), 5000); // Reduced to 5s for faster import
       
       let webpageHtml: string;
       try {
@@ -484,7 +484,7 @@ export default function UploadBookmarksScreen() {
       // Step 2: Use AI to analyze the HTML content for recipe validation and image extraction
       console.log(`🤖 Analyzing HTML content with AI...`);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // Reduced from 20s to 15s for speed
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // Reduced to 10s for faster import
       
       const response = await fetch('https://toolkit.rork.com/text/llm/', {
         method: 'POST',
@@ -744,7 +744,7 @@ export default function UploadBookmarksScreen() {
         }
         
         // Small delay to prevent overwhelming the system
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 50)); // Reduced to 50ms for faster import
       }
       
       console.log(`📊 FINAL Import Summary:`);
@@ -768,20 +768,17 @@ export default function UploadBookmarksScreen() {
         }
       }
       
-      // Show detailed success message
-      const skippedCount = parsedBookmarks.length - successCount;
-      let message = `🎉 Successfully imported ${successCount} out of ${parsedBookmarks.length} recipe${parsedBookmarks.length !== 1 ? 's' : ''}!`;
+      // Show detailed success message with accurate counts
+      let message = `🎉 Successfully imported ${successCount} recipe${successCount !== 1 ? 's' : ''}!`;
       
       if (successCount > 0) {
         message += `\n\n✅ Imported recipes:\n${importedRecipes.slice(0, 5).join('\n')}${importedRecipes.length > 5 ? `\n...and ${importedRecipes.length - 5} more` : ''}`;
         message += `\n\nYou can now find them in the Cook Book tab.`;
       }
       
-      if (skippedCount > 0) {
-        message += `\n\n⚠️ ${skippedCount} recipe${skippedCount !== 1 ? 's' : ''} could not be imported.`;
-        if (failedRecipes.length > 0) {
-          message += `\n\n❌ Failed recipes:\n${failedRecipes.slice(0, 3).join('\n')}${failedRecipes.length > 3 ? `\n...and ${failedRecipes.length - 3} more` : ''}`;
-        }
+      if (failedRecipes.length > 0) {
+        message += `\n\n❌ Failed to import ${failedRecipes.length} recipe${failedRecipes.length !== 1 ? 's' : ''}:`;
+        message += `\n${failedRecipes.slice(0, 3).join('\n')}${failedRecipes.length > 3 ? `\n...and ${failedRecipes.length - 3} more` : ''}`;
       }
       
       // Use setTimeout to ensure the alert shows after state updates
