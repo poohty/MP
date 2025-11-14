@@ -98,26 +98,44 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
     ];
   }, []);
 
-  // Test if an image URL is actually loadable
-  const testImageUrl = useCallback(async (imageUrl: string, timeout: number = 3000): Promise<boolean> => {
+  // Download image and convert to base64
+  const downloadImageAsBase64 = useCallback(async (imageUrl: string, timeout: number = 5000): Promise<string | null> => {
     try {
+      console.log(`📥 Downloading image: ${imageUrl}`);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
       
       const response = await fetch(imageUrl, { 
-        method: 'HEAD',
+        method: 'GET',
         signal: controller.signal
       });
       
       clearTimeout(timeoutId);
       
-      if (response.ok) {
-        const contentType = response.headers.get('content-type');
-        return contentType ? contentType.startsWith('image/') : false;
+      if (!response.ok) {
+        console.log(`❌ Failed to download image: HTTP ${response.status}`);
+        return null;
       }
-      return false;
-    } catch {
-      return false;
+      
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.startsWith('image/')) {
+        console.log(`❌ Invalid content type: ${contentType}`);
+        return null;
+      }
+      
+      const blob = await response.blob();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      
+      console.log(`✅ Successfully downloaded and converted image to base64 (${base64.length} chars)`);
+      return base64;
+    } catch (error) {
+      console.log(`❌ Error downloading image:`, error);
+      return null;
     }
   }, []);
 
@@ -249,13 +267,14 @@ Return ANY food image URL you can find.`
         if (imageUrl !== 'NONE' && imageUrl.length > 10 && 
             (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
           
-          // Test if image is loadable
-          const isLoadable = await testImageUrl(imageUrl, 2000);
-          if (isLoadable) {
-            console.log(`✅ AI found recipe image: ${imageUrl}`);
-            return imageUrl;
+          // Download and convert to base64
+          console.log(`📥 AI found image, downloading as base64: ${imageUrl}`);
+          const base64Image = await downloadImageAsBase64(imageUrl, 5000);
+          if (base64Image) {
+            console.log(`✅ AI image successfully downloaded and converted to base64`);
+            return base64Image;
           } else {
-            console.log(`❌ AI image not loadable: ${imageUrl}`);
+            console.log(`❌ Failed to download AI image`);
           }
         }
       }
@@ -277,19 +296,19 @@ Return ANY food image URL you can find.`
     // Try each fallback URL until we find one that works
     for (let i = 0; i < fallbackUrls.length; i++) {
       const url = fallbackUrls[i];
-      console.log(`🧪 Testing fallback image ${i + 1}/${fallbackUrls.length}: ${url}`);
+      console.log(`🧪 Downloading fallback image ${i + 1}/${fallbackUrls.length}: ${url}`);
       
-      const isLoadable = await testImageUrl(url, 2000);
-      if (isLoadable) {
-        console.log(`✅ Fallback image ${i + 1} works: ${url}`);
-        return url;
+      const base64 = await downloadImageAsBase64(url, 5000);
+      if (base64) {
+        console.log(`✅ Fallback image ${i + 1} downloaded successfully`);
+        return base64;
       } else {
-        console.log(`❌ Fallback image ${i + 1} failed: ${url}`);
+        console.log(`❌ Fallback image ${i + 1} failed to download`);
       }
     }
     
-    // If all fallbacks fail, return the first one anyway (Unsplash usually works)
-    console.log(`⚠️ All fallback tests failed, using first fallback anyway`);
+    // If all fallbacks fail, return URL anyway (last resort)
+    console.log(`⚠️ All fallback downloads failed, returning URL as fallback`);
     return fallbackUrls[0];
   }, [getMultipleFallbackImages, testImageUrl]);
 
@@ -348,27 +367,14 @@ Return ANY food image URL you can find.`
         if (imageUrl !== 'NONE' && imageUrl.length > 10 && 
             (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
           
-          // Test if image is loadable
-          try {
-            const testController = new AbortController();
-            const testTimeoutId = setTimeout(() => testController.abort(), 3000);
-            
-            const testResponse = await fetch(imageUrl, { 
-              method: 'HEAD',
-              signal: testController.signal
-            });
-            
-            clearTimeout(testTimeoutId);
-            
-            if (testResponse.ok) {
-              const contentType = testResponse.headers.get('content-type');
-              if (contentType && contentType.startsWith('image/')) {
-                console.log(`✅ Aggressive search found: ${imageUrl}`);
-                return imageUrl;
-              }
-            }
-          } catch (testError) {
-            console.log(`❌ Aggressive search result not loadable: ${testError}`);
+          // Download and convert to base64
+          console.log(`📥 Aggressive search found image, downloading as base64: ${imageUrl}`);
+          const base64Image = await downloadImageAsBase64(imageUrl, 5000);
+          if (base64Image) {
+            console.log(`✅ Aggressive search image successfully downloaded`);
+            return base64Image;
+          } else {
+            console.log(`❌ Failed to download aggressive search image`);
           }
         }
       }
@@ -782,32 +788,14 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
               !imageUrl.toLowerCase().includes('button') &&
               !imageUrl.toLowerCase().includes('arrow')) {
             
-            // Test if image is actually loadable with shorter timeout
-            try {
-              console.log(`🧪 Testing extracted image URL: ${imageUrl}`);
-              const testController = new AbortController();
-              const testTimeoutId = setTimeout(() => testController.abort(), 2000); // Reduced to 2s for speed
-              
-              const testResponse = await fetch(imageUrl, { 
-                method: 'HEAD',
-                signal: testController.signal
-              });
-              
-              clearTimeout(testTimeoutId);
-              
-              if (testResponse.ok) {
-                const contentType = testResponse.headers.get('content-type');
-                if (contentType && contentType.startsWith('image/')) {
-                  console.log(`✅ Successfully extracted and verified recipe image: ${imageUrl}`);
-                  return imageUrl;
-                } else {
-                  console.log(`❌ URL is not an image: ${contentType}`);
-                }
-              } else {
-                console.log(`❌ Image URL not accessible: ${testResponse.status}`);
-              }
-            } catch (testError) {
-              console.log(`❌ Error testing image URL:`, testError);
+            // Download and convert to base64
+            console.log(`📥 Downloading extracted image as base64...`);
+            const base64Image = await downloadImageAsBase64(imageUrl, 10000);
+            if (base64Image) {
+              console.log(`✅ Successfully downloaded and converted recipe image to base64`);
+              return base64Image;
+            } else {
+              console.log(`❌ Failed to download image`);
             }
           } else {
             console.log(`❌ Invalid or filtered image URL: "${imageUrl}"`);
@@ -911,35 +899,22 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
             // Use extracted image or fallback
             if (extractedContent.imageUrl) {
               console.log(`🖼️ AI extracted image URL: ${extractedContent.imageUrl}`);
-              // Test if the extracted image is actually loadable
-              try {
-                const testResponse = await fetch(extractedContent.imageUrl, { method: 'HEAD' });
-                if (testResponse.ok) {
-                  const contentType = testResponse.headers.get('content-type');
-                  if (contentType && contentType.startsWith('image/')) {
-                    finalRecipe.imageUri = extractedContent.imageUrl;
-                    console.log(`✅ Successfully extracted and verified recipe image: ${extractedContent.imageUrl}`);
-                    console.log(`📸 Recipe "${recipe.name}" now has imageUri: ${finalRecipe.imageUri}`);
-                  } else {
-                    console.log(`⚠️ Extracted URL is not an image (${contentType}), generating fallback...`);
-                    finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
-                    console.log(`📸 Recipe "${recipe.name}" using fallback imageUri: ${finalRecipe.imageUri}`);
-                  }
-                } else {
-                  console.log(`⚠️ Extracted image not loadable (HTTP ${testResponse.status}), generating fallback...`);
-                  finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
-                  console.log(`📸 Recipe "${recipe.name}" using fallback imageUri: ${finalRecipe.imageUri}`);
-                }
-              } catch (err) {
-                console.log(`⚠️ Error testing extracted image:`, err);
-                console.log('⚠️ Generating fallback...');
+              // Download and convert to base64
+              console.log(`📥 Downloading extracted image as base64...`);
+              const base64Image = await downloadImageAsBase64(extractedContent.imageUrl, 10000);
+              if (base64Image) {
+                finalRecipe.imageUri = base64Image;
+                console.log(`✅ Successfully downloaded and stored recipe image as base64`);
+                console.log(`📸 Recipe "${recipe.name}" now has imageUri (${base64Image.length} chars)`);
+              } else {
+                console.log(`⚠️ Failed to download extracted image, generating fallback...`);
                 finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
-                console.log(`📸 Recipe "${recipe.name}" using fallback imageUri: ${finalRecipe.imageUri}`);
+                console.log(`📸 Recipe "${recipe.name}" using fallback imageUri`);
               }
             } else {
               console.log('⚠️ No image found in extraction, generating fallback...');
               finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
-              console.log(`📸 Recipe "${recipe.name}" using fallback imageUri: ${finalRecipe.imageUri}`);
+              console.log(`📸 Recipe "${recipe.name}" using fallback imageUri`);
             }
           } else {
             console.log('⚠️ Recipe content extraction failed, using fallback image...');
