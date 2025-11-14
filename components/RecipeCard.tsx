@@ -46,23 +46,23 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
         // Additional validation for common invalid values
         if (trimmedUri === 'null' || 
             trimmedUri === 'undefined' || 
-            trimmedUri === '[object Object]' ||
-            trimmedUri.startsWith('data:') === false && 
-            trimmedUri.startsWith('http://') === false && 
-            trimmedUri.startsWith('https://') === false) {
+            trimmedUri === '[object Object]') {
           console.log(`⚠️ Recipe "${recipe.name}" has INVALID imageUri format: ${trimmedUri.substring(0, 50)}`);
           const fallback = getStableFallbackImage();
           setImageSource(fallback);
           return;
         }
         
-        if (trimmedUri.startsWith('http://') || trimmedUri.startsWith('https://')) {
+        // Accept both HTTP/HTTPS URLs AND base64 data URIs
+        if (trimmedUri.startsWith('http://') || 
+            trimmedUri.startsWith('https://') || 
+            trimmedUri.startsWith('data:image/')) {
           console.log(`✅ Recipe "${recipe.name}" HAS VALID imageUri: ${trimmedUri.substring(0, 100)}...`);
           setImageSource(trimmedUri);
           setImageKey(prev => prev + 1); // Force re-render
           return;
         } else {
-          console.log(`⚠️ Recipe "${recipe.name}" has imageUri but not HTTP/HTTPS: ${trimmedUri.substring(0, 50)}`);
+          console.log(`⚠️ Recipe "${recipe.name}" has imageUri but not HTTP/HTTPS/data: ${trimmedUri.substring(0, 50)}`);
         }
       } else {
         console.log(`⚠️ Recipe "${recipe.name}" has NO valid imageUri (empty, null, or too short)`);
@@ -191,10 +191,7 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
         {imageSource && imageSource.length > 10 ? (
           <Image
             key={`${recipe.id}-${imageKey}`}
-            source={{ 
-              uri: imageSource, 
-              cache: 'reload' 
-            }}
+            source={{ uri: imageSource }}
             style={styles.image}
             resizeMode="cover"
             onLoad={handleImageLoad}

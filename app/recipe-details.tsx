@@ -272,6 +272,16 @@ export default function RecipeDetailsScreen() {
   ];
 
   const getStableFallbackImage = (recipe: Recipe) => {
+    // Return recipe.imageUri if it's a base64 data URI or HTTP/HTTPS URL
+    if (recipe.imageUri && 
+        typeof recipe.imageUri === 'string' && 
+        (recipe.imageUri.startsWith('data:image/') || 
+         recipe.imageUri.startsWith('http://') || 
+         recipe.imageUri.startsWith('https://'))) {
+      return recipe.imageUri;
+    }
+    
+    // Otherwise generate an unsplash fallback
     const cleanName = recipe.name
       .replace(/recipe/gi, '')
       .replace(/[^a-zA-Z0-9\s]/g, '')
