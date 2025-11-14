@@ -279,13 +279,12 @@ Return ANY food image URL you can find.`
         }
       }
       
-      console.log(`❌ AI image search failed for "${recipeName}"`);
-      return undefined;
+      console.log(`❌ AI image search failed for "${recipeName}"`);  return undefined;
     } catch (error) {
       console.log(`❌ Error in AI image search for "${recipeName}":`, error);
       return undefined;
     }
-  }, [testImageUrl]);
+  }, [downloadImageAsBase64]);
 
   // Generate a guaranteed fallback image with multiple attempts
   const generateFallbackImage = useCallback(async (recipeName: string, category: string): Promise<string> => {
@@ -310,7 +309,7 @@ Return ANY food image URL you can find.`
     // If all fallbacks fail, return URL anyway (last resort)
     console.log(`⚠️ All fallback downloads failed, returning URL as fallback`);
     return fallbackUrls[0];
-  }, [getMultipleFallbackImages, testImageUrl]);
+  }, [getMultipleFallbackImages, downloadImageAsBase64]);
 
   // Aggressive image search as final fallback
   const aggressiveImageSearch = useCallback(async (recipeName: string): Promise<string | undefined> => {
