@@ -64,7 +64,6 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
     }
   }, [user?.id]);
 
-  // Multiple fallback image sources for maximum reliability
   const getMultipleFallbackImages = useCallback((recipeName: string, category: string): string[] => {
     const cleanName = recipeName
       .replace(/recipe/gi, '')
@@ -85,308 +84,73 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
     const categoryTerm = encodeURIComponent(category.toLowerCase().replace(/[^a-zA-Z0-9\s]/g, ''));
     
     return [
-      // Primary: Specific recipe search
       `https://source.unsplash.com/featured/400x300/?${searchTerm},food,recipe,dish&sig=${timestamp}`,
-      // Secondary: Category-based search
       `https://source.unsplash.com/featured/400x300/?${categoryTerm},food,cooking&sig=${timestamp + 1}`,
-      // Tertiary: Generic food search
       `https://source.unsplash.com/featured/400x300/?food,cooking,recipe&sig=${timestamp + 2}`,
-      // Quaternary: Meal-based search
       `https://source.unsplash.com/featured/400x300/?meal,dish,cuisine&sig=${timestamp + 3}`,
-      // Final fallback: Kitchen/cooking theme
       `https://source.unsplash.com/featured/400x300/?kitchen,cooking,chef&sig=${timestamp + 4}`
     ];
   }, []);
 
-  // Download image and convert to base64
-  const downloadImageAsBase64 = useCallback(async (imageUrl: string, timeout: number = 5000): Promise<string | null> => {
-    try {
-      console.log(`📥 Downloading image: ${imageUrl}`);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-      
-      const response = await fetch(imageUrl, { 
-        method: 'GET',
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        console.log(`❌ Failed to download image: HTTP ${response.status}`);
-        return null;
-      }
-      
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.startsWith('image/')) {
-        console.log(`❌ Invalid content type: ${contentType}`);
-        return null;
-      }
-      
-      const blob = await response.blob();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      
-      console.log(`✅ Successfully downloaded and converted image to base64 (${base64.length} chars)`);
-      return base64;
-    } catch (error) {
-      console.log(`❌ Error downloading image:`, error);
-      return null;
-    }
-  }, []);
-
-  // Search for recipe images using AI with multiple strategies
-  const searchRecipeImages = useCallback(async (recipeName: string): Promise<string | undefined> => {
-    try {
-      console.log(`🔍 AI searching for recipe images: "${recipeName}"`);
-      
-      const cleanName = recipeName
-        .replace(/recipe/gi, '')
-        .replace(/[^a-zA-Z0-9\s]/g, '')
-        .trim();
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
-      
-      const response = await fetch('https://toolkit.rork.com/text/llm/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          messages: [
-            {
-              role: 'system',
-              content: `🚨 ULTRA-AGGRESSIVE RECIPE CONTENT EXTRACTOR 🚨
-
-You are the MOST PRECISE recipe content extractor with ENHANCED SCRAPING CAPABILITIES. Your job is to find and extract the COMPLETE recipe from any webpage, filtering out all filler content.
-
-🎯 MISSION: Extract ONLY the actual recipe content with MAXIMUM ACCURACY
-
-🔍 ENHANCED EXTRACTION STRATEGY:
-1. SCAN ENTIRE WEBPAGE for recipe content
-2. LOOK FOR structured data (JSON-LD, microdata)
-3. IDENTIFY recipe cards, recipe sections
-4. EXTRACT from recipe plugins/widgets
-5. PARSE ingredient lists and instruction blocks
-6. IGNORE all non-recipe content
-
-✅ EXTRACT (MANDATORY):
-- Complete ingredients list with EXACT measurements
-- Step-by-step cooking instructions (numbered sequentially)
-- Cooking time, prep time, servings if available
-- Temperature settings and cooking methods
-- Any special notes, tips, or variations
-
-❌ IGNORE (FILTER OUT COMPLETELY):
-- Author bio, personal stories, blog content
-- Advertisements, social media links, affiliate links
-- Comments, reviews, ratings, user feedback
-- Navigation menus, headers, footers
-- "Pin this recipe" or sharing buttons
-- Nutritional disclaimers or legal text
-- Related recipes or suggestions
-- Website navigation elements
-- Popup content or subscription prompts
-
-📝 ULTRA-STRICT FORMAT:
-INGREDIENTS:
-- [ingredient with exact measurement and preparation notes]
-- [ingredient with exact measurement and preparation notes]
-
-INSTRUCTIONS:
-1. [detailed, actionable cooking step with temperatures/times]
-2. [detailed, actionable cooking step with temperatures/times]
-3. [detailed, actionable cooking step with temperatures/times]
-
-NOTES: [cooking tips, temperature guidelines, timing notes, variations]
-
-🚨 CRITICAL REQUIREMENTS:
-- Extract ONLY the recipe content, ignore ALL filler
-- Make each instruction step EXTREMELY clear and actionable
-- Include EXACT measurements, temperatures, and timing
-- Number ALL instruction steps sequentially (1, 2, 3...)
-- Focus ONLY on the cooking process, not stories or ads`
-            },
-            {
-              role: 'user',
-              content: `🚨 ULTRA-AGGRESSIVE IMAGE SEARCH MISSION
-
-Recipe: "${cleanName}"
-
-🔍 SEARCH STRATEGY:
-1. Search for exact recipe name: "${cleanName}"
-2. Search for similar dishes and variations
-3. Search for main ingredients
-4. Search for food category/cuisine type
-5. Search for ANY related food images
-
-🎯 CRITICAL MISSION:
-- Find ANY food-related image for "${cleanName}"
-- Be extremely aggressive and creative
-- Try multiple websites and sources
-- Use different search terms and variations
-- Look for similar dishes if exact match not found
-- Find ingredient photos if no dish photos exist
-- Even find cartoon/illustrated food if needed
-
-🚨 DO NOT RETURN "NONE" - Find SOMETHING food-related!
-
-Search everywhere: recipe sites, food blogs, restaurants, social media, stock photos, Wikipedia, YouTube thumbnails, grocery stores, food delivery apps.
-
-Return ANY food image URL you can find.`
-            }
-          ]
-        })
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        console.log(`❌ AI image search API error: ${response.status}`);
-        return undefined;
-      }
-      
-      const data = await response.json();
-      if (!data?.completion) {
-        console.log(`❌ No completion in AI image search response`);
-        return undefined;
-      }
-      
-      const result = data.completion.trim();
-      const imageLine = result.split('\n').find((line: string) => line.toUpperCase().startsWith('IMAGE:'));
-      
-      if (imageLine) {
-        const imageUrl = imageLine.replace(/IMAGE:/i, '').trim();
-        
-        if (imageUrl !== 'NONE' && imageUrl.length > 10 && 
-            (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
-          
-          // Download and convert to base64
-          console.log(`📥 AI found image, downloading as base64: ${imageUrl}`);
-          const base64Image = await downloadImageAsBase64(imageUrl, 5000);
-          if (base64Image) {
-            console.log(`✅ AI image successfully downloaded and converted to base64`);
-            return base64Image;
-          } else {
-            console.log(`❌ Failed to download AI image`);
-          }
-        }
-      }
-      
-      console.log(`❌ AI image search failed for "${recipeName}"`);  return undefined;
-    } catch (error) {
-      console.log(`❌ Error in AI image search for "${recipeName}":`, error);
-      return undefined;
-    }
-  }, [downloadImageAsBase64]);
-
-  // Generate a guaranteed fallback image with multiple attempts
   const generateFallbackImage = useCallback(async (recipeName: string, category: string): Promise<string> => {
-    console.log(`🎨 Generating fallback image for "${recipeName}" in category "${category}"`);
-    
+    console.log(`🎨 Generating fallback image URL for "${recipeName}" in category "${category}"`);
     const fallbackUrls = getMultipleFallbackImages(recipeName, category);
-    
-    // Try each fallback URL until we find one that works
-    for (let i = 0; i < fallbackUrls.length; i++) {
-      const url = fallbackUrls[i];
-      console.log(`🧪 Downloading fallback image ${i + 1}/${fallbackUrls.length}: ${url}`);
-      
-      const base64 = await downloadImageAsBase64(url, 5000);
-      if (base64) {
-        console.log(`✅ Fallback image ${i + 1} downloaded successfully`);
-        return base64;
-      } else {
-        console.log(`❌ Fallback image ${i + 1} failed to download`);
-      }
-    }
-    
-    // If all fallbacks fail, return URL anyway (last resort)
-    console.log(`⚠️ All fallback downloads failed, returning URL as fallback`);
+    console.log(`✅ Using Unsplash fallback URL: ${fallbackUrls[0]}`);
     return fallbackUrls[0];
-  }, [getMultipleFallbackImages, downloadImageAsBase64]);
+  }, [getMultipleFallbackImages]);
 
-  // Aggressive image search as final fallback
-  const aggressiveImageSearch = useCallback(async (recipeName: string): Promise<string | undefined> => {
+  const extractRecipeImage = useCallback(async (recipeName: string, recipeUrl: string, retryCount: number = 1): Promise<string | undefined> => {
+    console.log(`🖼️ Starting image extraction for "${recipeName}"`);
+    
     try {
-      console.log(`🚀 Aggressive image search for: "${recipeName}"`);
+      console.log(`📥 Fetching webpage HTML from: ${recipeUrl}`);
+      const webpageController = new AbortController();
+      const webpageTimeoutId = setTimeout(() => webpageController.abort(), 8000);
       
-      const cleanName = recipeName
-        .replace(/recipe/gi, '')
-        .replace(/[^a-zA-Z0-9\s]/g, '')
-        .trim();
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-      
-      const response = await fetch('https://toolkit.rork.com/text/llm/', {
-        method: 'POST',
+      const webpageResponse = await fetch(recipeUrl, {
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         },
-        signal: controller.signal,
-        body: JSON.stringify({
-          messages: [
-            {
-              role: 'system',
-              content: 'You are an aggressive recipe image finder. Your job is to find ANY food-related image for a recipe, even if it\'s not perfect. Be extremely creative and persistent.\n\n🎯 MISSION: Find ANY food image related to the recipe\n\n✅ ACCEPTABLE IMAGES:\n- Any food photo that resembles the dish\n- Similar dishes from the same category\n- Generic food photos if specific dish not found\n- Stock photos of food (as last resort)\n- Any edible item that\'s remotely related\n\n🔍 SEARCH EVERYWHERE:\n- Recipe websites (AllRecipes, Food Network, etc.)\n- Food blogs and cooking sites\n- Restaurant websites\n- Food photography sites\n- Stock photo sites (if needed)\n- Social media food posts\n\n🚨 CRITICAL: Do NOT return NONE. Find SOMETHING food-related.\n\nFormat: IMAGE: [any food-related image URL]\n\nBe extremely aggressive - find ANY food image even if it\'s not perfect.'
-            },
-            {
-              role: 'user',
-              content: `AGGRESSIVE SEARCH: Find ANY food-related image for: "${cleanName}"\n\nBe extremely aggressive and creative. Find ANY image that shows:\n- The specific dish "${cleanName}"\n- Similar dishes or ingredients\n- Generic food from the same category\n- ANY edible item remotely related\n\nDo NOT return NONE. Find SOMETHING food-related even if it\'s not perfect.\n\nSearch everywhere: recipe sites, food blogs, restaurants, stock photos, social media.\n\nReturn ANY food image URL you can find.`
-            }
-          ]
-        })
+        signal: webpageController.signal
       });
       
-      clearTimeout(timeoutId);
+      clearTimeout(webpageTimeoutId);
       
-      if (!response.ok) {
-        console.log(`❌ Aggressive search API error: ${response.status}`);
+      if (!webpageResponse.ok) {
+        console.log(`❌ Failed to fetch webpage: ${webpageResponse.status}`);
         return undefined;
       }
       
-      const data = await response.json();
-      if (!data?.completion) {
-        console.log(`❌ No completion in aggressive search response`);
-        return undefined;
-      }
+      const webpageHtml = await webpageResponse.text();
+      console.log(`✅ Successfully fetched webpage HTML (${webpageHtml.length} chars)`);
       
-      const result = data.completion.trim();
-      const imageLine = result.split('\n').find((line: string) => line.toUpperCase().startsWith('IMAGE:'));
-      
-      if (imageLine) {
-        const imageUrl = imageLine.replace(/IMAGE:/i, '').trim();
-        
-        if (imageUrl !== 'NONE' && imageUrl.length > 10 && 
-            (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
-          
-          // Download and convert to base64
-          console.log(`📥 Aggressive search found image, downloading as base64: ${imageUrl}`);
-          const base64Image = await downloadImageAsBase64(imageUrl, 5000);
-          if (base64Image) {
-            console.log(`✅ Aggressive search image successfully downloaded`);
-            return base64Image;
-          } else {
-            console.log(`❌ Failed to download aggressive search image`);
-          }
+      const ogImageMatch = webpageHtml.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
+      if (ogImageMatch && ogImageMatch[1]) {
+        const imageUrl = ogImageMatch[1];
+        if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+          console.log(`✅ Found og:image: ${imageUrl}`);
+          return imageUrl;
         }
       }
       
-      console.log(`❌ Aggressive search failed for "${recipeName}"`);
+      const twitterImageMatch = webpageHtml.match(/<meta\s+(?:name|property)="twitter:image"\s+content="([^"]+)"/i);
+      if (twitterImageMatch && twitterImageMatch[1]) {
+        const imageUrl = twitterImageMatch[1];
+        if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+          console.log(`✅ Found twitter:image: ${imageUrl}`);
+          return imageUrl;
+        }
+      }
+      
+      console.log(`⚠️ No og:image or twitter:image found in HTML`);
       return undefined;
     } catch (error) {
-      console.log(`❌ Error in aggressive search for "${recipeName}":`, error);
+      console.log(`❌ Error extracting image from webpage:`, error);
       return undefined;
     }
   }, []);
 
-  // Extract complete recipe content with enhanced parsing and categorization
   const extractRecipeContent = useCallback(async (recipeName: string, recipeUrl: string): Promise<{
     ingredients?: string;
     nutritionalFacts?: string;
@@ -398,7 +162,6 @@ Return ANY food image URL you can find.`
     try {
       console.log(`🔍 Extracting complete recipe content for "${recipeName}" from ${recipeUrl}`);
       
-      // Fetch the webpage HTML
       const webpageController = new AbortController();
       const webpageTimeoutId = setTimeout(() => webpageController.abort(), 10000);
       
@@ -426,7 +189,6 @@ Return ANY food image URL you can find.`
         return undefined;
       }
       
-      // Use AI to extract the 5 required fields + category
       console.log(`🤖 Analyzing HTML content with AI for complete recipe extraction...`);
       const aiController = new AbortController();
       const aiTimeoutId = setTimeout(() => aiController.abort(), 20000);
@@ -589,7 +351,6 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
       const result = data.completion.trim();
       console.log(`🤖 AI recipe extraction result for "${recipeName}": ${result.substring(0, 800)}...`);
       
-      // Enhanced parsing of AI response
       const extractedData: {
         ingredients?: string;
         nutritionalFacts?: string;
@@ -599,7 +360,6 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
         category?: RecipeCategory;
       } = {};
       
-      // More robust parsing - handle both section headers and single-line fields
       const lines = result.split('\n');
       let currentSection: string | null = null;
       let sectionContent: string[] = [];
@@ -608,9 +368,7 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
         const line = lines[i];
         const upperLine = line.toUpperCase();
         
-        // Check if this is a section header (INGREDIENTS:, INSTRUCTIONS:, etc.)
         if (upperLine.match(/^[A-Z][A-Z ]*:/) && !line.startsWith(' ')) {
-          // Save previous section if exists
           if (currentSection && sectionContent.length > 0) {
             const content = sectionContent.join('\n').trim();
             if (currentSection === 'INGREDIENTS') {
@@ -624,12 +382,10 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
             }
           }
           
-          // Start new section
           const colonIndex = line.indexOf(':');
           const header = line.substring(0, colonIndex).toUpperCase().trim();
           const valueAfterColon = line.substring(colonIndex + 1).trim();
           
-          // Handle single-line fields (IMAGE: url, CATEGORY: name)
           if (header === 'IMAGE') {
             const imageUrl = valueAfterColon;
             if (imageUrl && imageUrl !== 'Not available' && imageUrl !== 'NONE' && 
@@ -653,17 +409,14 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
             currentSection = null;
             sectionContent = [];
           } else {
-            // Multi-line section (INGREDIENTS, INSTRUCTIONS, etc.)
             currentSection = header;
             sectionContent = valueAfterColon ? [valueAfterColon] : [];
           }
         } else if (currentSection) {
-          // Add to current section
           sectionContent.push(line);
         }
       }
       
-      // Save last section if exists
       if (currentSection && sectionContent.length > 0) {
         const content = sectionContent.join('\n').trim();
         if (currentSection === 'INGREDIENTS') {
@@ -694,169 +447,6 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
     }
   }, []);
 
-  // Extract recipe image from URL with retry mechanism and AI generation fallback
-  const extractRecipeImage = useCallback(async (recipeName: string, recipeUrl: string, retryCount: number = 1): Promise<string | undefined> => {
-    console.log(`🖼️ Starting image extraction for "${recipeName}"`);
-    
-    // Try to get image from AI generation first (most reliable)
-    console.log(`🎨 Trying AI image generation for "${recipeName}"...`);
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-      
-      const response = await fetch('https://toolkit.rork.com/images/generate/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          prompt: `A professional, appetizing photograph of ${recipeName}, food photography, high quality, well-lit, restaurant style presentation, shallow depth of field`,
-          size: '1024x1024'
-        })
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data?.image?.base64Data && data?.image?.mimeType) {
-          const base64Image = `data:${data.image.mimeType};base64,${data.image.base64Data}`;
-          console.log(`✅ AI generated image successfully for "${recipeName}" (${base64Image.length} chars)`);
-          return base64Image;
-        }
-      } else {
-        console.log(`⚠️ AI image generation API returned ${response.status}`);
-      }
-    } catch (error) {
-      console.log(`⚠️ AI image generation failed for "${recipeName}":`, error);
-    }
-    
-    // Fallback: Try to extract from webpage (but with lower priority)
-    let attempts = 0;
-    const maxAttempts = retryCount + 1;
-    
-    while (attempts < maxAttempts) {
-      try {
-        console.log(`🔍 [Attempt ${attempts + 1}/${maxAttempts}] Extracting image from webpage for "${recipeName}"`);
-        
-        const webpageController = new AbortController();
-        const webpageTimeoutId = setTimeout(() => webpageController.abort(), 5000);
-        
-        let webpageHtml: string;
-        try {
-          const webpageResponse = await fetch(recipeUrl, {
-            method: 'GET',
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            },
-            signal: webpageController.signal
-          });
-          
-          clearTimeout(webpageTimeoutId);
-          
-          if (!webpageResponse.ok) {
-            console.log(`❌ Webpage fetch failed with HTTP ${webpageResponse.status}, skipping to fallback`);
-            break; // Skip retries, go straight to fallback
-          }
-          
-          webpageHtml = await webpageResponse.text();
-          console.log(`✅ Successfully fetched webpage HTML (${webpageHtml.length} chars)`);
-        } catch (fetchError) {
-          console.log(`❌ Error fetching webpage, skipping to fallback:`, fetchError);
-          break; // Skip retries, go straight to fallback
-        }
-        
-        // Analyze HTML to extract image
-        console.log(`🤖 Analyzing HTML for image extraction...`);
-        const aiController = new AbortController();
-        const aiTimeoutId = setTimeout(() => aiController.abort(), 8000);
-        
-        const response = await fetch('https://toolkit.rork.com/text/llm/', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          signal: aiController.signal,
-          body: JSON.stringify({
-            messages: [
-              {
-                role: 'system',
-                content: `You are an ULTRA-AGGRESSIVE recipe image extractor with SOUP DETECTION priority. Your job is to analyze HTML content and extract the main recipe image URL while detecting soup recipes.\n\n🎯 CRITICAL MISSION: Find the EXACT recipe image URL from the HTML\n\n🍲 SOUP DETECTION (HIGHEST PRIORITY):\nFirst, scan the HTML for ANY soup-related keywords: soup, soups, soupy, stew, stews, stewed, chili, chilis, chile, chilli, bisque, bisques, chowder, chowders, broth, broths, stock, stocks, pho, ramen, miso, gazpacho, minestrone, bouillabaisse, gumbo, borscht, consommé, vichyssoise, tom yum, laksa, pozole, menudo, curry soup, coconut soup, noodle soup, chicken soup, beef soup, vegetable soup, tomato soup, mushroom soup, onion soup, french onion soup, clam chowder, corn chowder, seafood chowder, wonton soup, egg drop soup, lentil soup, split pea soup, butternut squash soup, potato soup, leek soup, carrot soup, seafood soup, fish soup, bone broth, vegetable broth, chicken broth, beef broth, turkey soup, cabbage soup, celery soup, pumpkin soup, matzo ball soup, chicken noodle, hot and sour soup, cream soup, pureed soup, clear soup, bean soup, black bean soup, white bean soup, navy bean soup, tortilla soup, albondigas, cioppino, mulligatawny\n\nIf ANY soup keyword found, this is a SOUP RECIPE and must be categorized as Salads & Soups.\n\n🔍 IMAGE EXTRACTION PRIORITY ORDER:\n1. META TAGS: <meta property="og:image" content="..."> (HIGHEST PRIORITY)\n2. TWITTER CARDS: <meta name="twitter:image" content="...">\n3. RECIPE SCHEMA: JSON-LD structured data with "image" property\n4. MAIN IMG TAGS: <img> with recipe-related alt text and large dimensions\n5. HERO IMAGES: Large featured images near recipe title\n6. ANY FOOD IMAGE: If no perfect match, find any food-related image\n\n✅ VALID IMAGE CRITERIA:\n- Direct HTTP/HTTPS image URL from the HTML\n- Shows food, dish, or recipe-related content\n- High resolution (preferably 300px+ width)\n- From recipe website domain or trusted CDN\n- Common formats: .jpg, .jpeg, .png, .webp\n\n❌ REJECT THESE:\n- Logos, icons, social buttons\n- Author/chef profile photos (unless no other option)\n- Advertisement images\n- Navigation/UI elements\n- Favicon or small icons\n\n🚨 CRITICAL: Be extremely aggressive in finding images. Scan the ENTIRE HTML for ANY food-related image. Even if it's not perfect, find SOMETHING food-related.\n\nRespond with ONLY:\nIMAGE: [exact direct image URL from HTML]\n\nIf absolutely no food-related image found:\nIMAGE: NONE`
-              },
-              {
-                role: 'user',
-                content: `🎯 EXTRACT RECIPE IMAGE FROM HTML CONTENT (Attempt ${attempts + 1})\n\nRecipe Name: "${recipeName}"\nWebpage URL: ${recipeUrl}\n\n📋 HTML CONTENT TO ANALYZE:\n${webpageHtml.substring(0, 50000)}\n\n🔍 CRITICAL TASK:\n1. Scan the ENTIRE HTML content above for ANY food-related image\n2. Find the main recipe image that shows the finished "${recipeName}" dish\n3. If no perfect match, find ANY food-related image from the page\n4. Extract the direct image URL from the HTML\n5. Prioritize og:image meta tags, then twitter:image, then recipe schema, then main img tags\n6. Be EXTREMELY aggressive - find ANY food image even if not perfect\n\n✅ SUCCESS: Return the exact image URL from the HTML\n❌ FAILURE: Return "NONE" only if absolutely NO food images exist anywhere\n\nBe extremely aggressive - find ANY food image if the perfect recipe image isn't available. Scan every img tag, every meta tag, every schema markup.`
-              }
-            ]
-          })
-        });
-        
-        clearTimeout(aiTimeoutId);
-        
-        if (!response.ok) {
-          console.log(`⚠️ AI API error for image extraction: ${response.status}`);
-          throw new Error(`AI API error: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        if (!data?.completion) {
-          console.log(`⚠️ No completion in AI response`);
-          throw new Error('No AI completion');
-        }
-        
-        const result = data.completion.trim();
-        console.log(`🤖 AI image extraction result for "${recipeName}": ${result}`);
-        
-        const imageLine = result.split('\n').find((line: string) => line.toUpperCase().startsWith('IMAGE:'));
-        
-        if (imageLine) {
-          const imageUrl = imageLine.replace(/IMAGE:/i, '').trim();
-          console.log(`🔍 Extracted image URL: "${imageUrl}"`);
-          
-          if (imageUrl !== 'NONE' && imageUrl.length > 10 && 
-              (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) &&
-              !imageUrl.toLowerCase().includes('favicon') &&
-              !imageUrl.toLowerCase().includes('sprite') &&
-              !imageUrl.toLowerCase().includes('button') &&
-              !imageUrl.toLowerCase().includes('arrow')) {
-            
-            // Download and convert to base64
-            console.log(`📥 Downloading extracted image as base64...`);
-            const base64Image = await downloadImageAsBase64(imageUrl, 10000);
-            if (base64Image) {
-              console.log(`✅ Successfully downloaded and converted recipe image to base64`);
-              return base64Image;
-            } else {
-              console.log(`❌ Failed to download image`);
-            }
-          } else {
-            console.log(`❌ Invalid or filtered image URL: "${imageUrl}"`);
-          }
-        } else {
-          console.log(`❌ No IMAGE: line found in AI response`);
-        }
-        
-        // If we reach here, this attempt found no valid image
-        throw new Error('No valid image found in HTML');
-        
-      } catch (error) {
-        attempts++;
-        console.log(`❌ Webpage extraction attempt ${attempts} failed:`, error);
-        
-        if (attempts >= maxAttempts) {
-          break;
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 300));
-      }
-    }
-    
-    // All methods failed, return undefined and let generateFallbackImage handle it
-    console.log(`⚠️ Could not extract or generate image for "${recipeName}", will use fallback`);
-    return undefined;
-  }, [downloadImageAsBase64]);
-
   const addRecipe = useCallback(async (recipe: Omit<Recipe, 'id' | 'createdAt'>) => {
     try {
       console.log('📝 Adding recipe:', {
@@ -867,7 +457,6 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
         hasContent: !!recipe.content
       });
       
-      // FORCE complete recipe extraction for ALL URL recipes
       let finalRecipe = { ...recipe };
       if (recipe.url) {
         console.log('🔍 FORCING complete recipe content extraction for recipe with URL...');
@@ -875,13 +464,11 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
           const extractedContent = await extractRecipeContent(recipe.name, recipe.url);
           
           if (extractedContent) {
-            // Update category if AI provided a better one
             if (extractedContent.category) {
               finalRecipe.category = extractedContent.category;
               console.log(`🎯 AI updated category to: ${extractedContent.category}`);
             }
             
-            // Build the complete recipe content with all extracted fields
             let content = '';
             
             if (extractedContent.ingredients) {
@@ -897,31 +484,23 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
             }
             
             if (extractedContent.instructions) {
-              // Instructions should already have checkboxes from AI
               content += `**Instructions:**\n${extractedContent.instructions}\n\n`;
             }
             
             finalRecipe.content = content.trim();
             
-            // Use extracted image or fallback
             if (extractedContent.imageUrl) {
-              console.log(`🖼️ AI extracted image URL: ${extractedContent.imageUrl}`);
-              // Download and convert to base64
-              console.log(`📥 Downloading extracted image as base64...`);
-              const base64Image = await downloadImageAsBase64(extractedContent.imageUrl, 10000);
-              if (base64Image) {
-                finalRecipe.imageUri = base64Image;
-                console.log(`✅ Successfully downloaded and stored recipe image as base64`);
-                console.log(`📸 Recipe "${recipe.name}" now has imageUri (${base64Image.length} chars)`);
+              const imageUrl = extractedContent.imageUrl.trim();
+              if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('data:image/')) {
+                console.log(`✅ Using extracted image URL directly: ${imageUrl.substring(0, 100)}...`);
+                finalRecipe.imageUri = imageUrl;
               } else {
-                console.log(`⚠️ Failed to download extracted image, generating fallback...`);
+                console.log(`⚠️ Invalid image URL format, using fallback...`);
                 finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
-                console.log(`📸 Recipe "${recipe.name}" using fallback imageUri`);
               }
             } else {
-              console.log('⚠️ No image found in extraction, generating fallback...');
+              console.log('⚠️ No image found in extraction, using fallback...');
               finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
-              console.log(`📸 Recipe "${recipe.name}" using fallback imageUri`);
             }
           } else {
             console.log('⚠️ Recipe content extraction failed, using fallback image...');
@@ -933,19 +512,16 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
         }
       }
       
-      // Generate a more unique ID to avoid conflicts
       const newRecipe: Recipe = {
         ...finalRecipe,
         id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         createdAt: Date.now(),
       };
       
-      // Get the latest recipes from storage to avoid conflicts
       const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
       const storedRecipes = await AsyncStorage.getItem(storageKey);
       const currentRecipes = storedRecipes ? JSON.parse(storedRecipes) : [];
       
-      // Check for duplicates by URL to avoid adding the same recipe twice
       const existingRecipe = currentRecipes.find((r: Recipe) => r.url === newRecipe.url);
       if (existingRecipe) {
         console.log('⚠️ Recipe already exists, skipping duplicate');
@@ -1057,12 +633,10 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
     }
   }, []);
 
-  // Re-extract images for recipes that don't have them
   const reExtractImages = useCallback(async () => {
     try {
       console.log('🔄 Starting image re-extraction for recipes without images...');
       
-      // Get fresh recipes from storage
       const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
       const storedRecipes = await AsyncStorage.getItem(storageKey);
       const currentRecipes = storedRecipes ? JSON.parse(storedRecipes) : [];
@@ -1077,36 +651,31 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
       
       let successCount = 0;
       let failedCount = 0;
-      let workingRecipes = [...currentRecipes]; // Working copy that gets updated
+      let workingRecipes = [...currentRecipes];
       
       for (let i = 0; i < recipesWithoutImages.length; i++) {
         const recipe = recipesWithoutImages[i];
         console.log(`🔍 [${i + 1}/${recipesWithoutImages.length}] Re-extracting image for: "${recipe.name}"`);
         
         try {
-          const imageUri = await extractRecipeImage(recipe.name, recipe.url!, 2); // 2 retries for re-extraction
+          const imageUri = await extractRecipeImage(recipe.name, recipe.url!, 2);
           
           if (imageUri) {
-            // Update the recipe with the new image in the working copy
             workingRecipes = workingRecipes.map(r => 
               r.id === recipe.id ? { ...r, imageUri } : r
             );
             console.log(`✅ [${i + 1}/${recipesWithoutImages.length}] Successfully extracted image for: "${recipe.name}"`);
-            console.log(`   Image URL: ${imageUri.substring(0, 100)}...`);
             successCount++;
           } else {
-            // If extraction fails, generate a fallback image
             console.log(`⚠️ Extraction failed, generating fallback for: "${recipe.name}"`);
             const fallbackImage = await generateFallbackImage(recipe.name, recipe.category);
             workingRecipes = workingRecipes.map(r => 
               r.id === recipe.id ? { ...r, imageUri: fallbackImage } : r
             );
             console.log(`✅ [${i + 1}/${recipesWithoutImages.length}] Generated fallback image for: "${recipe.name}"`);
-            console.log(`   Fallback URL: ${fallbackImage.substring(0, 100)}...`);
-            successCount++; // Count fallback as success since recipe now has an image
+            successCount++;
           }
         } catch (error) {
-          // Even on error, try to generate a fallback
           try {
             console.log(`⚠️ Error occurred, generating fallback for: "${recipe.name}"`, error);
             const fallbackImage = await generateFallbackImage(recipe.name, recipe.category);
@@ -1114,24 +683,21 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
               r.id === recipe.id ? { ...r, imageUri: fallbackImage } : r
             );
             console.log(`✅ [${i + 1}/${recipesWithoutImages.length}] Generated fallback after error for: "${recipe.name}"`);
-            successCount++; // Count fallback as success
+            successCount++;
           } catch (fallbackError) {
             failedCount++;
             console.log(`❌ [${i + 1}/${recipesWithoutImages.length}] Complete failure for: "${recipe.name}"`, fallbackError);
           }
         }
         
-        // Save after EACH update so changes persist
         await saveRecipes(workingRecipes);
         
-        // Shorter delay between requests for speed
         if (i < recipesWithoutImages.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 200)); // Reduced from 500ms to 200ms
+          await new Promise(resolve => setTimeout(resolve, 200));
         }
       }
       
       console.log(`🎉 Image re-extraction complete: ${successCount} success, ${failedCount} failed`);
-      console.log(`📊 Final check: ${workingRecipes.filter((r: Recipe) => r.imageUri).length} recipes now have images`);
       return { success: successCount, failed: failedCount };
     } catch (error) {
       console.error('❌ Error during image re-extraction:', error);
@@ -1139,33 +705,15 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
     }
   }, [user?.id, extractRecipeImage, saveRecipes, generateFallbackImage]);
 
-  // Force re-extract images for ALL recipes (including ones that already have images)
   const forceReExtractAllImages = useCallback(async () => {
     try {
       console.log('🚀 FORCE re-extracting images for ALL recipes with URLs...');
       
-      // Get fresh recipes from storage
       const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
       const storedRecipes = await AsyncStorage.getItem(storageKey);
       const currentRecipes = storedRecipes ? JSON.parse(storedRecipes) : [];
       
-      // Clean up invalid imageUri values first
-      const cleanedRecipes = currentRecipes.map((recipe: Recipe) => {
-        if (recipe.imageUri) {
-          const trimmedUri = recipe.imageUri.trim();
-          if (!trimmedUri || trimmedUri === 'null' || trimmedUri === 'undefined' || trimmedUri.length < 10) {
-            console.log(`🧹 Cleaning invalid imageUri for "${recipe.name}": "${recipe.imageUri}"`);
-            return { ...recipe, imageUri: undefined };
-          }
-          if (!trimmedUri.startsWith('http://') && !trimmedUri.startsWith('https://')) {
-            console.log(`🧹 Cleaning non-URL imageUri for "${recipe.name}": "${recipe.imageUri}"`);
-            return { ...recipe, imageUri: undefined };
-          }
-        }
-        return recipe;
-      });
-      
-      const recipesWithUrls = cleanedRecipes.filter((recipe: Recipe) => recipe.url);
+      const recipesWithUrls = currentRecipes.filter((recipe: Recipe) => recipe.url);
       console.log(`📊 Found ${recipesWithUrls.length} recipes with URLs to re-extract`);
       
       if (recipesWithUrls.length === 0) {
@@ -1175,36 +723,31 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
       
       let successCount = 0;
       let failedCount = 0;
-      let workingRecipes = [...currentRecipes]; // Working copy that gets updated
+      let workingRecipes = [...currentRecipes];
       
       for (let i = 0; i < recipesWithUrls.length; i++) {
         const recipe = recipesWithUrls[i];
         console.log(`🔍 [${i + 1}/${recipesWithUrls.length}] FORCE re-extracting image for: "${recipe.name}"`);
         
         try {
-          const imageUri = await extractRecipeImage(recipe.name, recipe.url!, 3); // 3 retries for force extraction
+          const imageUri = await extractRecipeImage(recipe.name, recipe.url!, 3);
           
           if (imageUri) {
-            // Update the recipe with the new image in the working copy
             workingRecipes = workingRecipes.map(r => 
               r.id === recipe.id ? { ...r, imageUri } : r
             );
             console.log(`✅ [${i + 1}/${recipesWithUrls.length}] Successfully FORCE extracted image for: "${recipe.name}"`);
-            console.log(`   Image URL: ${imageUri.substring(0, 100)}...`);
             successCount++;
           } else {
-            // If extraction fails, generate a fallback image
             console.log(`⚠️ FORCE extraction failed, generating fallback for: "${recipe.name}"`);
             const fallbackImage = await generateFallbackImage(recipe.name, recipe.category);
             workingRecipes = workingRecipes.map(r => 
               r.id === recipe.id ? { ...r, imageUri: fallbackImage } : r
             );
             console.log(`✅ [${i + 1}/${recipesWithUrls.length}] Generated fallback after FORCE extraction for: "${recipe.name}"`);
-            console.log(`   Fallback URL: ${fallbackImage.substring(0, 100)}...`);
-            successCount++; // Count fallback as success
+            successCount++;
           }
         } catch (error) {
-          // Even on error, try to generate a fallback
           try {
             console.log(`⚠️ FORCE extraction error, generating fallback for: "${recipe.name}"`, error);
             const fallbackImage = await generateFallbackImage(recipe.name, recipe.category);
@@ -1212,32 +755,27 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
               r.id === recipe.id ? { ...r, imageUri: fallbackImage } : r
             );
             console.log(`✅ [${i + 1}/${recipesWithUrls.length}] Generated fallback after FORCE error for: "${recipe.name}"`);
-            successCount++; // Count fallback as success
+            successCount++;
           } catch (fallbackError) {
             failedCount++;
             console.log(`❌ [${i + 1}/${recipesWithUrls.length}] Complete FORCE failure for: "${recipe.name}"`, fallbackError);
           }
         }
         
-        // Save after EACH update so changes persist
         await saveRecipes(workingRecipes);
         
-        // Shorter delay between requests for speed
         if (i < recipesWithUrls.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 300)); // Slightly longer delay for force extraction
+          await new Promise(resolve => setTimeout(resolve, 300));
         }
       }
       
       console.log(`🎉 FORCE image re-extraction complete: ${successCount} success, ${failedCount} failed`);
-      console.log(`📊 Final check: ${workingRecipes.filter((r: Recipe) => r.imageUri).length} recipes now have images`);
       return { success: successCount, failed: failedCount };
     } catch (error) {
       console.error('❌ Error during FORCE image re-extraction:', error);
       return { success: 0, failed: 0 };
     }
   }, [user?.id, extractRecipeImage, saveRecipes, generateFallbackImage]);
-
-
 
   const contextValue = useMemo(() => ({
     recipes,
