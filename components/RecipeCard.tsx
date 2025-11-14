@@ -32,23 +32,46 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
   
   React.useEffect(() => {
     const loadImage = async () => {
-      if (recipe.imageUri && recipe.imageUri.trim().length > 10) {
+      console.log(`🔍 [RecipeCard] Loading image for "${recipe.name}"`);
+      console.log(`   imageUri value: ${recipe.imageUri}`);
+      console.log(`   imageUri type: ${typeof recipe.imageUri}`);
+      console.log(`   imageUri length: ${recipe.imageUri?.length || 0}`);
+      
+      // STRICT validation - must be a valid HTTP/HTTPS URL
+      if (recipe.imageUri && 
+          typeof recipe.imageUri === 'string' && 
+          recipe.imageUri.trim().length > 10) {
         const trimmedUri = recipe.imageUri.trim();
         
+        // Additional validation for common invalid values
+        if (trimmedUri === 'null' || 
+            trimmedUri === 'undefined' || 
+            trimmedUri === '[object Object]' ||
+            trimmedUri.startsWith('data:') === false && 
+            trimmedUri.startsWith('http://') === false && 
+            trimmedUri.startsWith('https://') === false) {
+          console.log(`⚠️ Recipe "${recipe.name}" has INVALID imageUri format: ${trimmedUri.substring(0, 50)}`);
+          const fallback = getStableFallbackImage();
+          setImageSource(fallback);
+          return;
+        }
+        
         if (trimmedUri.startsWith('http://') || trimmedUri.startsWith('https://')) {
-          console.log(`✅ Recipe "${recipe.name}" HAS imageUri: ${trimmedUri.substring(0, 100)}...`);
+          console.log(`✅ Recipe "${recipe.name}" HAS VALID imageUri: ${trimmedUri.substring(0, 100)}...`);
           setImageSource(trimmedUri);
+          setImageKey(prev => prev + 1); // Force re-render
           return;
         } else {
-          console.log(`⚠️ Recipe "${recipe.name}" has invalid imageUri (not HTTP/HTTPS): ${trimmedUri.substring(0, 50)}`);
+          console.log(`⚠️ Recipe "${recipe.name}" has imageUri but not HTTP/HTTPS: ${trimmedUri.substring(0, 50)}`);
         }
       } else {
-        console.log(`⚠️ Recipe "${recipe.name}" has NO imageUri or empty imageUri`);
+        console.log(`⚠️ Recipe "${recipe.name}" has NO valid imageUri (empty, null, or too short)`);
       }
       
       const fallback = getStableFallbackImage();
       console.log(`📸 Using fallback image for "${recipe.name}": ${fallback.substring(0, 80)}...`);
       setImageSource(fallback);
+      setImageKey(prev => prev + 1); // Force re-render
     };
     
     loadImage();
@@ -158,19 +181,23 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
       activeOpacity={0.9}
     >
       <View style={styles.imageContainer}>
-        {imageSource ? (
+        {imageSource && imageSource.length > 10 ? (
           <Image
             key={`${recipe.id}-${imageKey}`}
             source={{ 
               uri: imageSource, 
-              cache: 'default'
+              cache: 'reload' 
             }}
             style={styles.image}
             resizeMode="cover"
             onLoad={handleImageLoad}
             onError={handleImageError}
           />
-        ) : null}
+        ) : (
+          <View style={[styles.image, { backgroundColor: Colors.surface, alignItems: 'center', justifyContent: 'center' }]}>
+            <Text style={{ color: Colors.textSecondary, fontSize: 12 }}>No Image</Text>
+          </View>
+        )}
         
 
         <LinearGradient
