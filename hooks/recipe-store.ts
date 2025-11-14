@@ -18,34 +18,21 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
       const storedRecipes = await AsyncStorage.getItem(storageKey);
       if (storedRecipes) {
         const parsedRecipes = JSON.parse(storedRecipes);
-        // Validate and clean up image URIs
-        const cleanedRecipes = parsedRecipes.map((recipe: Recipe) => {
-          // Check if imageUri exists and is valid
+        console.log(`📊 Loading ${parsedRecipes.length} recipes from storage`);
+        
+        parsedRecipes.forEach((recipe: Recipe) => {
           if (recipe.imageUri) {
-            const trimmedUri = recipe.imageUri.trim();
-            // If imageUri is empty string, null, or invalid, remove it
-            if (!trimmedUri || trimmedUri === 'null' || trimmedUri === 'undefined' || trimmedUri.length < 10) {
-              console.log(`⚠️ Recipe "${recipe.name}" has invalid imageUri, removing: "${recipe.imageUri}"`);
-              return { ...recipe, imageUri: undefined };
-            }
-            // If imageUri doesn't start with http, remove it
-            if (!trimmedUri.startsWith('http://') && !trimmedUri.startsWith('https://')) {
-              console.log(`⚠️ Recipe "${recipe.name}" has non-URL imageUri, removing: "${recipe.imageUri}"`);
-              return { ...recipe, imageUri: undefined };
-            }
-            // Valid imageUri - keep it
-            console.log(`✅ Recipe "${recipe.name}" has valid imageUri`);
+            console.log(`✅ Recipe "${recipe.name}" has imageUri: ${recipe.imageUri.substring(0, 50)}...`);
           } else {
             console.log(`⚠️ Recipe "${recipe.name}" has NO imageUri`);
           }
-          return recipe;
         });
-        setRecipes(cleanedRecipes);
         
-        // Log summary
-        const recipesWithImages = cleanedRecipes.filter((r: Recipe) => r.imageUri).length;
-        const recipesWithoutImages = cleanedRecipes.filter((r: Recipe) => !r.imageUri).length;
-        console.log(`📊 Loaded ${cleanedRecipes.length} recipes: ${recipesWithImages} with images, ${recipesWithoutImages} without`);
+        setRecipes(parsedRecipes);
+        
+        const recipesWithImages = parsedRecipes.filter((r: Recipe) => r.imageUri).length;
+        const recipesWithoutImages = parsedRecipes.filter((r: Recipe) => !r.imageUri).length;
+        console.log(`📊 Loaded ${parsedRecipes.length} recipes: ${recipesWithImages} with images, ${recipesWithoutImages} without`);
       } else {
         setRecipes([]);
       }
