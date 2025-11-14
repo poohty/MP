@@ -513,7 +513,14 @@ export default function UploadBookmarksScreen() {
         throw new Error(`API error: ${response.status}`);
       }
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        console.log(`⚠️ Failed to parse JSON response for "${name}"`);
+        throw new Error('Invalid JSON response');
+      }
+
       if (!data || !data.completion) {
         console.log(`⚠️ Invalid API response for "${name}"`);
         throw new Error('Invalid API response');
