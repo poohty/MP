@@ -694,20 +694,54 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
     }
   }, []);
 
-  // Extract recipe image from URL with retry mechanism and Google Images fallback
-  const extractRecipeImage = useCallback(async (recipeName: string, recipeUrl: string, retryCount: number = 3): Promise<string | undefined> => {
+  // Extract recipe image from URL with retry mechanism and AI generation fallback
+  const extractRecipeImage = useCallback(async (recipeName: string, recipeUrl: string, retryCount: number = 1): Promise<string | undefined> => {
+    console.log(`🖼️ Starting image extraction for "${recipeName}"`);
+    
+    // Try to get image from AI generation first (most reliable)
+    console.log(`🎨 Trying AI image generation for "${recipeName}"...`);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      
+      const response = await fetch('https://toolkit.rork.com/images/generate/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          prompt: `A professional, appetizing photograph of ${recipeName}, food photography, high quality, well-lit, restaurant style presentation, shallow depth of field`,
+          size: '1024x1024'
+        })
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.image?.base64Data && data?.image?.mimeType) {
+          const base64Image = `data:${data.image.mimeType};base64,${data.image.base64Data}`;
+          console.log(`✅ AI generated image successfully for "${recipeName}" (${base64Image.length} chars)`);
+          return base64Image;
+        }
+      } else {
+        console.log(`⚠️ AI image generation API returned ${response.status}`);
+      }
+    } catch (error) {
+      console.log(`⚠️ AI image generation failed for "${recipeName}":`, error);
+    }
+    
+    // Fallback: Try to extract from webpage (but with lower priority)
     let attempts = 0;
     const maxAttempts = retryCount + 1;
     
-    // First, try to extract from the recipe webpage
     while (attempts < maxAttempts) {
       try {
-        console.log(`🔍 [Attempt ${attempts + 1}/${maxAttempts}] Extracting image for "${recipeName}" from ${recipeUrl}`);
+        console.log(`🔍 [Attempt ${attempts + 1}/${maxAttempts}] Extracting image from webpage for "${recipeName}"`);
         
-        // Step 1: Fetch the actual webpage HTML content with shorter timeout for speed
-        console.log(`📥 Fetching webpage HTML from: ${recipeUrl}`);
         const webpageController = new AbortController();
-        const webpageTimeoutId = setTimeout(() => webpageController.abort(), 6000); // Reduced to 6s for speed
+        const webpageTimeoutId = setTimeout(() => webpageController.abort(), 5000);
         
         let webpageHtml: string;
         try {
@@ -722,21 +756,21 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
           clearTimeout(webpageTimeoutId);
           
           if (!webpageResponse.ok) {
-            console.log(`❌ Failed to fetch webpage: ${webpageResponse.status}`);
-            throw new Error(`HTTP ${webpageResponse.status}`);
+            console.log(`❌ Webpage fetch failed with HTTP ${webpageResponse.status}, skipping to fallback`);
+            break; // Skip retries, go straight to fallback
           }
           
           webpageHtml = await webpageResponse.text();
           console.log(`✅ Successfully fetched webpage HTML (${webpageHtml.length} chars)`);
         } catch (fetchError) {
-          console.log(`❌ Error fetching webpage:`, fetchError);
-          throw fetchError;
+          console.log(`❌ Error fetching webpage, skipping to fallback:`, fetchError);
+          break; // Skip retries, go straight to fallback
         }
         
-        // Step 2: Use AI to analyze the actual HTML and extract the recipe image with shorter timeout
-        console.log(`🤖 Analyzing HTML content with AI for image extraction...`);
+        // Analyze HTML to extract image
+        console.log(`🤖 Analyzing HTML for image extraction...`);
         const aiController = new AbortController();
-        const aiTimeoutId = setTimeout(() => aiController.abort(), 10000); // Reduced to 10s for speed
+        const aiTimeoutId = setTimeout(() => aiController.abort(), 8000);
         
         const response = await fetch('https://toolkit.rork.com/text/llm/', {
           method: 'POST',
@@ -803,51 +837,25 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
           console.log(`❌ No IMAGE: line found in AI response`);
         }
         
-        // If we reach here, this attempt failed
-        throw new Error('No valid image found in this attempt');
+        // If we reach here, this attempt found no valid image
+        throw new Error('No valid image found in HTML');
         
       } catch (error) {
         attempts++;
+        console.log(`❌ Webpage extraction attempt ${attempts} failed:`, error);
         
-        if (error instanceof Error && error.name === 'AbortError') {
-          console.log(`⏰ Image extraction timeout for "${recipeName}" (attempt ${attempts})`);
-        } else {
-          console.log(`❌ Error extracting image for "${recipeName}" (attempt ${attempts}):`, error);
-        }
-        
-        // If this was the last attempt, break and try Google Images
         if (attempts >= maxAttempts) {
-          console.log(`💀 All ${maxAttempts} webpage attempts failed for "${recipeName}", trying Google Images...`);
           break;
         }
         
-        // Wait before retry (shorter delay for speed)
-        console.log(`🔄 Retrying image extraction for "${recipeName}" in 500ms...`);
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
     }
     
-    // If webpage extraction failed, try AI image search as fallback
-    console.log(`🔍 Webpage extraction failed, trying AI image search for "${recipeName}"...`);
-    const aiImageUrl = await searchRecipeImages(recipeName);
-    
-    if (aiImageUrl) {
-      console.log(`✅ Found image via AI search for "${recipeName}": ${aiImageUrl}`);
-      return aiImageUrl;
-    }
-    
-    // If AI search also failed, try one more aggressive search
-    console.log(`🔍 AI search failed, trying aggressive search for "${recipeName}"...`);
-    const aggressiveImageUrl = await aggressiveImageSearch(recipeName);
-    
-    if (aggressiveImageUrl) {
-      console.log(`✅ Found image via aggressive search for "${recipeName}": ${aggressiveImageUrl}`);
-      return aggressiveImageUrl;
-    }
-    
-    console.log(`❌ All extraction methods failed for "${recipeName}"`);
+    // All methods failed, return undefined and let generateFallbackImage handle it
+    console.log(`⚠️ Could not extract or generate image for "${recipeName}", will use fallback`);
     return undefined;
-  }, [searchRecipeImages, aggressiveImageSearch]);
+  }, [downloadImageAsBase64]);
 
   const addRecipe = useCallback(async (recipe: Omit<Recipe, 'id' | 'createdAt'>) => {
     try {
