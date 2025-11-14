@@ -21,7 +21,7 @@ export default function ImageDiagnosticsScreen() {
   const [recipeImageInfos, setRecipeImageInfos] = useState<RecipeImageInfo[]>([]);
   const [isScanning, setIsScanning] = useState(false);
 
-  const testImageLoad = async (uri: string): Promise<boolean> => {
+  const testImageLoad = async (uri: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000);
@@ -35,11 +35,33 @@ export default function ImageDiagnosticsScreen() {
       
       if (response.ok) {
         const contentType = response.headers.get('content-type');
-        return contentType ? contentType.startsWith('image/') : false;
+        if (contentType && contentType.startsWith('image/')) {
+          return { success: true };
+        } else {
+          return { 
+            success: false, 
+            error: `Invalid content-type: ${contentType || 'missing'}` 
+          };
+        }
       }
-      return false;
-    } catch {
-      return false;
+      return { 
+        success: false, 
+        error: `HTTP ${response.status}: ${response.statusText}` 
+      };
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        return { success: false, error: 'Request timeout (3s)' };
+      }
+      if (error.message?.includes('CORS')) {
+        return { success: false, error: 'CORS policy blocked' };
+      }
+      if (error.message?.includes('Network')) {
+        return { success: false, error: 'Network connection failed' };
+      }
+      return { 
+        success: false, 
+        error: error.message || 'Unknown error' 
+      };
     }
   };
 
@@ -92,9 +114,9 @@ export default function ImageDiagnosticsScreen() {
       }
 
       // Try to load the image
-      const isLoadable = await testImageLoad(trimmedUri);
+      const result = await testImageLoad(trimmedUri);
       
-      if (isLoadable) {
+      if (result.success) {
         infos.push({
           recipe,
           status: 'success',
@@ -105,7 +127,7 @@ export default function ImageDiagnosticsScreen() {
           recipe,
           status: 'failed',
           imageUri: trimmedUri,
-          errorMessage: 'Image URL exists but failed to load (network error, CORS, or invalid URL)'
+          errorMessage: result.error || 'Unknown error loading image'
         });
       }
     }
