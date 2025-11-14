@@ -188,6 +188,7 @@ export default function RecipeBookScreen() {
       '🛠️ Debug Menu',
       `Total Recipes: ${totalRecipes}\nWith Images: ${recipesWithImages}\nWithout Images: ${recipesWithoutImages}`,
       [
+        { text: 'Image Diagnostics', onPress: () => router.push('/image-diagnostics') },
         { text: 'Debug Storage', onPress: debugStorage },
         { text: 'Force Re-Extract ALL', onPress: handleForceReExtractAll },
         { text: 'Close', style: 'cancel', onPress: () => setShowDebugMenu(false) }

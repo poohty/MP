@@ -85,12 +85,19 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
     console.log(`❌ Image failed to load for recipe: ${recipe.name}`);
     console.log(`   Image URI: ${imageSource}`);
     console.log(`   Error details:`, e?.nativeEvent);
+    console.log(`   Original recipe.imageUri: ${recipe.imageUri}`);
     console.log(`   Switching to fallback image`);
     
     const fallback = getStableFallbackImage();
     console.log(`📸 Using fallback after error for "${recipe.name}": ${fallback.substring(0, 80)}...`);
-    setImageSource(fallback);
-    setImageKey(prev => prev + 1);
+    
+    if (imageSource !== fallback) {
+      setImageSource(fallback);
+      setImageKey(prev => prev + 1);
+    } else {
+      console.log(`⚠️ Already using fallback, forcing re-render with new key`);
+      setImageKey(prev => prev + 1);
+    }
   };
   
 
