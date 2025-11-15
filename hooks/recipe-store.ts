@@ -5,6 +5,7 @@ import { Recipe, RecipeCategory } from '@/types';
 import { useAuth } from './auth-store';
 
 const RECIPES_STORAGE_KEY = 'meal-planner-recipes';
+const IMAGE_FAILURES_STORAGE_KEY = 'meal-planner-image-failures';
 
 const USER_AGENTS = {
   desktop: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -12,6 +13,18 @@ const USER_AGENTS = {
 };
 
 const domainUserAgentCache = new Map<string, 'desktop' | 'mobile'>();
+
+interface ImageFetchFailure {
+  recipeUrl: string;
+  imageUrl: string;
+  httpStatus?: number;
+  responseHeaders?: Record<string, string>;
+  timeUtc: string;
+  userAgentUsed: string;
+  refererUsed?: string;
+  retryCount: number;
+  errorMessage: string;
+}
 
 export const [RecipeContext, useRecipes] = createContextHook(() => {
   const { user } = useAuth();
@@ -106,10 +119,48 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
     return fallbackUrls[0];
   }, [getMultipleFallbackImages]);
 
+  const logImageFailure = useCallback(async (failure: ImageFetchFailure) => {
+    try {
+      const storageKey = `${IMAGE_FAILURES_STORAGE_KEY}-${user?.id}`;
+      const storedFailures = await AsyncStorage.getItem(storageKey);
+      const failures: ImageFetchFailure[] = storedFailures ? JSON.parse(storedFailures) : [];
+      failures.push(failure);
+      await AsyncStorage.setItem(storageKey, JSON.stringify(failures));
+      console.log('📝 Logged image fetch failure:', failure);
+    } catch (error) {
+      console.error('Failed to log image failure:', error);
+    }
+  }, [user?.id]);
+
+  const getImageFailures = useCallback(async (): Promise<ImageFetchFailure[]> => {
+    try {
+      const storageKey = `${IMAGE_FAILURES_STORAGE_KEY}-${user?.id}`;
+      const storedFailures = await AsyncStorage.getItem(storageKey);
+      return storedFailures ? JSON.parse(storedFailures) : [];
+    } catch (error) {
+      console.error('Failed to get image failures:', error);
+      return [];
+    }
+  }, [user?.id]);
+
+  const clearImageFailures = useCallback(async () => {
+    try {
+      const storageKey = `${IMAGE_FAILURES_STORAGE_KEY}-${user?.id}`;
+      await AsyncStorage.removeItem(storageKey);
+      console.log('✅ Cleared all image failure logs');
+    } catch (error) {
+      console.error('Failed to clear image failures:', error);
+    }
+  }, [user?.id]);
+
   const convertImageToBase64 = useCallback(async (imageUrl: string, pageUrl?: string): Promise<string | undefined> => {
     const maxRetries = 4;
     const baseDelays = [500, 1000, 2000, 4000];
     const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    let attemptCount = 0;
+    let lastStatus: number | undefined;
+    let lastError: string | undefined;
+    let lastHeaders: Record<string, string> = {};
     
     let domain: string | undefined;
     try {
@@ -132,6 +183,7 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
     };
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      attemptCount = attempt + 1;
       try {
         console.log(`🔄 Converting image to base64 (attempt ${attempt + 1}/${maxRetries + 1}): ${imageUrl.substring(0, 80)}...`);
         console.log(`🔗 Using page URL as Referer: ${pageUrl || 'not provided'}`);
@@ -165,8 +217,14 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
         
         clearTimeout(timeoutId);
         
+        lastStatus = response.status;
+        response.headers.forEach((value, key) => {
+          lastHeaders[key] = value;
+        });
+        
         if (!response.ok) {
           const status = response.status;
+          lastError = `HTTP ${status}`;
           console.log(`❌ Failed to fetch image: HTTP ${status}`);
           
           if (status === 503 && attempt === 0 && domain) {
@@ -200,6 +258,11 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
               clearTimeout(retryTimeoutId);
               
               if (retryResponse.ok) {
+                lastStatus = retryResponse.status;
+                lastHeaders = {};
+                retryResponse.headers.forEach((value, key) => {
+                  lastHeaders[key] = value;
+                });
                 console.log(`✅ Success with alternate User-Agent ${alternateUAType}, caching for domain ${domain}`);
                 domainUserAgentCache.set(domain, alternateUAType);
                 
@@ -313,6 +376,7 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
           reader.readAsDataURL(blob);
         });
       } catch (error: any) {
+        lastError = error.message || String(error);
         console.log(`❌ Error converting image to base64 (attempt ${attempt + 1}):`, error.message || error);
         
         if (attempt < maxRetries) {
@@ -328,8 +392,21 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
     }
     
     console.log(`❌ All ${maxRetries + 1} attempts failed for image: ${imageUrl.substring(0, 80)}...`);
+    
+    await logImageFailure({
+      recipeUrl: pageUrl || 'unknown',
+      imageUrl,
+      httpStatus: lastStatus,
+      responseHeaders: Object.keys(lastHeaders).length > 0 ? lastHeaders : undefined,
+      timeUtc: new Date().toISOString(),
+      userAgentUsed: USER_AGENTS[getCachedUserAgent()],
+      refererUsed: pageUrl,
+      retryCount: attemptCount,
+      errorMessage: lastError || 'Unknown error after all retries'
+    });
+    
     return undefined;
-  }, []);
+  }, [logImageFailure]);
 
   const extractRecipeImage = useCallback(async (recipeName: string, recipeUrl: string, retryCount: number = 1): Promise<string | undefined> => {
     console.log(`🖼️ Starting image extraction for "${recipeName}"`);
@@ -1053,7 +1130,9 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
     forceReExtractAllImages,
     generateFallbackImage,
     convertImageToBase64,
-  }), [recipes, isLoading, addRecipe, updateRecipe, updateRecipeStepProgress, deleteRecipe, toggleFavorite, changeRecipeCategory, getRecipesByCategory, loadRecipes, debugStorage, extractRecipeImage, extractRecipeContent, reExtractImages, forceReExtractAllImages, generateFallbackImage, convertImageToBase64]);
+    getImageFailures,
+    clearImageFailures,
+  }), [recipes, isLoading, addRecipe, updateRecipe, updateRecipeStepProgress, deleteRecipe, toggleFavorite, changeRecipeCategory, getRecipesByCategory, loadRecipes, debugStorage, extractRecipeImage, extractRecipeContent, reExtractImages, forceReExtractAllImages, generateFallbackImage, convertImageToBase64, getImageFailures, clearImageFailures]);
 
   return contextValue;
 });

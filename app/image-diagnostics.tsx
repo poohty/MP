@@ -4,7 +4,7 @@ import { Stack, router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import Colors from '@/constants/colors';
 import GradientBackground from '@/components/GradientBackground';
-import { RefreshCw, CheckCircle, XCircle, AlertCircle } from 'lucide-react-native';
+import { RefreshCw, CheckCircle, XCircle, AlertCircle, FileText } from 'lucide-react-native';
 import { Recipe } from '@/types';
 
 type ImageStatus = 'loading' | 'success' | 'failed' | 'invalid';
@@ -210,16 +210,26 @@ export default function ImageDiagnosticsScreen() {
                 <Text style={styles.summaryValue}>{invalidCount}</Text>
               </View>
             </View>
-            <TouchableOpacity 
-              style={styles.refreshButton}
-              onPress={scanRecipes}
-              disabled={isScanning}
-            >
-              <RefreshCw size={16} color={Colors.text} />
-              <Text style={styles.refreshButtonText}>
-                {isScanning ? 'Scanning...' : 'Re-Scan All'}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity 
+                style={[styles.refreshButton, styles.halfButton]}
+                onPress={scanRecipes}
+                disabled={isScanning}
+              >
+                <RefreshCw size={16} color={Colors.text} />
+                <Text style={styles.refreshButtonText}>
+                  {isScanning ? 'Scanning...' : 'Re-Scan'}
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.logsButton, styles.halfButton]}
+                onPress={() => router.push('/image-failure-logs')}
+              >
+                <FileText size={16} color="#fff" />
+                <Text style={styles.logsButtonText}>View Logs</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <Text style={styles.sectionTitle}>Recipe Details</Text>
@@ -329,6 +339,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.text,
   },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  halfButton: {
+    flex: 1,
+  },
   refreshButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -338,6 +355,21 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 8,
+  },
+  logsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#3B82F6',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  logsButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600' as const,
   },
   refreshButtonText: {
     color: Colors.text,
