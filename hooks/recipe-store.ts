@@ -100,66 +100,93 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
   }, [getMultipleFallbackImages]);
 
   const convertImageToBase64 = useCallback(async (imageUrl: string, pageUrl?: string): Promise<string | undefined> => {
-    try {
-      console.log(`🔄 Converting image to base64: ${imageUrl.substring(0, 80)}...`);
-      console.log(`🔗 Using page URL as Referer: ${pageUrl || 'not provided'}`);
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-      
-      const headers: Record<string, string> = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-      };
-      
-      if (pageUrl) {
-        try {
-          const pageOrigin = new URL(pageUrl).origin;
-          headers['Referer'] = pageOrigin;
-          console.log(`✅ Set Referer to origin: ${pageOrigin}`);
-        } catch (e) {
-          console.log(`⚠️ Failed to parse page URL, skipping Referer`);
+    const maxRetries = 4;
+    const baseDelays = [500, 1000, 2000, 4000];
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔄 Converting image to base64 (attempt ${attempt + 1}/${maxRetries + 1}): ${imageUrl.substring(0, 80)}...`);
+        console.log(`🔗 Using page URL as Referer: ${pageUrl || 'not provided'}`);
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        
+        const headers: Record<string, string> = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        };
+        
+        if (pageUrl) {
+          try {
+            const pageOrigin = new URL(pageUrl).origin;
+            headers['Referer'] = pageOrigin;
+            console.log(`✅ Set Referer to origin: ${pageOrigin}`);
+          } catch (e) {
+            console.log(`⚠️ Failed to parse page URL, skipping Referer`);
+          }
         }
-      }
-      
-      const response = await fetch(imageUrl, {
-        method: 'GET',
-        headers,
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        console.log(`❌ Failed to fetch image: HTTP ${response.status}`);
+        
+        const response = await fetch(imageUrl, {
+          method: 'GET',
+          headers,
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          const status = response.status;
+          console.log(`❌ Failed to fetch image: HTTP ${status}`);
+          
+          if ((status === 503 || status === 429) && attempt < maxRetries) {
+            const jitter = 0.8 + Math.random() * 0.4;
+            const delay = Math.round(baseDelays[attempt] * jitter);
+            console.log(`⏳ Retry ${attempt + 1}/${maxRetries}: HTTP ${status} - waiting ${delay}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+          
+          return undefined;
+        }
+        
+        const blob = await response.blob();
+        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        
+        if (!contentType.startsWith('image/')) {
+          console.log(`❌ Invalid content-type: ${contentType}`);
+          return undefined;
+        }
+        
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64String = reader.result as string;
+            console.log(`✅ Successfully converted image to base64 (${base64String.length} chars)`);
+            resolve(base64String);
+          };
+          reader.onerror = () => {
+            console.log(`❌ Failed to convert blob to base64`);
+            reject(new Error('Failed to convert blob to base64'));
+          };
+          reader.readAsDataURL(blob);
+        });
+      } catch (error: any) {
+        console.log(`❌ Error converting image to base64 (attempt ${attempt + 1}):`, error.message || error);
+        
+        if (attempt < maxRetries) {
+          const jitter = 0.8 + Math.random() * 0.4;
+          const delay = Math.round(baseDelays[attempt] * jitter);
+          console.log(`⏳ Retry ${attempt + 1}/${maxRetries}: Error - waiting ${delay}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
         return undefined;
       }
-      
-      const blob = await response.blob();
-      const contentType = response.headers.get('content-type') || 'image/jpeg';
-      
-      if (!contentType.startsWith('image/')) {
-        console.log(`❌ Invalid content-type: ${contentType}`);
-        return undefined;
-      }
-      
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64String = reader.result as string;
-          console.log(`✅ Successfully converted image to base64 (${base64String.length} chars)`);
-          resolve(base64String);
-        };
-        reader.onerror = () => {
-          console.log(`❌ Failed to convert blob to base64`);
-          reject(new Error('Failed to convert blob to base64'));
-        };
-        reader.readAsDataURL(blob);
-      });
-    } catch (error: any) {
-      console.log(`❌ Error converting image to base64:`, error.message || error);
-      return undefined;
     }
+    
+    console.log(`❌ All ${maxRetries + 1} attempts failed for image: ${imageUrl.substring(0, 80)}...`);
+    return undefined;
   }, []);
 
   const extractRecipeImage = useCallback(async (recipeName: string, recipeUrl: string, retryCount: number = 1): Promise<string | undefined> => {
