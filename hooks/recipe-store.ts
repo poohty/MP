@@ -99,20 +99,32 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
     return fallbackUrls[0];
   }, [getMultipleFallbackImages]);
 
-  const convertImageToBase64 = useCallback(async (imageUrl: string): Promise<string | undefined> => {
+  const convertImageToBase64 = useCallback(async (imageUrl: string, pageUrl?: string): Promise<string | undefined> => {
     try {
       console.log(`🔄 Converting image to base64: ${imageUrl.substring(0, 80)}...`);
+      console.log(`🔗 Using page URL as Referer: ${pageUrl || 'not provided'}`);
       
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       
+      const headers: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      };
+      
+      if (pageUrl) {
+        try {
+          const pageOrigin = new URL(pageUrl).origin;
+          headers['Referer'] = pageOrigin;
+          console.log(`✅ Set Referer to origin: ${pageOrigin}`);
+        } catch (e) {
+          console.log(`⚠️ Failed to parse page URL, skipping Referer`);
+        }
+      }
+      
       const response = await fetch(imageUrl, {
         method: 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-          'Referer': imageUrl,
-        },
+        headers,
         signal: controller.signal
       });
       
@@ -204,7 +216,7 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
       }
       
       for (const imageUrl of imageUrls) {
-        const base64Image = await convertImageToBase64(imageUrl);
+        const base64Image = await convertImageToBase64(imageUrl, recipeUrl);
         if (base64Image) {
           return base64Image;
         }
@@ -563,7 +575,7 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
                 finalRecipe.imageUri = imageUrl;
               } else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
                 console.log(`🔄 Converting extracted image URL to base64: ${imageUrl.substring(0, 80)}...`);
-                const base64Image = await convertImageToBase64(imageUrl);
+                const base64Image = await convertImageToBase64(imageUrl, recipe.url);
                 if (base64Image) {
                   console.log(`✅ Successfully converted image to base64`);
                   finalRecipe.imageUri = base64Image;
