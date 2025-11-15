@@ -25,46 +25,39 @@ export type RecipeStoreState = {
 
 const DEFAULT_RECIPES: Recipe[] = [];
 
-const {
-  useContextHook,
-  Provider: RecipeProvider
-} = createContextHook<RecipeStoreState>(() => {
-  throw new Error('RecipeProvider not mounted');
+export const [RecipeProvider, useRecipes] = createContextHook(() => {
+  return createRecipeStore();
 });
 
-export { RecipeProvider };
+function createRecipeStore(): RecipeStoreState {
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-export const useRecipes = useContextHook;
-
-export function createRecipeStore() {
-  let subscribers: Array<(s: Recipe[]) => void> = [];
-  let state: Recipe[] = DEFAULT_RECIPES.slice();
-
-  const notify = () => {
-    for (const s of subscribers) s(state.slice());
-  };
-
-  const load = async () => {
-    try {
-      const raw = await AsyncStorage.getItem(RECIPES_STORAGE_KEY);
-      if (raw) {
-        state = JSON.parse(raw);
-        notify();
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(RECIPES_STORAGE_KEY);
+        if (raw) {
+          setRecipes(JSON.parse(raw));
+        }
+      } catch (e) {
+        console.warn('Failed loading recipes', e);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (e) {
-      console.warn('Failed loading recipes', e);
-    }
-  };
+    };
+    load();
+  }, []);
 
-  const persist = async () => {
+  const persist = useCallback(async (recipesToSave: Recipe[]) => {
     try {
-      await AsyncStorage.setItem(RECIPES_STORAGE_KEY, JSON.stringify(state));
+      await AsyncStorage.setItem(RECIPES_STORAGE_KEY, JSON.stringify(recipesToSave));
     } catch (e) {
       console.warn('Failed persisting recipes', e);
     }
-  };
+  }, []);
 
-  const addRecipeFromUrl = async (url: string, suggestedCategory?: RecipeCategory) => {
+  const addRecipeFromUrl = useCallback(async (url: string, suggestedCategory?: RecipeCategory): Promise<Recipe | undefined> => {
     // Minimal higher-level flow:
     // 1. Fetch HTML, parse basic meta tags and images
     // 2. Try og:image/twitter:image/json-ld first
@@ -160,17 +153,19 @@ export function createRecipeStore() {
     const newRecipe: Recipe = {
       id: Date.now().toString(),
       url: recipeUrl,
-      title: '', // optionally parsed separately
+      title: '',
       category: suggestedCategory ?? 'uncategorized',
       imageUri: thumbnailDataUri,
       createdAt: Date.now()
     };
 
-    state = [...state, newRecipe];
-    await persist();
-    notify();
+    setRecipes(prev => {
+      const updated = [...prev, newRecipe];
+      persist(updated);
+      return updated;
+    });
     return newRecipe;
-  };
+  }, [persist]);
 
   // Minimal image conversion utility - keep this small and safe
   const convertImageToBase64 = async (imageUrl: string, pageUrl?: string): Promise<string | undefined> => {
@@ -219,37 +214,41 @@ export function createRecipeStore() {
     }
   };
 
-  const updateRecipe = (r: Recipe) => {
-    state = state.map(existing => existing.id === r.id ? r : existing);
-    persist();
-    notify();
-  };
+  const updateRecipe = useCallback((r: Recipe) => {
+    setRecipes(prev => {
+      const updated = prev.map(existing => existing.id === r.id ? r : existing);
+      persist(updated);
+      return updated;
+    });
+  }, [persist]);
 
-  const removeRecipe = (id: string) => {
-    state = state.filter(r => r.id !== id);
-    persist();
-    notify();
-  };
+  const removeRecipe = useCallback((id: string) => {
+    setRecipes(prev => {
+      const updated = prev.filter(r => r.id !== id);
+      persist(updated);
+      return updated;
+    });
+  }, [persist]);
 
-  const reextractImagesForAll = async () => {
-    // iterate and attempt re-extraction
-    for (const r of state) {
-      if (r.url) {
-        const newImage = await convertImageToBase64(r.url, r.url).catch(() => undefined);
-        if (newImage) {
-          r.imageUri = newImage;
+  const reextractImagesForAll = useCallback(async () => {
+    setRecipes(prev => {
+      const updated = [...prev];
+      Promise.all(updated.map(async r => {
+        if (r.url) {
+          const newImage = await convertImageToBase64(r.url, r.url).catch(() => undefined);
+          if (newImage) {
+            r.imageUri = newImage;
+          }
         }
-      }
-    }
-    persist();
-    notify();
-  };
-
-  // Initialize load on module mount
-  load();
+      })).then(() => {
+        persist(updated);
+      });
+      return updated;
+    });
+  }, [persist]);
 
   return {
-    recipes: state.slice(),
+    recipes,
     addRecipeFromUrl,
     updateRecipe,
     removeRecipe,
