@@ -202,11 +202,22 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
                 console.log(`✅ Success with alternate User-Agent ${alternateUAType}, caching for domain ${domain}`);
                 domainUserAgentCache.set(domain, alternateUAType);
                 
-                const blob = await retryResponse.blob();
-                const contentType = retryResponse.headers.get('content-type') || 'image/jpeg';
+                const retryContentType = retryResponse.headers.get('content-type');
+                if (!retryContentType || !retryContentType.startsWith('image/')) {
+                  console.log(`❌ Invalid or missing content-type: ${retryContentType || 'none'}`);
+                  return undefined;
+                }
                 
-                if (!contentType.startsWith('image/')) {
-                  console.log(`❌ Invalid content-type: ${contentType}`);
+                const retryContentLength = retryResponse.headers.get('content-length');
+                if (retryContentLength && parseInt(retryContentLength, 10) < 1024) {
+                  console.log(`❌ Content too small: ${retryContentLength} bytes (minimum 1024)`);
+                  return undefined;
+                }
+                
+                const blob = await retryResponse.blob();
+                
+                if (blob.size < 1024) {
+                  console.log(`❌ Blob size too small: ${blob.size} bytes (minimum 1024)`);
                   return undefined;
                 }
                 
@@ -244,11 +255,22 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
           return undefined;
         }
         
-        const blob = await response.blob();
-        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.startsWith('image/')) {
+          console.log(`❌ Invalid or missing content-type: ${contentType || 'none'}`);
+          return undefined;
+        }
         
-        if (!contentType.startsWith('image/')) {
-          console.log(`❌ Invalid content-type: ${contentType}`);
+        const contentLength = response.headers.get('content-length');
+        if (contentLength && parseInt(contentLength, 10) < 1024) {
+          console.log(`❌ Content too small: ${contentLength} bytes (minimum 1024)`);
+          return undefined;
+        }
+        
+        const blob = await response.blob();
+        
+        if (blob.size < 1024) {
+          console.log(`❌ Blob size too small: ${blob.size} bytes (minimum 1024)`);
           return undefined;
         }
         
