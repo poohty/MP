@@ -7,7 +7,7 @@ import { useRecipes } from './recipe-store';
 
 const MEAL_PLANS_STORAGE_KEY = 'meal-planner-meal-plans';
 
-export const [MealPlanContext, useMealPlans] = createContextHook(() => {
+export const [MealPlanProvider, useMealPlans] = createContextHook(() => {
   const { user } = useAuth();
   const { recipes, getRecipesByCategory } = useRecipes();
   const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);

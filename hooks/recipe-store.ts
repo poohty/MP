@@ -18,6 +18,7 @@ export type RecipeStoreState = {
   addRecipeFromUrl: (url: string, suggestedCategory?: RecipeCategory) => Promise<Recipe | undefined>;
   updateRecipe: (r: Recipe) => void;
   removeRecipe: (id: string) => void;
+  getRecipesByCategory: (category: RecipeCategory) => Recipe[];
   reextractImagesForAll: () => Promise<void>;
   getImageFailures: () => Promise<any[]>;
   clearImageFailures: () => Promise<void>;
@@ -147,8 +148,8 @@ export const [RecipeProvider, useRecipes] = createContextHook(() => {
     const newRecipe: Recipe = {
       id: Date.now().toString(),
       url: recipeUrl,
-      title: '',
-      category: suggestedCategory ?? 'uncategorized',
+      name: '',
+      category: suggestedCategory ?? 'Main Course',
       imageUri: thumbnailDataUri,
       createdAt: Date.now()
     };
@@ -268,11 +269,16 @@ export const [RecipeProvider, useRecipes] = createContextHook(() => {
     }
   }, []);
 
+  const getRecipesByCategory = useCallback((category: RecipeCategory): Recipe[] => {
+    return recipes.filter(recipe => recipe.category === category);
+  }, [recipes]);
+
   return {
     recipes,
     addRecipeFromUrl,
     updateRecipe,
     removeRecipe,
+    getRecipesByCategory,
     reextractImagesForAll,
     getImageFailures,
     clearImageFailures
