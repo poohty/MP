@@ -109,6 +109,7 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
   const convertImageToBase64 = useCallback(async (imageUrl: string, pageUrl?: string): Promise<string | undefined> => {
     const maxRetries = 4;
     const baseDelays = [500, 1000, 2000, 4000];
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
     
     let domain: string | undefined;
     try {
@@ -209,12 +210,24 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
                 }
                 
                 const retryContentLength = retryResponse.headers.get('content-length');
-                if (retryContentLength && parseInt(retryContentLength, 10) < 1024) {
+                const retryContentSize = retryContentLength ? parseInt(retryContentLength, 10) : 0;
+                
+                if (retryContentSize > 0 && retryContentSize > MAX_FILE_SIZE) {
+                  console.log(`❌ Image too large: ${(retryContentSize / 1024 / 1024).toFixed(2)}MB (max 10MB)`);
+                  return undefined;
+                }
+                
+                if (retryContentSize > 0 && retryContentSize < 1024) {
                   console.log(`❌ Content too small: ${retryContentLength} bytes (minimum 1024)`);
                   return undefined;
                 }
                 
                 const blob = await retryResponse.blob();
+                
+                if (blob.size > MAX_FILE_SIZE) {
+                  console.log(`❌ Downloaded blob too large: ${(blob.size / 1024 / 1024).toFixed(2)}MB (max 10MB)`);
+                  return undefined;
+                }
                 
                 if (blob.size < 1024) {
                   console.log(`❌ Blob size too small: ${blob.size} bytes (minimum 1024)`);
@@ -262,12 +275,24 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
         }
         
         const contentLength = response.headers.get('content-length');
-        if (contentLength && parseInt(contentLength, 10) < 1024) {
+        const contentSize = contentLength ? parseInt(contentLength, 10) : 0;
+        
+        if (contentSize > 0 && contentSize > MAX_FILE_SIZE) {
+          console.log(`❌ Image too large: ${(contentSize / 1024 / 1024).toFixed(2)}MB (max 10MB)`);
+          return undefined;
+        }
+        
+        if (contentSize > 0 && contentSize < 1024) {
           console.log(`❌ Content too small: ${contentLength} bytes (minimum 1024)`);
           return undefined;
         }
         
         const blob = await response.blob();
+        
+        if (blob.size > MAX_FILE_SIZE) {
+          console.log(`❌ Downloaded blob too large: ${(blob.size / 1024 / 1024).toFixed(2)}MB (max 10MB)`);
+          return undefined;
+        }
         
         if (blob.size < 1024) {
           console.log(`❌ Blob size too small: ${blob.size} bytes (minimum 1024)`);
