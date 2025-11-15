@@ -427,7 +427,7 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
   }, [logImageFailure]);
 
   const extractRecipeImage = useCallback(async (recipeName: string, recipeUrl: string, retryCount: number = 1): Promise<string | undefined> => {
-    console.log(`🖼️ Starting image extraction for "${recipeName}"`);
+    console.log(`🖼️ Starting IMPROVED image extraction for "${recipeName}"`);
     
     try {
       console.log(`📥 Fetching webpage HTML from: ${recipeUrl}`);
@@ -452,42 +452,199 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
       const webpageHtml = await webpageResponse.text();
       console.log(`✅ Successfully fetched webpage HTML (${webpageHtml.length} chars)`);
       
-      const imageUrls: string[] = [];
+      let bestImageUrl: string | undefined;
       
+      console.log('🔍 Priority 1: Looking for og:image...');
       const ogImageMatch = webpageHtml.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
       if (ogImageMatch && ogImageMatch[1]) {
         const imageUrl = ogImageMatch[1];
         if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
           console.log(`✅ Found og:image: ${imageUrl}`);
-          imageUrls.push(imageUrl);
+          bestImageUrl = imageUrl;
         }
       }
       
-      const twitterImageMatch = webpageHtml.match(/<meta\s+(?:name|property)="twitter:image"\s+content="([^"]+)"/i);
-      if (twitterImageMatch && twitterImageMatch[1]) {
-        const imageUrl = twitterImageMatch[1];
-        if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-          console.log(`✅ Found twitter:image: ${imageUrl}`);
-          if (!imageUrls.includes(imageUrl)) {
-            imageUrls.push(imageUrl);
+      if (!bestImageUrl) {
+        console.log('🔍 Priority 2: Looking for twitter:image...');
+        const twitterImageMatch = webpageHtml.match(/<meta\s+(?:name|property)="twitter:image"\s+content="([^"]+)"/i);
+        if (twitterImageMatch && twitterImageMatch[1]) {
+          const imageUrl = twitterImageMatch[1];
+          if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+            console.log(`✅ Found twitter:image: ${imageUrl}`);
+            bestImageUrl = imageUrl;
           }
         }
       }
       
-      if (imageUrls.length === 0) {
-        console.log(`⚠️ No og:image or twitter:image found in HTML`);
-        return undefined;
-      }
-      
-      for (const imageUrl of imageUrls) {
-        const base64Image = await convertImageToBase64(imageUrl, recipeUrl);
-        if (base64Image) {
-          return base64Image;
+      if (!bestImageUrl) {
+        console.log('🔍 Priority 3: Looking for JSON-LD image...');
+        const jsonLdMatches = webpageHtml.matchAll(/<script\s+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi);
+        for (const match of jsonLdMatches) {
+          try {
+            const jsonContent = match[1];
+            const data = JSON.parse(jsonContent);
+            
+            const findImage = (obj: any): string | undefined => {
+              if (!obj || typeof obj !== 'object') return undefined;
+              
+              if (obj['@type'] === 'Recipe' || obj['@type'] === 'ImageObject') {
+                if (typeof obj.image === 'string' && (obj.image.startsWith('http://') || obj.image.startsWith('https://'))) {
+                  return obj.image;
+                }
+                if (obj.image && typeof obj.image === 'object') {
+                  if (obj.image.url && typeof obj.image.url === 'string') {
+                    return obj.image.url;
+                  }
+                  if (Array.isArray(obj.image) && obj.image.length > 0) {
+                    const firstImage = typeof obj.image[0] === 'string' ? obj.image[0] : obj.image[0]?.url;
+                    if (firstImage && (firstImage.startsWith('http://') || firstImage.startsWith('https://'))) {
+                      return firstImage;
+                    }
+                  }
+                }
+              }
+              
+              for (const key in obj) {
+                const result = findImage(obj[key]);
+                if (result) return result;
+              }
+              
+              return undefined;
+            };
+            
+            const imageUrl = findImage(data);
+            if (imageUrl) {
+              console.log(`✅ Found JSON-LD image: ${imageUrl}`);
+              bestImageUrl = imageUrl;
+              break;
+            }
+          } catch (e) {
+            console.log('⚠️ Failed to parse JSON-LD block');
+          }
         }
       }
       
-      console.log(`⚠️ All image URLs failed to convert to base64`);
-      return undefined;
+      if (!bestImageUrl) {
+        console.log('🔍 Priority 4: Looking for link rel="image_src"...');
+        const imageSrcMatch = webpageHtml.match(/<link\s+rel="image_src"\s+href="([^"]+)"/i);
+        if (imageSrcMatch && imageSrcMatch[1]) {
+          const imageUrl = imageSrcMatch[1];
+          if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+            console.log(`✅ Found image_src: ${imageUrl}`);
+            bestImageUrl = imageUrl;
+          }
+        }
+      }
+      
+      if (!bestImageUrl) {
+        console.log('🔍 Priority 5: Parsing srcset for largest candidate...');
+        const srcsetRegex = /<img[^>]*srcset="([^"]+)"[^>]*>/gi;
+        const srcsetMatches = [...webpageHtml.matchAll(srcsetRegex)];
+        let largestSrcsetImage: { url: string; width: number } | undefined;
+        
+        for (const match of srcsetMatches) {
+          const srcset = match[1];
+          const candidates = srcset.split(',').map(s => s.trim());
+          
+          for (const candidate of candidates) {
+            const parts = candidate.split(/\s+/);
+            if (parts.length >= 2) {
+              const url = parts[0];
+              const descriptor = parts[1];
+              const width = descriptor.endsWith('w') ? parseInt(descriptor.slice(0, -1), 10) : 0;
+              
+              if (width > 0 && (url.startsWith('http://') || url.startsWith('https://'))) {
+                if (!largestSrcsetImage || width > largestSrcsetImage.width) {
+                  largestSrcsetImage = { url, width };
+                }
+              }
+            }
+          }
+        }
+        
+        if (largestSrcsetImage) {
+          console.log(`✅ Found largest srcset image: ${largestSrcsetImage.url} (${largestSrcsetImage.width}w)`);
+          bestImageUrl = largestSrcsetImage.url;
+        }
+      }
+      
+      if (!bestImageUrl) {
+        console.log('🔍 Priority 6: Parsing <img> tags for largest dimensions/file size...');
+        const imgRegex = /<img[^>]*>/gi;
+        const imgMatches = [...webpageHtml.matchAll(imgRegex)];
+        let largestImg: { url: string; score: number } | undefined;
+        
+        for (const match of imgMatches) {
+          const imgTag = match[0];
+          
+          const srcMatch = imgTag.match(/(?:src|data-src)="([^"]+)"/i);
+          if (!srcMatch || !srcMatch[1]) continue;
+          
+          let imageUrl = srcMatch[1];
+          if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+            try {
+              const base = new URL(recipeUrl);
+              imageUrl = new URL(imageUrl, base.origin).href;
+            } catch (e) {
+              continue;
+            }
+          }
+          
+          let score = 0;
+          
+          const widthMatch = imgTag.match(/width="(\d+)"/i);
+          const heightMatch = imgTag.match(/height="(\d+)"/i);
+          
+          if (widthMatch && heightMatch) {
+            const width = parseInt(widthMatch[1], 10);
+            const height = parseInt(heightMatch[1], 10);
+            score = width * height;
+            console.log(`📏 Found img with dimensions: ${width}x${height} = ${score} score`);
+          } else {
+            const filename = imageUrl.split('/').pop() || '';
+            const sizeIndicators = filename.match(/(\d+)x(\d+)/i);
+            if (sizeIndicators) {
+              const width = parseInt(sizeIndicators[1], 10);
+              const height = parseInt(sizeIndicators[2], 10);
+              score = width * height;
+              console.log(`📏 Found img with filename size: ${width}x${height} = ${score} score`);
+            } else {
+              score = 100;
+            }
+          }
+          
+          if (imageUrl.includes('logo') || imageUrl.includes('icon') || imageUrl.includes('avatar') || 
+              imageUrl.includes('button') || imageUrl.includes('badge') || score < 10000) {
+            continue;
+          }
+          
+          if (!largestImg || score > largestImg.score) {
+            largestImg = { url: imageUrl, score };
+          }
+        }
+        
+        if (largestImg) {
+          console.log(`✅ Found largest img tag: ${largestImg.url} (score: ${largestImg.score})`);
+          bestImageUrl = largestImg.url;
+        }
+      }
+      
+      if (!bestImageUrl) {
+        console.log(`⚠️ No suitable image found using any extraction method`);
+        return undefined;
+      }
+      
+      console.log(`🎯 Best image candidate selected: ${bestImageUrl}`);
+      console.log(`🔄 Converting best candidate to base64...`);
+      const base64Image = await convertImageToBase64(bestImageUrl, recipeUrl);
+      
+      if (base64Image) {
+        console.log(`✅ Successfully converted best candidate to base64`);
+        return base64Image;
+      } else {
+        console.log(`❌ Failed to convert best candidate to base64`);
+        return undefined;
+      }
     } catch (error) {
       console.log(`❌ Error extracting image from webpage:`, error);
       return undefined;
