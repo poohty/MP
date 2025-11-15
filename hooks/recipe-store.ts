@@ -19,6 +19,8 @@ export type RecipeStoreState = {
   updateRecipe: (r: Recipe) => void;
   removeRecipe: (id: string) => void;
   reextractImagesForAll: () => Promise<void>;
+  getImageFailures: () => Promise<any[]>;
+  clearImageFailures: () => Promise<void>;
 };
 
 export const [RecipeProvider, useRecipes] = createContextHook(() => {
@@ -246,11 +248,33 @@ export const [RecipeProvider, useRecipes] = createContextHook(() => {
     });
   }, [persist]);
 
+  const getImageFailures = useCallback(async (): Promise<any[]> => {
+    try {
+      const raw = await AsyncStorage.getItem(IMAGE_FAILURES_STORAGE_KEY);
+      if (raw) {
+        return JSON.parse(raw);
+      }
+    } catch (e) {
+      console.warn('Failed loading image failures', e);
+    }
+    return [];
+  }, []);
+
+  const clearImageFailures = useCallback(async (): Promise<void> => {
+    try {
+      await AsyncStorage.removeItem(IMAGE_FAILURES_STORAGE_KEY);
+    } catch (e) {
+      console.warn('Failed clearing image failures', e);
+    }
+  }, []);
+
   return {
     recipes,
     addRecipeFromUrl,
     updateRecipe,
     removeRecipe,
-    reextractImagesForAll
+    reextractImagesForAll,
+    getImageFailures,
+    clearImageFailures
   };
 });
