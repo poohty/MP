@@ -195,8 +195,11 @@ function createRecipeStore(): RecipeStoreState {
             const r2 = await fetch(imageUrl, { method: 'GET', headers: { 'User-Agent': USER_AGENTS[ua], ...(pageUrl ? { Referer: pageUrl } : {}) } });
             if (r2.ok) {
               const blob = await r2.blob();
-              const arr = new Uint8Array(await blob.arrayBuffer());
-              return `data:${r2.headers.get('content-type')};base64,${Buffer.from(arr).toString('base64')}`;
+              const reader = new FileReader();
+              return new Promise<string>((resolve) => {
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+              });
             }
           }
         }
@@ -206,8 +209,12 @@ function createRecipeStore(): RecipeStoreState {
       const ct = res.headers.get('content-type') ?? '';
       if (!ct.startsWith('image/')) return undefined;
       const blob = await res.blob();
-      const arr = new Uint8Array(await blob.arrayBuffer());
-      return `data:${ct};base64,${Buffer.from(arr).toString('base64')}`;
+      const reader = new FileReader();
+      return new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
     } catch (e) {
       console.warn('convertImageToBase64 error', e);
       return undefined;
