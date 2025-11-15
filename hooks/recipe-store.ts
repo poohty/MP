@@ -1,9 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Recipe, RecipeCategory } from '@/types';
-import { useAuth } from './auth-store';
-import { trpcClient } from '@/lib/trpc';
 
 const RECIPES_STORAGE_KEY = 'meal-planner-recipes';
 const IMAGE_FAILURES_STORAGE_KEY = 'meal-planner-image-failures';
@@ -23,13 +21,7 @@ export type RecipeStoreState = {
   reextractImagesForAll: () => Promise<void>;
 };
 
-const DEFAULT_RECIPES: Recipe[] = [];
-
 export const [RecipeProvider, useRecipes] = createContextHook(() => {
-  return createRecipeStore();
-});
-
-function createRecipeStore(): RecipeStoreState {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -261,4 +253,4 @@ function createRecipeStore(): RecipeStoreState {
     removeRecipe,
     reextractImagesForAll
   };
-}
+});
