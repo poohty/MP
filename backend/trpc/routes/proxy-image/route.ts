@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { publicProcedure } from "../../create-context";
 
-export const proxyImageProcedure = publicProcedure
+export default publicProcedure
   .input(
     z.object({
       imageUrl: z.string().url(),
@@ -126,5 +126,3 @@ export const proxyImageProcedure = publicProcedure
       };
     }
   });
-
-export default proxyImageProcedure;
