@@ -99,6 +99,57 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
     return fallbackUrls[0];
   }, [getMultipleFallbackImages]);
 
+  const convertImageToBase64 = useCallback(async (imageUrl: string): Promise<string | undefined> => {
+    try {
+      console.log(`🔄 Converting image to base64: ${imageUrl.substring(0, 80)}...`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      
+      const response = await fetch(imageUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+          'Referer': imageUrl,
+        },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        console.log(`❌ Failed to fetch image: HTTP ${response.status}`);
+        return undefined;
+      }
+      
+      const blob = await response.blob();
+      const contentType = response.headers.get('content-type') || 'image/jpeg';
+      
+      if (!contentType.startsWith('image/')) {
+        console.log(`❌ Invalid content-type: ${contentType}`);
+        return undefined;
+      }
+      
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64String = reader.result as string;
+          console.log(`✅ Successfully converted image to base64 (${base64String.length} chars)`);
+          resolve(base64String);
+        };
+        reader.onerror = () => {
+          console.log(`❌ Failed to convert blob to base64`);
+          reject(new Error('Failed to convert blob to base64'));
+        };
+        reader.readAsDataURL(blob);
+      });
+    } catch (error: any) {
+      console.log(`❌ Error converting image to base64:`, error.message || error);
+      return undefined;
+    }
+  }, []);
+
   const extractRecipeImage = useCallback(async (recipeName: string, recipeUrl: string, retryCount: number = 1): Promise<string | undefined> => {
     console.log(`🖼️ Starting image extraction for "${recipeName}"`);
     
@@ -110,7 +161,7 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
       const webpageResponse = await fetch(recipeUrl, {
         method: 'GET',
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         },
         signal: webpageController.signal
       });
@@ -125,12 +176,14 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
       const webpageHtml = await webpageResponse.text();
       console.log(`✅ Successfully fetched webpage HTML (${webpageHtml.length} chars)`);
       
+      const imageUrls: string[] = [];
+      
       const ogImageMatch = webpageHtml.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
       if (ogImageMatch && ogImageMatch[1]) {
         const imageUrl = ogImageMatch[1];
         if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
           console.log(`✅ Found og:image: ${imageUrl}`);
-          return imageUrl;
+          imageUrls.push(imageUrl);
         }
       }
       
@@ -139,17 +192,31 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
         const imageUrl = twitterImageMatch[1];
         if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
           console.log(`✅ Found twitter:image: ${imageUrl}`);
-          return imageUrl;
+          if (!imageUrls.includes(imageUrl)) {
+            imageUrls.push(imageUrl);
+          }
         }
       }
       
-      console.log(`⚠️ No og:image or twitter:image found in HTML`);
+      if (imageUrls.length === 0) {
+        console.log(`⚠️ No og:image or twitter:image found in HTML`);
+        return undefined;
+      }
+      
+      for (const imageUrl of imageUrls) {
+        const base64Image = await convertImageToBase64(imageUrl);
+        if (base64Image) {
+          return base64Image;
+        }
+      }
+      
+      console.log(`⚠️ All image URLs failed to convert to base64`);
       return undefined;
     } catch (error) {
       console.log(`❌ Error extracting image from webpage:`, error);
       return undefined;
     }
-  }, []);
+  }, [convertImageToBase64]);
 
   const extractRecipeContent = useCallback(async (recipeName: string, recipeUrl: string): Promise<{
     ingredients?: string;
@@ -491,9 +558,19 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
             
             if (extractedContent.imageUrl) {
               const imageUrl = extractedContent.imageUrl.trim();
-              if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('data:image/')) {
-                console.log(`✅ Using extracted image URL directly: ${imageUrl.substring(0, 100)}...`);
+              if (imageUrl.startsWith('data:image/')) {
+                console.log(`✅ Using base64 image data directly: ${imageUrl.substring(0, 50)}...`);
                 finalRecipe.imageUri = imageUrl;
+              } else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+                console.log(`🔄 Converting extracted image URL to base64: ${imageUrl.substring(0, 80)}...`);
+                const base64Image = await convertImageToBase64(imageUrl);
+                if (base64Image) {
+                  console.log(`✅ Successfully converted image to base64`);
+                  finalRecipe.imageUri = base64Image;
+                } else {
+                  console.log(`⚠️ Failed to convert image, using fallback...`);
+                  finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
+                }
               } else {
                 console.log(`⚠️ Invalid image URL format, using fallback...`);
                 finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
@@ -794,7 +871,8 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
     reExtractImages,
     forceReExtractAllImages,
     generateFallbackImage,
-  }), [recipes, isLoading, addRecipe, updateRecipe, updateRecipeStepProgress, deleteRecipe, toggleFavorite, changeRecipeCategory, getRecipesByCategory, loadRecipes, debugStorage, extractRecipeImage, extractRecipeContent, reExtractImages, forceReExtractAllImages, generateFallbackImage]);
+    convertImageToBase64,
+  }), [recipes, isLoading, addRecipe, updateRecipe, updateRecipeStepProgress, deleteRecipe, toggleFavorite, changeRecipeCategory, getRecipesByCategory, loadRecipes, debugStorage, extractRecipeImage, extractRecipeContent, reExtractImages, forceReExtractAllImages, generateFallbackImage, convertImageToBase64]);
 
   return contextValue;
 });
