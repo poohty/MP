@@ -3,6 +3,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Recipe, RecipeCategory } from '@/types';
 import { useAuth } from './auth-store';
+import { trpcClient } from '@/lib/trpc';
 
 const RECIPES_STORAGE_KEY = 'meal-planner-recipes';
 const IMAGE_FAILURES_STORAGE_KEY = 'meal-planner-image-failures';
@@ -392,6 +393,23 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
     }
     
     console.log(`❌ All ${maxRetries + 1} attempts failed for image: ${imageUrl.substring(0, 80)}...`);
+    console.log(`🔄 Attempting backend proxy as fallback...`);
+    
+    try {
+      const proxyResult = await trpcClient.proxyImage.mutate({
+        imageUrl,
+        pageUrl,
+      });
+      
+      if (proxyResult.success && proxyResult.base64Data) {
+        console.log(`✅ Backend proxy succeeded! (${proxyResult.base64Data.length} chars)`);
+        return proxyResult.base64Data;
+      } else {
+        console.log(`❌ Backend proxy failed: ${proxyResult.error || 'Unknown error'}`);
+      }
+    } catch (proxyError: any) {
+      console.log(`❌ Backend proxy error:`, proxyError.message || proxyError);
+    }
     
     await logImageFailure({
       recipeUrl: pageUrl || 'unknown',
@@ -402,7 +420,7 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
       userAgentUsed: USER_AGENTS[getCachedUserAgent()],
       refererUsed: pageUrl,
       retryCount: attemptCount,
-      errorMessage: lastError || 'Unknown error after all retries'
+      errorMessage: lastError || 'Unknown error after all retries (including proxy)'
     });
     
     return undefined;
