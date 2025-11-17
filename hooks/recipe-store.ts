@@ -190,11 +190,14 @@ export const [RecipeProvider, useRecipes] = createContextHook(() => {
             const r2 = await fetch(imageUrl, { method: 'GET', headers: { 'User-Agent': USER_AGENTS[ua], ...(pageUrl ? { Referer: pageUrl } : {}) } });
             if (r2.ok) {
               const blob = await r2.blob();
-              const reader = new FileReader();
-              return new Promise<string>((resolve) => {
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(blob);
-              });
+              if (typeof FileReader !== 'undefined') {
+                const reader = new FileReader();
+                return new Promise<string>((resolve) => {
+                  reader.onloadend = () => resolve(reader.result as string);
+                  reader.readAsDataURL(blob);
+                });
+              }
+              return undefined;
             }
           }
         }
@@ -204,12 +207,16 @@ export const [RecipeProvider, useRecipes] = createContextHook(() => {
       const ct = res.headers.get('content-type') ?? '';
       if (!ct.startsWith('image/')) return undefined;
       const blob = await res.blob();
-      const reader = new FileReader();
-      return new Promise<string>((resolve, reject) => {
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+      
+      if (typeof FileReader !== 'undefined') {
+        const reader = new FileReader();
+        return new Promise<string>((resolve, reject) => {
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      }
+      return undefined;
     } catch (e) {
       console.warn('convertImageToBase64 error', e);
       return undefined;
