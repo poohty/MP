@@ -2,57 +2,67 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
-import { SafeAreaProvider } from "react-native-safe-area-context";
-import { RecipeProvider } from "@/hooks/recipe-store";
-import { AuthProvider } from "@/hooks/auth-store";
-import { MealPlanProvider } from "@/hooks/meal-plan-store";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { StatusBar } from "expo-status-bar";
+import { AuthContext } from "@/hooks/auth-store";
+import { RecipeContext } from "@/hooks/recipe-store";
+import { MealPlanContext } from "@/hooks/meal-plan-store";
+import Colors from "@/constants/colors";
 
-SplashScreen.preventAutoHideAsync().catch(() => {});
+// Prevent the splash screen from auto-hiding before asset loading is complete.
+SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
+function RootLayoutNav() {
+  return (
+    <Stack 
+      screenOptions={{ 
+        headerBackTitle: "Back",
+        headerStyle: {
+          backgroundColor: Colors.light.background,
+        },
+        headerTintColor: Colors.light.text,
+        headerTitleStyle: {
+          fontWeight: '600',
+        },
+        contentStyle: {
+          backgroundColor: Colors.light.background,
+        },
+      }}
+    >
+
+      <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="signup" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="upload-bookmarks" options={{ title: "Upload Bookmarks" }} />
+      <Stack.Screen name="add-recipe-photo" options={{ title: "Add Recipe" }} />
+      <Stack.Screen name="add-recipe-url" options={{ title: "Add Recipe from URL" }} />
+      <Stack.Screen name="recipe-details" options={{ title: "Recipe Details" }} />
+      <Stack.Screen name="create-meal-plan" options={{ title: "Create Meal Plan" }} />
+      <Stack.Screen name="meal-plan-details" options={{ title: "Meal Plan Details" }} />
+      <Stack.Screen name="grocery-list" options={{ title: "Grocery List" }} />
+    </Stack>
+  );
+}
+
 export default function RootLayout() {
   useEffect(() => {
-    const hide = async () => {
-      try {
-        await SplashScreen.hideAsync();
-      } catch (e) {
-        // ignore
-      }
-    };
-    hide();
+    SplashScreen.hideAsync();
   }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <RecipeProvider>
-          <MealPlanProvider>
-            <SafeAreaProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <AuthContext>
+          <RecipeContext>
+            <MealPlanContext>
+              <StatusBar style="light" />
               <RootLayoutNav />
-            </SafeAreaProvider>
-          </MealPlanProvider>
-        </RecipeProvider>
-      </AuthProvider>
+            </MealPlanContext>
+          </RecipeContext>
+        </AuthContext>
+      </GestureHandlerRootView>
     </QueryClientProvider>
-  );
-}
-
-function RootLayoutNav() {
-  return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="login" options={{ headerShown: false }} />
-      <Stack.Screen name="signup" options={{ headerShown: false }} />
-      <Stack.Screen name="add-recipe-photo" options={{ presentation: "modal", headerShown: false }} />
-      <Stack.Screen name="add-recipe-url" options={{ presentation: "modal", headerShown: false }} />
-      <Stack.Screen name="recipe-details" options={{ headerShown: false }} />
-      <Stack.Screen name="create-meal-plan" options={{ presentation: "modal", headerShown: false }} />
-      <Stack.Screen name="meal-plan-details" options={{ headerShown: false }} />
-      <Stack.Screen name="upload-bookmarks" options={{ presentation: "modal", headerShown: false }} />
-      <Stack.Screen name="grocery-list" options={{ headerShown: false }} />
-      <Stack.Screen name="image-diagnostics" options={{ headerShown: false }} />
-      <Stack.Screen name="image-failure-logs" options={{ headerShown: false }} />
-    </Stack>
   );
 }
