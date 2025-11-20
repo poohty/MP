@@ -139,10 +139,7 @@ export default function UploadBookmarksScreen() {
           failedRecipes.push(name);
         }
         
-        // Minimal delay between requests for speed
-        if (i < potentialRecipes.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 20)); // Reduced to 20ms for faster import
-        }
+        // No delay between recipe parsing for maximum speed
       }
       
       console.log(`🎉 PARSING COMPLETE: ${bookmarks.length}/${potentialRecipes.length} recipes processed`);
@@ -750,8 +747,7 @@ export default function UploadBookmarksScreen() {
           console.log(`❌ [${i + 1}/${parsedBookmarks.length}] Final failure to import: "${bookmark.name}" after ${maxImportAttempts} attempts`);
         }
         
-        // Small delay to prevent overwhelming the system
-        await new Promise(resolve => setTimeout(resolve, 50)); // Reduced to 50ms for faster import
+        // No delay between imports for maximum speed
       }
       
       console.log(`📊 FINAL Import Summary:`);
@@ -764,34 +760,56 @@ export default function UploadBookmarksScreen() {
       setIsProcessing(false);
       setProcessingStatus('');
       
-      // Refresh recipes to ensure they show up in the cook book
-      if (successCount > 0) {
-        console.log('🔄 UPLOAD: Refreshing recipes after successful import...');
-        try {
-          await refreshRecipes();
-          console.log('✅ UPLOAD: Recipes refreshed successfully');
-        } catch (refreshError) {
-          console.error('❌ UPLOAD: Error refreshing recipes:', refreshError);
-        }
+      // Always refresh recipes to ensure they show up in the cook book
+      console.log('🔄 UPLOAD: Refreshing recipes after import...');
+      try {
+        await refreshRecipes();
+        console.log('✅ UPLOAD: Recipes refreshed successfully');
+      } catch (refreshError) {
+        console.error('❌ UPLOAD: Error refreshing recipes:', refreshError);
       }
       
       // Show detailed success message with accurate counts
-      let message = `🎉 Successfully imported ${successCount} recipe${successCount !== 1 ? 's' : ''}!`;
+      const totalAttempted = parsedBookmarks.length;
+      let message = '';
+      let title = 'Import Complete';
       
-      if (successCount > 0) {
-        message += `\n\n✅ Imported recipes:\n${importedRecipes.slice(0, 5).join('\n')}${importedRecipes.length > 5 ? `\n...and ${importedRecipes.length - 5} more` : ''}`;
+      if (successCount === 0) {
+        // All recipes failed
+        title = 'Import Failed';
+        message = `⚠️ Failed to import all ${totalAttempted} recipe${totalAttempted !== 1 ? 's' : ''}.\n\nThis could be due to network issues or invalid recipe URLs. Please try again.`;
+        if (failedRecipes.length > 0 && failedRecipes.length <= 3) {
+          message += `\n\n❌ Failed recipes:\n${failedRecipes.join('\n')}`;
+        }
+      } else if (successCount === totalAttempted) {
+        // All recipes succeeded
+        title = 'Import Complete! 🎉';
+        message = `✅ Successfully imported all ${successCount} recipe${successCount !== 1 ? 's' : ''}!`;
         message += `\n\nYou can now find them in the Cook Book tab.`;
-      }
-      
-      if (failedRecipes.length > 0) {
-        message += `\n\n❌ Failed to import ${failedRecipes.length} recipe${failedRecipes.length !== 1 ? 's' : ''}:`;
-        message += `\n${failedRecipes.slice(0, 3).join('\n')}${failedRecipes.length > 3 ? `\n...and ${failedRecipes.length - 3} more` : ''}`;
+      } else {
+        // Partial success
+        title = 'Import Partially Complete';
+        message = `✅ Successfully imported ${successCount} out of ${totalAttempted} recipes.`;
+        
+        if (successCount > 0 && successCount <= 5) {
+          message += `\n\n✅ Imported:\n${importedRecipes.join('\n')}`;
+        } else if (successCount > 5) {
+          message += `\n\n✅ Imported:\n${importedRecipes.slice(0, 5).join('\n')}\n...and ${importedRecipes.length - 5} more`;
+        }
+        
+        if (failedRecipes.length > 0 && failedRecipes.length <= 3) {
+          message += `\n\n❌ Failed:\n${failedRecipes.join('\n')}`;
+        } else if (failedRecipes.length > 3) {
+          message += `\n\n❌ Failed: ${failedRecipes.length} recipes`;
+        }
+        
+        message += `\n\nSuccessful recipes are now in the Cook Book tab.`;
       }
       
       // Use setTimeout to ensure the alert shows after state updates
       setTimeout(() => {
         Alert.alert(
-          successCount > 0 ? `Import Complete! 🎉` : 'Import Complete',
+          title,
           message,
           [
             {
