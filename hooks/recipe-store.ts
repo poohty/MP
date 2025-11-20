@@ -137,10 +137,15 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
       console.warn("⚠️ Rork AI image generation failed in generateFallbackImage:", error);
     }
 
-    // If AI generation fails for any reason, return an empty string so callers handle it gracefully.
-    console.log("❌ No fallback image could be generated; returning empty string.");
-    return "";
-  }, []);
+    // If AI generation fails for any reason, use static fallback URLs
+    const fallbackUrls = getMultipleFallbackImages(recipeName, category);
+    const safeUrl =
+      fallbackUrls && fallbackUrls[0]
+        ? fallbackUrls[0]
+        : `https://source.unsplash.com/featured/400x300/?food,recipe&sig=${Date.now().toString().slice(-4)}`;
+    console.log("⚠️ Using static fallback URL instead of empty string:", safeUrl);
+    return safeUrl;
+  }, [getMultipleFallbackImages]);
 
   const convertImageToBase64 = useCallback(async (imageUrl: string): Promise<string | undefined> => {
     try {
