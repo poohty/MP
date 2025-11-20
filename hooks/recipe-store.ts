@@ -93,11 +93,52 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
   }, []);
 
   const generateFallbackImage = useCallback(async (recipeName: string, category: string): Promise<string> => {
-    console.log(`🎨 Generating fallback image URL for "${recipeName}" in category "${category}"`);
-    const fallbackUrls = getMultipleFallbackImages(recipeName, category);
-    console.log(`✅ Using Unsplash fallback URL: ${fallbackUrls[0]}`);
-    return fallbackUrls[0];
-  }, [getMultipleFallbackImages]);
+    console.log(`🎨 Rork AI fallback triggered for "${recipeName}"`);
+
+    try {
+      const promptText = `Photorealistic, high-quality food photography of a dish called "${recipeName}". Bright natural lighting, shallow depth of field, appetizing and realistic.`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch('https://toolkit.rork.com/images/generate/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          prompt: promptText,
+          size: "1024x1024"
+        })
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        console.log(`❌ AI image generation API error: ${response.status}`);
+        return "";
+      }
+
+      const data = await response.json();
+      const b64 = data?.image?.base64Data;
+      const mimeType = data?.image?.mimeType || 'image/png';
+
+      if (b64) {
+        console.log("✅ AI-generated thumbnail created");
+        if (b64.startsWith("data:")) {
+          return b64;
+        } else {
+          return `data:${mimeType};base64,${b64}`;
+        }
+      }
+    } catch (e: any) {
+      console.warn("⚠️ AI generation failed, no fallback image generated:", e.message || e);
+    }
+
+    console.log("❌ AI generation failed completely — returning empty string");
+    return "";
+  }, []);
 
   const convertImageToBase64 = useCallback(async (imageUrl: string): Promise<string | undefined> => {
     try {
