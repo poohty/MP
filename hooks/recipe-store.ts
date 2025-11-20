@@ -93,8 +93,9 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
   }, []);
 
   const generateFallbackImage = useCallback(async (recipeName: string, category: string): Promise<string> => {
-    console.log(`🎨 Rork AI fallback triggered for "${recipeName}"`);
+    console.log(`🎨 Rork AI fallback triggered for "${recipeName}" in category "${category}"`);
 
+    // 1) Try Rork's built-in AI image generator first
     try {
       const promptText = `Photorealistic, high-quality food photography of a dish called "${recipeName}". Bright natural lighting, shallow depth of field, appetizing and realistic.`;
 
@@ -116,29 +117,42 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        console.log(`❌ AI image generation API error: ${response.status}`);
-        return "";
-      }
+        console.log(`⚠️ Rork AI image generation API error: ${response.status}, falling back to static URLs`);
+      } else {
+        const data = await response.json();
+        const b64 = data?.image?.base64Data;
+        const mimeType = data?.image?.mimeType || 'image/png';
 
-      const data = await response.json();
-      const b64 = data?.image?.base64Data;
-      const mimeType = data?.image?.mimeType || 'image/png';
-
-      if (b64) {
-        console.log("✅ AI-generated thumbnail created");
-        if (b64.startsWith("data:")) {
-          return b64;
+        if (b64 && typeof b64 === "string") {
+          console.log("✅ AI-generated thumbnail created by Rork");
+          if (b64.startsWith("data:")) {
+            return b64;
+          } else {
+            return `data:${mimeType};base64,${b64}`;
+          }
         } else {
-          return `data:${mimeType};base64,${b64}`;
+          console.warn("⚠️ Rork AI returned no base64 image data, falling back to static URLs.");
         }
       }
-    } catch (e: any) {
-      console.warn("⚠️ AI generation failed, no fallback image generated:", e.message || e);
+    } catch (error: any) {
+      console.warn("⚠️ Rork AI image generation failed, falling back to static URLs:", error.message || error);
     }
 
-    console.log("❌ AI generation failed completely — returning empty string");
+    // 2) If AI generation fails for any reason, fall back to the existing Unsplash-based URLs
+    try {
+      const fallbackUrls = getMultipleFallbackImages(recipeName, category);
+      if (fallbackUrls && fallbackUrls[0]) {
+        console.log(`✅ Using static fallback URL: ${fallbackUrls[0]}`);
+        return fallbackUrls[0];
+      }
+    } catch (e) {
+      console.warn("❌ Static fallback URL generation failed:", e);
+    }
+
+    // 3) As a last resort, return an empty string so callers don't crash
+    console.log("❌ No fallback image could be generated; returning empty string.");
     return "";
-  }, []);
+  }, [getMultipleFallbackImages]);
 
   const convertImageToBase64 = useCallback(async (imageUrl: string): Promise<string | undefined> => {
     try {
