@@ -189,8 +189,6 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
     >
       <View style={styles.imageContainer}>
         {imageSource && imageSource.length > 10 ? (
-      console.log("Thumbnail debug:", recipe.name, imageSource?.slice(0, 80));
-
           <Image
             key={`${recipe.id}-${imageKey}`}
             source={{ uri: imageSource }}
@@ -200,16 +198,25 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
             onError={handleImageError}
           />
         ) : (
-          <View style={[styles.image, { backgroundColor: Colors.surface, alignItems: 'center', justifyContent: 'center' }]}>
+          <View
+            style={[
+              styles.image,
+              {
+                backgroundColor: Colors.surface,
+                alignItems: 'center',
+                justifyContent: 'center',
+              },
+            ]}
+          >
             <Text style={{ color: Colors.textSecondary, fontSize: 12 }}>No Image</Text>
           </View>
         )}
-        
 
         <LinearGradient
           colors={['transparent', 'rgba(0,0,0,0.8)']}
           style={styles.gradient}
         />
+        
         <View style={styles.actionButtons}>
           {onToggleFavorite && (
             <TouchableOpacity
