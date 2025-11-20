@@ -137,11 +137,7 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
     }
   }, []);
 
-  /**
-   * Rork toolkit wrapper: generate a recipe thumbnail using Rork's built-in generator.
-   * Returns { dataUri, provider, model } or undefined on any error.
-   */
-  async function generateImageForRecipeRork(title?: string, ingredients?: string[] | undefined, width = 768, height = 576) {
+  const generateImageForRecipeRork = useCallback(async (title?: string, ingredients?: string[] | undefined, width = 768, height = 576): Promise<{ dataUri: string; provider: string; model: string } | undefined> => {
     try {
       const t = (title || '').replace(/\s+/g, ' ').trim();
       const topIngredients = Array.isArray(ingredients) ? ingredients.slice(0, 3).join(', ') : '';
@@ -184,7 +180,7 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
       console.warn('generateImageForRecipeRork error', e);
       return undefined;
     }
-  }
+  }, []);
 
   const extractRecipeImage = useCallback(async (recipeName: string, recipeUrl: string, retryCount: number = 1): Promise<string | undefined> => {
     console.log(`🖼️ Starting image extraction for "${recipeName}"`);
@@ -673,7 +669,7 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
       console.error('Failed to add recipe:', error);
       return false;
     }
-  }, [user?.id, saveRecipes, extractRecipeContent, generateFallbackImage, convertImageToBase64]);
+  }, [user?.id, saveRecipes, extractRecipeContent, generateFallbackImage, convertImageToBase64, generateImageForRecipeRork]);
 
   const updateRecipe = useCallback(async (updatedRecipe: Recipe) => {
     try {
