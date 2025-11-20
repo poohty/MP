@@ -92,13 +92,12 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
     ];
   }, []);
 
-  const generateFallbackImage = useCallback(async (recipeName: string, category: string): Promise<string> => {
-    console.log(`🎨 Rork AI fallback triggered for "${recipeName}" in category "${category}"`);
+  const generateAiThumbnail = useCallback(async (recipeName: string, category: string): Promise<string> => {
+    console.log(`🎨 Rork AI thumbnail generation for "${recipeName}" in category "${category}"`);
 
     try {
       const promptText = `Photorealistic, high-quality food photography of a dish called "${recipeName}". Bright natural lighting, shallow depth of field, appetizing and realistic.`;
 
-      // Use Rork's built-in image generator API
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
@@ -116,38 +115,44 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
 
       clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        console.warn(`⚠️ Rork AI image generation API error: ${response.status}`);
-      } else {
+      if (response.ok) {
         const data = await response.json();
         const b64 = data?.image?.base64Data;
         const mimeType = data?.image?.mimeType || 'image/png';
 
-        if (b64 && typeof b64 === "string") {
-          console.log("✅ AI-generated thumbnail created by Rork");
-          if (b64.startsWith("data:")) {
-            return b64;
-          }
-          return `data:${mimeType};base64,${b64}`;
-        } else {
-          console.warn("⚠️ Rork AI returned no usable base64 image data");
+        if (b64 && typeof b64 === "string" && b64.length > 100) {
+          const dataUri = b64.startsWith("data:") ? b64 : `data:${mimeType};base64,${b64}`;
+          console.log(`✅ AI-generated thumbnail created (${dataUri.length} chars)`);
+          return dataUri;
         }
       }
-    } catch (error) {
-      console.warn("⚠️ Rork AI image generation failed in generateFallbackImage:", error);
+      console.warn(`⚠️ Rork AI image generation failed: HTTP ${response.status}`);
+    } catch (error: any) {
+      console.warn("⚠️ Rork AI image generation error:", error?.message || error);
     }
 
-    // If AI generation fails for any reason, use static fallback URLs
-    const fallbackUrls = getMultipleFallbackImages(recipeName, category);
-    const safeUrl =
-      fallbackUrls && fallbackUrls[0]
-        ? fallbackUrls[0]
-        : `https://source.unsplash.com/featured/400x300/?food,recipe&sig=${Date.now().toString().slice(-4)}`;
-    console.log("⚠️ Using static fallback URL instead of empty string:", safeUrl);
-    return safeUrl;
-  }, [getMultipleFallbackImages]);
+    console.log(`❌ AI generation completely failed for "${recipeName}", returning empty string`);
+    return "";
+  }, []);
 
-  const convertImageToBase64 = useCallback(async (imageUrl: string): Promise<string | undefined> => {
+  const generateFallbackImage = useCallback(async (recipeName: string, category: string): Promise<string> => {
+    console.log(`🎨 Fallback image requested for "${recipeName}"`);
+    
+    const aiThumbnail = await generateAiThumbnail(recipeName, category);
+    if (aiThumbnail && aiThumbnail.startsWith('data:')) {
+      console.log(`✅ Using AI-generated thumbnail for "${recipeName}"`);
+      return aiThumbnail;
+    }
+
+    console.log(`⚠️ AI generation failed, using Unsplash URL for "${recipeName}"`);
+    const fallbackUrls = getMultipleFallbackImages(recipeName, category);
+    const safeUrl = fallbackUrls && fallbackUrls[0]
+      ? fallbackUrls[0]
+      : `https://source.unsplash.com/featured/400x300/?food,recipe&sig=${Date.now().toString().slice(-4)}`;
+    return safeUrl;
+  }, [generateAiThumbnail, getMultipleFallbackImages]);
+
+  const convertImageToBase64 = useCallback(async (imageUrl: string, recipeName?: string, category?: string): Promise<string | undefined> => {
     try {
       console.log(`🔄 Converting image to base64: ${imageUrl.substring(0, 80)}...`);
       
@@ -167,7 +172,15 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
       clearTimeout(timeoutId);
       
       if (!response.ok) {
-        console.log(`❌ Failed to fetch image: HTTP ${response.status}`);
+        console.log(`❌ Failed to fetch image: HTTP ${response.status} ${response.statusText}`);
+        if (recipeName && category && (response.status === 503 || response.status === 403 || response.status >= 400)) {
+          console.log(`🎨 HTTP ${response.status} detected, generating AI thumbnail instead...`);
+          const aiThumbnail = await generateAiThumbnail(recipeName, category);
+          if (aiThumbnail && aiThumbnail.startsWith('data:')) {
+            console.log(`✅ Replaced failed HTTP ${response.status} image with AI thumbnail`);
+            return aiThumbnail;
+          }
+        }
         return undefined;
       }
       
@@ -194,9 +207,17 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
       });
     } catch (error: any) {
       console.log(`❌ Error converting image to base64:`, error.message || error);
+      if (recipeName && category && error.message) {
+        console.log(`🎨 Fetch error detected, generating AI thumbnail instead...`);
+        const aiThumbnail = await generateAiThumbnail(recipeName, category);
+        if (aiThumbnail && aiThumbnail.startsWith('data:')) {
+          console.log(`✅ Replaced failed fetch with AI thumbnail`);
+          return aiThumbnail;
+        }
+      }
       return undefined;
     }
-  }, []);
+  }, [generateAiThumbnail]);
 
   const extractRecipeImage = useCallback(async (recipeName: string, recipeUrl: string, retryCount: number = 1): Promise<string | undefined> => {
     console.log(`🖼️ Starting image extraction for "${recipeName}"`);
@@ -252,7 +273,7 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
       }
       
       for (const imageUrl of imageUrls) {
-        const base64Image = await convertImageToBase64(imageUrl);
+        const base64Image = await convertImageToBase64(imageUrl, recipeName, 'Main Course');
         if (base64Image) {
           return base64Image;
         }
@@ -611,29 +632,34 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
                 finalRecipe.imageUri = imageUrl;
               } else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
                 console.log(`🔄 Converting extracted image URL to base64: ${imageUrl.substring(0, 80)}...`);
-                const base64Image = await convertImageToBase64(imageUrl);
-                if (base64Image) {
-                  console.log(`✅ Successfully converted image to base64`);
+                const base64Image = await convertImageToBase64(imageUrl, recipe.name, finalRecipe.category);
+                if (base64Image && base64Image.startsWith('data:')) {
+                  console.log(`✅ Successfully converted/generated image`);
                   finalRecipe.imageUri = base64Image;
                 } else {
-                  console.log(`⚠️ Failed to convert image, using fallback...`);
-                  finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
+                  console.log(`⚠️ Image conversion failed, generating AI fallback...`);
+                  const aiFallback = await generateAiThumbnail(recipe.name, finalRecipe.category);
+                  finalRecipe.imageUri = aiFallback || await generateFallbackImage(recipe.name, finalRecipe.category);
                 }
               } else {
-                console.log(`⚠️ Invalid image URL format, using fallback...`);
-                finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
+                console.log(`⚠️ Invalid image URL format, generating AI fallback...`);
+                const aiFallback = await generateAiThumbnail(recipe.name, finalRecipe.category);
+                finalRecipe.imageUri = aiFallback || await generateFallbackImage(recipe.name, finalRecipe.category);
               }
             } else {
-              console.log('⚠️ No image found in extraction, using fallback...');
-              finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
+              console.log('⚠️ No image found in extraction, generating AI fallback...');
+              const aiFallback = await generateAiThumbnail(recipe.name, finalRecipe.category);
+              finalRecipe.imageUri = aiFallback || await generateFallbackImage(recipe.name, finalRecipe.category);
             }
           } else {
-            console.log('⚠️ Recipe content extraction failed, using fallback image...');
-            finalRecipe.imageUri = await generateFallbackImage(recipe.name, recipe.category);
+            console.log('⚠️ Recipe content extraction failed, generating AI fallback...');
+            const aiFallback = await generateAiThumbnail(recipe.name, recipe.category);
+            finalRecipe.imageUri = aiFallback || await generateFallbackImage(recipe.name, recipe.category);
           }
         } catch (error) {
-          console.log('⚠️ Error during recipe content extraction, using fallback:', error);
-          finalRecipe.imageUri = await generateFallbackImage(recipe.name, recipe.category);
+          console.log('⚠️ Error during recipe content extraction, generating AI fallback:', error);
+          const aiFallback = await generateAiThumbnail(recipe.name, recipe.category);
+          finalRecipe.imageUri = aiFallback || await generateFallbackImage(recipe.name, recipe.category);
         }
       }
       
@@ -661,7 +687,7 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
       console.error('Failed to add recipe:', error);
       return false;
     }
-  }, [user?.id, saveRecipes, extractRecipeContent, generateFallbackImage]);
+  }, [user?.id, saveRecipes, extractRecipeContent, generateFallbackImage, generateAiThumbnail, convertImageToBase64]);
 
   const updateRecipe = useCallback(async (updatedRecipe: Recipe) => {
     try {
@@ -785,29 +811,31 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
         try {
           const imageUri = await extractRecipeImage(recipe.name, recipe.url!, 2);
           
-          if (imageUri) {
+          if (imageUri && imageUri.startsWith('data:')) {
             workingRecipes = workingRecipes.map(r => 
               r.id === recipe.id ? { ...r, imageUri } : r
             );
             console.log(`✅ [${i + 1}/${recipesWithoutImages.length}] Successfully extracted image for: "${recipe.name}"`);
             successCount++;
           } else {
-            console.log(`⚠️ Extraction failed, generating fallback for: "${recipe.name}"`);
-            const fallbackImage = await generateFallbackImage(recipe.name, recipe.category);
+            console.log(`⚠️ Extraction failed or returned invalid data, generating AI fallback for: "${recipe.name}"`);
+            const aiFallback = await generateAiThumbnail(recipe.name, recipe.category);
+            const finalImage = aiFallback || await generateFallbackImage(recipe.name, recipe.category);
             workingRecipes = workingRecipes.map(r => 
-              r.id === recipe.id ? { ...r, imageUri: fallbackImage } : r
+              r.id === recipe.id ? { ...r, imageUri: finalImage } : r
             );
-            console.log(`✅ [${i + 1}/${recipesWithoutImages.length}] Generated fallback image for: "${recipe.name}"`);
+            console.log(`✅ [${i + 1}/${recipesWithoutImages.length}] Generated AI/fallback image for: "${recipe.name}"`);
             successCount++;
           }
         } catch (error) {
           try {
-            console.log(`⚠️ Error occurred, generating fallback for: "${recipe.name}"`, error);
-            const fallbackImage = await generateFallbackImage(recipe.name, recipe.category);
+            console.log(`⚠️ Error occurred, generating AI fallback for: "${recipe.name}"`, error);
+            const aiFallback = await generateAiThumbnail(recipe.name, recipe.category);
+            const finalImage = aiFallback || await generateFallbackImage(recipe.name, recipe.category);
             workingRecipes = workingRecipes.map(r => 
-              r.id === recipe.id ? { ...r, imageUri: fallbackImage } : r
+              r.id === recipe.id ? { ...r, imageUri: finalImage } : r
             );
-            console.log(`✅ [${i + 1}/${recipesWithoutImages.length}] Generated fallback after error for: "${recipe.name}"`);
+            console.log(`✅ [${i + 1}/${recipesWithoutImages.length}] Generated AI/fallback after error for: "${recipe.name}"`);
             successCount++;
           } catch (fallbackError) {
             failedCount++;
@@ -828,7 +856,7 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
       console.error('❌ Error during image re-extraction:', error);
       return { success: 0, failed: 0 };
     }
-  }, [user?.id, extractRecipeImage, saveRecipes, generateFallbackImage]);
+  }, [user?.id, extractRecipeImage, saveRecipes, generateFallbackImage, generateAiThumbnail]);
 
   const forceReExtractAllImages = useCallback(async () => {
     try {
@@ -857,29 +885,31 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
         try {
           const imageUri = await extractRecipeImage(recipe.name, recipe.url!, 3);
           
-          if (imageUri) {
+          if (imageUri && imageUri.startsWith('data:')) {
             workingRecipes = workingRecipes.map(r => 
               r.id === recipe.id ? { ...r, imageUri } : r
             );
             console.log(`✅ [${i + 1}/${recipesWithUrls.length}] Successfully FORCE extracted image for: "${recipe.name}"`);
             successCount++;
           } else {
-            console.log(`⚠️ FORCE extraction failed, generating fallback for: "${recipe.name}"`);
-            const fallbackImage = await generateFallbackImage(recipe.name, recipe.category);
+            console.log(`⚠️ FORCE extraction failed, generating AI fallback for: "${recipe.name}"`);
+            const aiFallback = await generateAiThumbnail(recipe.name, recipe.category);
+            const finalImage = aiFallback || await generateFallbackImage(recipe.name, recipe.category);
             workingRecipes = workingRecipes.map(r => 
-              r.id === recipe.id ? { ...r, imageUri: fallbackImage } : r
+              r.id === recipe.id ? { ...r, imageUri: finalImage } : r
             );
-            console.log(`✅ [${i + 1}/${recipesWithUrls.length}] Generated fallback after FORCE extraction for: "${recipe.name}"`);
+            console.log(`✅ [${i + 1}/${recipesWithUrls.length}] Generated AI/fallback after FORCE extraction for: "${recipe.name}"`);
             successCount++;
           }
         } catch (error) {
           try {
-            console.log(`⚠️ FORCE extraction error, generating fallback for: "${recipe.name}"`, error);
-            const fallbackImage = await generateFallbackImage(recipe.name, recipe.category);
+            console.log(`⚠️ FORCE extraction error, generating AI fallback for: "${recipe.name}"`, error);
+            const aiFallback = await generateAiThumbnail(recipe.name, recipe.category);
+            const finalImage = aiFallback || await generateFallbackImage(recipe.name, recipe.category);
             workingRecipes = workingRecipes.map(r => 
-              r.id === recipe.id ? { ...r, imageUri: fallbackImage } : r
+              r.id === recipe.id ? { ...r, imageUri: finalImage } : r
             );
-            console.log(`✅ [${i + 1}/${recipesWithUrls.length}] Generated fallback after FORCE error for: "${recipe.name}"`);
+            console.log(`✅ [${i + 1}/${recipesWithUrls.length}] Generated AI/fallback after FORCE error for: "${recipe.name}"`);
             successCount++;
           } catch (fallbackError) {
             failedCount++;
@@ -900,7 +930,7 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
       console.error('❌ Error during FORCE image re-extraction:', error);
       return { success: 0, failed: 0 };
     }
-  }, [user?.id, extractRecipeImage, saveRecipes, generateFallbackImage]);
+  }, [user?.id, extractRecipeImage, saveRecipes, generateFallbackImage, generateAiThumbnail]);
 
   const contextValue = useMemo(() => ({
     recipes,
@@ -919,8 +949,9 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
     reExtractImages,
     forceReExtractAllImages,
     generateFallbackImage,
+    generateAiThumbnail,
     convertImageToBase64,
-  }), [recipes, isLoading, addRecipe, updateRecipe, updateRecipeStepProgress, deleteRecipe, toggleFavorite, changeRecipeCategory, getRecipesByCategory, loadRecipes, debugStorage, extractRecipeImage, extractRecipeContent, reExtractImages, forceReExtractAllImages, generateFallbackImage, convertImageToBase64]);
+  }), [recipes, isLoading, addRecipe, updateRecipe, updateRecipeStepProgress, deleteRecipe, toggleFavorite, changeRecipeCategory, getRecipesByCategory, loadRecipes, debugStorage, extractRecipeImage, extractRecipeContent, reExtractImages, forceReExtractAllImages, generateFallbackImage, generateAiThumbnail, convertImageToBase64]);
 
   return contextValue;
 });

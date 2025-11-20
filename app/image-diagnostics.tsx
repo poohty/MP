@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import Colors from '@/constants/colors';
 import GradientBackground from '@/components/GradientBackground';
@@ -108,12 +108,32 @@ export default function ImageDiagnosticsScreen() {
           recipe,
           status: 'invalid',
           imageUri: recipe.imageUri,
-          errorMessage: `Not a valid URL (missing http:// or https://)`
+          errorMessage: `Not a valid URL (missing http://, https://, or data:)`
         });
         continue;
       }
 
-      // Try to load the image
+      // Handle data URIs separately - they are always valid if they exist
+      if (trimmedUri.startsWith('data:')) {
+        if (trimmedUri.startsWith('data:image/')) {
+          infos.push({
+            recipe,
+            status: 'success',
+            imageUri: trimmedUri
+          });
+          console.log(`✅ Recipe "${recipe.name}" has valid data URI (${trimmedUri.length} chars)`);
+        } else {
+          infos.push({
+            recipe,
+            status: 'invalid',
+            imageUri: trimmedUri,
+            errorMessage: 'Data URI is not an image type'
+          });
+        }
+        continue;
+      }
+
+      // Only test HTTP/HTTPS URLs
       const result = await testImageLoad(trimmedUri);
       
       if (result.success) {
@@ -138,6 +158,7 @@ export default function ImageDiagnosticsScreen() {
 
   useEffect(() => {
     scanRecipes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipes]);
 
   const handleReExtract = (recipe: Recipe) => {
