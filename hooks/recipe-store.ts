@@ -64,7 +64,8 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
     }
   }, [user?.id]);
 
-  const getMultipleFallbackImages = useCallback((recipeName: string, category: string): string[] => {
+  const generateFallbackImage = useCallback(async (recipeName: string, category: string): Promise<string> => {
+    console.log(`🎨 Generating fallback image URL for "${recipeName}" in category "${category}"`);
     const cleanName = recipeName
       .replace(/recipe/gi, '')
       .replace(/easy/gi, '')
@@ -78,26 +79,12 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
       .split(' ')
       .slice(0, 3)
       .join(' ');
-    
     const timestamp = Date.now().toString().slice(-4);
     const searchTerm = encodeURIComponent(cleanName);
-    const categoryTerm = encodeURIComponent(category.toLowerCase().replace(/[^a-zA-Z0-9\s]/g, ''));
-    
-    return [
-      `https://source.unsplash.com/featured/400x300/?${searchTerm},food,recipe,dish&sig=${timestamp}`,
-      `https://source.unsplash.com/featured/400x300/?${categoryTerm},food,cooking&sig=${timestamp + 1}`,
-      `https://source.unsplash.com/featured/400x300/?food,cooking,recipe&sig=${timestamp + 2}`,
-      `https://source.unsplash.com/featured/400x300/?meal,dish,cuisine&sig=${timestamp + 3}`,
-      `https://source.unsplash.com/featured/400x300/?kitchen,cooking,chef&sig=${timestamp + 4}`
-    ];
+    const fallbackUrl = `https://source.unsplash.com/featured/400x300/?${searchTerm},food,recipe,dish&sig=${timestamp}`;
+    console.log(`✅ Using Unsplash fallback URL: ${fallbackUrl}`);
+    return fallbackUrl;
   }, []);
-
-  const generateFallbackImage = useCallback(async (recipeName: string, category: string): Promise<string> => {
-    console.log(`🎨 Generating fallback image URL for "${recipeName}" in category "${category}"`);
-    const fallbackUrls = getMultipleFallbackImages(recipeName, category);
-    console.log(`✅ Using Unsplash fallback URL: ${fallbackUrls[0]}`);
-    return fallbackUrls[0];
-  }, [getMultipleFallbackImages]);
 
   const convertImageToBase64 = useCallback(async (imageUrl: string, recipeUrl?: string): Promise<string | undefined> => {
     try {
@@ -149,6 +136,55 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
       return undefined;
     }
   }, []);
+
+  /**
+   * Rork toolkit wrapper: generate a recipe thumbnail using Rork's built-in generator.
+   * Returns { dataUri, provider, model } or undefined on any error.
+   */
+  async function generateImageForRecipeRork(title?: string, ingredients?: string[] | undefined, width = 768, height = 576) {
+    try {
+      const t = (title || '').replace(/\s+/g, ' ').trim();
+      const topIngredients = Array.isArray(ingredients) ? ingredients.slice(0, 3).join(', ') : '';
+      if (!t && !topIngredients) return undefined;
+      const promptText = `Photorealistic close-up of a serving of ${t || topIngredients}. Ingredients visible: ${topIngredients}. Bright natural lighting, shallow depth-of-field, top-down three-quarter angle, food photography style, no text, high detail, vibrant colors, 4:3 aspect ratio.`;
+
+      console.log(`🤖 Requesting Rork AI image generation for: "${t}"`);
+      
+      const response = await fetch('https://toolkit.rork.com/images/generate/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: promptText,
+          size: `${width}x${height}`
+        })
+      });
+
+      if (!response.ok) {
+        console.log(`❌ Rork AI image generation failed: HTTP ${response.status}`);
+        return undefined;
+      }
+
+      const result = await response.json();
+      const b64 = result?.image?.base64Data || result?.image?.data || result?.base64;
+      if (!b64) {
+        console.log(`❌ No base64 data in Rork AI response`);
+        return undefined;
+      }
+      
+      if (typeof b64 === 'string' && b64.startsWith('data:')) {
+        console.log(`✅ Rork AI generated image successfully (data URI)`);
+        return { dataUri: b64, provider: 'rork', model: 'dalle-3' };
+      }
+      const dataUri = `data:image/png;base64,${b64}`;
+      console.log(`✅ Rork AI generated image successfully (base64 -> data URI)`);
+      return { dataUri, provider: 'rork', model: 'dalle-3' };
+    } catch (e) {
+      console.warn('generateImageForRecipeRork error', e);
+      return undefined;
+    }
+  }
 
   const extractRecipeImage = useCallback(async (recipeName: string, recipeUrl: string, retryCount: number = 1): Promise<string | undefined> => {
     console.log(`🖼️ Starting image extraction for "${recipeName}"`);
@@ -568,16 +604,40 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
                   console.log(`✅ Successfully converted image to base64`);
                   finalRecipe.imageUri = base64Image;
                 } else {
-                  console.log(`⚠️ Failed to convert image, using fallback...`);
-                  finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
+                  console.log(`⚠️ Failed to convert image, trying Rork AI generation...`);
+                  const ingredientsArray = extractedContent.ingredients?.split('\n').filter(i => i.trim()).map(i => i.replace(/^[-•*]\s*/, '').trim());
+                  const genResult = await generateImageForRecipeRork(recipe.name, ingredientsArray);
+                  if (genResult?.dataUri) {
+                    console.log(`✅ Rork AI generated image successfully`);
+                    finalRecipe.imageUri = genResult.dataUri;
+                  } else {
+                    console.log(`⚠️ Rork AI generation failed, using Unsplash fallback...`);
+                    finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
+                  }
                 }
               } else {
-                console.log(`⚠️ Invalid image URL format, using fallback...`);
-                finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
+                console.log(`⚠️ Invalid image URL format, trying Rork AI generation...`);
+                const ingredientsArray = extractedContent.ingredients?.split('\n').filter(i => i.trim()).map(i => i.replace(/^[-•*]\s*/, '').trim());
+                const genResult = await generateImageForRecipeRork(recipe.name, ingredientsArray);
+                if (genResult?.dataUri) {
+                  console.log(`✅ Rork AI generated image successfully`);
+                  finalRecipe.imageUri = genResult.dataUri;
+                } else {
+                  console.log(`⚠️ Rork AI generation failed, using Unsplash fallback...`);
+                  finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
+                }
               }
             } else {
-              console.log('⚠️ No image found in extraction, using fallback...');
-              finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
+              console.log('⚠️ No image found in extraction, trying Rork AI generation...');
+              const ingredientsArray = extractedContent.ingredients?.split('\n').filter(i => i.trim()).map(i => i.replace(/^[-•*]\s*/, '').trim());
+              const genResult = await generateImageForRecipeRork(recipe.name, ingredientsArray);
+              if (genResult?.dataUri) {
+                console.log(`✅ Rork AI generated image successfully`);
+                finalRecipe.imageUri = genResult.dataUri;
+              } else {
+                console.log(`⚠️ Rork AI generation failed, using Unsplash fallback...`);
+                finalRecipe.imageUri = await generateFallbackImage(recipe.name, finalRecipe.category);
+              }
             }
           } else {
             console.log('⚠️ Recipe content extraction failed, using fallback image...');
@@ -613,7 +673,7 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
       console.error('Failed to add recipe:', error);
       return false;
     }
-  }, [user?.id, saveRecipes, extractRecipeContent, generateFallbackImage]);
+  }, [user?.id, saveRecipes, extractRecipeContent, generateFallbackImage, convertImageToBase64]);
 
   const updateRecipe = useCallback(async (updatedRecipe: Recipe) => {
     try {
