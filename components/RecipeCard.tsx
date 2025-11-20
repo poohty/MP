@@ -189,6 +189,8 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
     >
       <View style={styles.imageContainer}>
         {imageSource && imageSource.length > 10 ? (
+      console.log("Thumbnail debug:", recipe.name, imageSource?.slice(0, 80));
+
           <Image
             key={`${recipe.id}-${imageKey}`}
             source={{ uri: imageSource }}
