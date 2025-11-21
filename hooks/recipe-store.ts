@@ -64,33 +64,7 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
     }
   }, [user?.id]);
 
-  const getMultipleFallbackImages = useCallback((recipeName: string, category: string): string[] => {
-    const cleanName = recipeName
-      .replace(/recipe/gi, '')
-      .replace(/easy/gi, '')
-      .replace(/best/gi, '')
-      .replace(/homemade/gi, '')
-      .replace(/delicious/gi, '')
-      .replace(/quick/gi, '')
-      .replace(/simple/gi, '')
-      .replace(/[^a-zA-Z0-9\s]/g, '')
-      .trim()
-      .split(' ')
-      .slice(0, 3)
-      .join(' ');
-    
-    const timestamp = Date.now().toString().slice(-4);
-    const searchTerm = encodeURIComponent(cleanName);
-    const categoryTerm = encodeURIComponent(category.toLowerCase().replace(/[^a-zA-Z0-9\s]/g, ''));
-    
-    return [
-      `https://source.unsplash.com/featured/400x300/?${searchTerm},food,recipe,dish&sig=${timestamp}`,
-      `https://source.unsplash.com/featured/400x300/?${categoryTerm},food,cooking&sig=${timestamp + 1}`,
-      `https://source.unsplash.com/featured/400x300/?food,cooking,recipe&sig=${timestamp + 2}`,
-      `https://source.unsplash.com/featured/400x300/?meal,dish,cuisine&sig=${timestamp + 3}`,
-      `https://source.unsplash.com/featured/400x300/?kitchen,cooking,chef&sig=${timestamp + 4}`
-    ];
-  }, []);
+
 
   const generateAiThumbnail = useCallback(async (recipeName: string, category: string): Promise<string> => {
     console.log(`🎨 Rork AI thumbnail generation for "${recipeName}" in category "${category}"`);
@@ -144,13 +118,9 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
       return aiThumbnail;
     }
 
-    console.log(`⚠️ AI generation failed, using Unsplash URL for "${recipeName}"`);
-    const fallbackUrls = getMultipleFallbackImages(recipeName, category);
-    const safeUrl = fallbackUrls && fallbackUrls[0]
-      ? fallbackUrls[0]
-      : `https://source.unsplash.com/featured/400x300/?food,recipe&sig=${Date.now().toString().slice(-4)}`;
-    return safeUrl;
-  }, [generateAiThumbnail, getMultipleFallbackImages]);
+    console.log(`❌ AI generation failed for "${recipeName}", returning empty string`);
+    return "";
+  }, [generateAiThumbnail]);
 
   const convertImageToBase64 = useCallback(async (imageUrl: string, recipeName?: string, category?: string): Promise<string | undefined> => {
     try {

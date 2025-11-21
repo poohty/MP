@@ -197,30 +197,7 @@ export default function UploadBookmarksScreen() {
     }
   };
 
-  // Get a recipe-specific placeholder image using Unsplash search with better uniqueness
-  const getRecipeSpecificPlaceholder = (recipeName: string, category: string): string => {
-    // Clean up recipe name for better search
-    const cleanName = recipeName
-      .replace(/recipe/gi, '')
-      .replace(/easy/gi, '')
-      .replace(/best/gi, '')
-      .replace(/homemade/gi, '')
-      .replace(/delicious/gi, '')
-      .replace(/quick/gi, '')
-      .replace(/simple/gi, '')
-      .replace(/[^a-zA-Z0-9\s]/g, '') // Remove special characters
-      .trim()
-      .split(' ')
-      .slice(0, 2) // Take first 2 words for more specific search
-      .join(' ');
-    
-    // Create a unique search term with recipe name and add randomness to avoid duplicates
-    const timestamp = Date.now().toString().slice(-4); // Last 4 digits for uniqueness
-    const searchTerm = encodeURIComponent(`${cleanName} food recipe dish`);
-    
-    // Use Unsplash search API with recipe-specific terms and size parameters
-    return `https://source.unsplash.com/featured/400x300/?${searchTerm}&sig=${timestamp}`;
-  };
+
 
   // Search for specific recipe images from web sources
   const searchSpecificRecipeImage = async (recipeName: string, category: string, originalUrl: string): Promise<string> => {
@@ -263,12 +240,12 @@ export default function UploadBookmarksScreen() {
       clearTimeout(timeoutId);
       
       if (!response.ok) {
-        return getRecipeSpecificPlaceholder(recipeName, category);
+        return '';
       }
       
       const data = await response.json();
       if (!data?.completion) {
-        return getRecipeSpecificPlaceholder(recipeName, category);
+        return '';
       }
       
       const result = data.completion.trim();
@@ -291,11 +268,11 @@ export default function UploadBookmarksScreen() {
         }
       }
       
-      console.log(`⚠️ No specific recipe image found for "${recipeName}", using placeholder`);
-      return getRecipeSpecificPlaceholder(recipeName, category);
+      console.log(`⚠️ No specific recipe image found for "${recipeName}"`);
+      return '';
     } catch (error) {
-      console.log(`❌ Error searching for recipe image for "${recipeName}", using placeholder`);
-      return getRecipeSpecificPlaceholder(recipeName, category);
+      console.log(`❌ Error searching for recipe image for "${recipeName}"`);
+      return '';
     }
   };
 

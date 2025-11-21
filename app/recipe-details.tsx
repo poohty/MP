@@ -271,8 +271,7 @@ export default function RecipeDetailsScreen() {
     { label: 'Desserts', value: 'Desserts' },
   ];
 
-  const getStableFallbackImage = (recipe: Recipe) => {
-    // Return recipe.imageUri if it's a base64 data URI or HTTP/HTTPS URL
+  const getImageSource = (recipe: Recipe): string | undefined => {
     if (recipe.imageUri && 
         typeof recipe.imageUri === 'string' && 
         (recipe.imageUri.startsWith('data:image/') || 
@@ -280,19 +279,7 @@ export default function RecipeDetailsScreen() {
          recipe.imageUri.startsWith('https://'))) {
       return recipe.imageUri;
     }
-    
-    // Otherwise generate an unsplash fallback
-    const cleanName = recipe.name
-      .replace(/recipe/gi, '')
-      .replace(/[^a-zA-Z0-9\s]/g, '')
-      .trim()
-      .split(' ')
-      .slice(0, 3)
-      .join(' ');
-    
-    const stableId = recipe.id.slice(-6);
-    const searchTerm = encodeURIComponent(cleanName);
-    return `https://source.unsplash.com/featured/400x300/?${searchTerm},food,recipe&sig=${stableId}`;
+    return undefined;
   };
 
   if (!recipe) {
@@ -334,11 +321,17 @@ export default function RecipeDetailsScreen() {
       <GradientBackground>
         <ScrollView style={styles.container}>
         <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: recipe.imageUri || getStableFallbackImage(recipe) }}
-            style={styles.image}
-            resizeMode="cover"
-          />
+          {getImageSource(recipe) ? (
+            <Image
+              source={{ uri: getImageSource(recipe) }}
+              style={styles.image}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[styles.image, { backgroundColor: Colors.surface, alignItems: 'center', justifyContent: 'center' }]}>
+              <Text style={{ color: Colors.textSecondary, fontSize: 16 }}>No Image</Text>
+            </View>
+          )}
           <LinearGradient
             colors={['transparent', 'rgba(0,0,0,0.8)']}
             style={styles.gradient}

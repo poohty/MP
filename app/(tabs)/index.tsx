@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, Image, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/auth-store';
 import { useRecipes } from '@/hooks/recipe-store';
@@ -38,11 +38,9 @@ export default function HomeScreen() {
         </View>
         
         <View style={styles.heroContainer}>
-          <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?q=80&w=400&auto=format&fit=crop' }}
-            style={styles.heroImage}
-            resizeMode="cover"
-          />
+          <View style={[styles.heroImage, { backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' }]}>
+            <Text style={{ fontSize: 48 }}>🍲</Text>
+          </View>
           <LinearGradient
             colors={['transparent', 'rgba(0,0,0,0.8)']}
             style={styles.heroGradient}
@@ -269,15 +267,9 @@ function WelcomeScreen() {
     <GradientBackground style={welcomeStyles.container}>
       <View style={welcomeStyles.content}>
         <View style={welcomeStyles.logoContainer}>
-          <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1547592180-85f173990554?q=80&w=400&auto=format&fit=crop' }}
-            style={welcomeStyles.image}
-            resizeMode="cover"
-          />
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.8)']}
-            style={welcomeStyles.imageGradient}
-          />
+          <View style={[welcomeStyles.image, { backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' }]}>
+            <Text style={{ fontSize: 80 }}>🍳</Text>
+          </View>
         </View>
         
         <View style={welcomeStyles.textContainer}>

@@ -16,19 +16,7 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
   const [imageSource, setImageSource] = React.useState<string>('');
   const [imageKey, setImageKey] = React.useState(0);
   
-  const getStableFallbackImage = React.useCallback(() => {
-    const cleanName = recipe.name
-      .replace(/recipe/gi, '')
-      .replace(/[^a-zA-Z0-9\s]/g, '')
-      .trim()
-      .split(' ')
-      .slice(0, 3)
-      .join(' ');
-    
-    const stableId = recipe.id.slice(-6);
-    const searchTerm = encodeURIComponent(cleanName);
-    return `https://source.unsplash.com/featured/400x300/?${searchTerm},food,recipe&sig=${stableId}`;
-  }, [recipe.id, recipe.name]);
+
   
   React.useEffect(() => {
     const loadImage = async () => {
@@ -37,29 +25,25 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
       console.log(`   imageUri type: ${typeof recipe.imageUri}`);
       console.log(`   imageUri length: ${recipe.imageUri?.length || 0}`);
       
-      // STRICT validation - must be a valid HTTP/HTTPS URL
       if (recipe.imageUri && 
           typeof recipe.imageUri === 'string' && 
           recipe.imageUri.trim().length > 10) {
         const trimmedUri = recipe.imageUri.trim();
         
-        // Additional validation for common invalid values
         if (trimmedUri === 'null' || 
             trimmedUri === 'undefined' || 
             trimmedUri === '[object Object]') {
           console.log(`⚠️ Recipe "${recipe.name}" has INVALID imageUri format: ${trimmedUri.substring(0, 50)}`);
-          const fallback = getStableFallbackImage();
-          setImageSource(fallback);
+          setImageSource('');
           return;
         }
         
-        // Accept both HTTP/HTTPS URLs AND base64 data URIs
         if (trimmedUri.startsWith('http://') || 
             trimmedUri.startsWith('https://') || 
             trimmedUri.startsWith('data:image/')) {
           console.log(`✅ Recipe "${recipe.name}" HAS VALID imageUri: ${trimmedUri.substring(0, 100)}...`);
           setImageSource(trimmedUri);
-          setImageKey(prev => prev + 1); // Force re-render
+          setImageKey(prev => prev + 1);
           return;
         } else {
           console.log(`⚠️ Recipe "${recipe.name}" has imageUri but not HTTP/HTTPS/data: ${trimmedUri.substring(0, 50)}`);
@@ -68,14 +52,13 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
         console.log(`⚠️ Recipe "${recipe.name}" has NO valid imageUri (empty, null, or too short)`);
       }
       
-      const fallback = getStableFallbackImage();
-      console.log(`📸 Using fallback image for "${recipe.name}": ${fallback.substring(0, 80)}...`);
-      setImageSource(fallback);
-      setImageKey(prev => prev + 1); // Force re-render
+      console.log(`📸 No image available for "${recipe.name}"`);
+      setImageSource('');
+      setImageKey(prev => prev + 1);
     };
     
     loadImage();
-  }, [recipe.id, recipe.name, recipe.imageUri, getStableFallbackImage]);
+  }, [recipe.id, recipe.name, recipe.imageUri]);
   
   const handleImageLoad = () => {
     console.log(`✅ Image loaded successfully for: ${recipe.name}`);
@@ -86,18 +69,10 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
     console.log(`   Image URI: ${imageSource}`);
     console.log(`   Error details:`, e?.nativeEvent);
     console.log(`   Original recipe.imageUri: ${recipe.imageUri}`);
-    console.log(`   Switching to fallback image`);
+    console.log(`   Clearing image (no fallback available)`);
     
-    const fallback = getStableFallbackImage();
-    console.log(`📸 Using fallback after error for "${recipe.name}": ${fallback.substring(0, 80)}...`);
-    
-    if (imageSource !== fallback) {
-      setImageSource(fallback);
-      setImageKey(prev => prev + 1);
-    } else {
-      console.log(`⚠️ Already using fallback, forcing re-render with new key`);
-      setImageKey(prev => prev + 1);
-    }
+    setImageSource('');
+    setImageKey(prev => prev + 1);
   };
   
 
