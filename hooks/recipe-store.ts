@@ -64,8 +64,6 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
     }
   }, [user?.id]);
 
-
-
   const generateAiThumbnail = useCallback(async (recipeName: string, category: string): Promise<string> => {
     console.log(`🎨 Rork AI thumbnail generation for "${recipeName}" in category "${category}"`);
 
