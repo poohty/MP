@@ -68,41 +68,53 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
     console.log(`🎨 Rork AI thumbnail generation for "${recipeName}" in category "${category}"`);
 
     try {
-      const promptText = `Photorealistic, high-quality food photography of a dish called "${recipeName}". Bright natural lighting, shallow depth of field, appetizing and realistic.`;
+      const safeName = (recipeName || "").toString().trim();
+      const safeCategory = (category || "").toString().trim();
+
+      // Build the prompt using ONLY text (no URLs, no image data)
+      const promptText = safeCategory
+        ? `Photorealistic, high-quality food photography of a dish called "${safeName}", in the "${safeCategory}" category. Bright natural lighting, shallow depth of field, appetizing, realistic.`
+        : `Photorealistic, high-quality food photography of a dish called "${safeName}". Bright natural lighting, shallow depth of field, appetizing, realistic.`;
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-      const response = await fetch('https://toolkit.rork.com/images/generate/', {
-        method: 'POST',
+      const response = await fetch("https://toolkit.rork.com/images/generate/", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         signal: controller.signal,
         body: JSON.stringify({
           prompt: promptText,
-          size: "1024x1024"
-        })
+          size: "1024x1024",
+        }),
       });
 
       clearTimeout(timeoutId);
 
       if (response.ok) {
-        const data = await response.json();
+        const data: any = await response.json();
         const b64 = data?.image?.base64Data;
-        const mimeType = data?.image?.mimeType || 'image/png';
+        const mimeType = data?.image?.mimeType || "image/png";
 
         if (b64 && typeof b64 === "string" && b64.length > 100) {
-          const dataUri = b64.startsWith("data:") ? b64 : `data:${mimeType};base64,${b64}`;
+          const dataUri = b64.startsWith("data:")
+            ? b64
+            : `data:${mimeType};base64,${b64}`;
           console.log(`✅ AI-generated thumbnail created (${dataUri.length} chars)`);
           return dataUri;
+        } else {
+          console.warn("⚠️ AI response did not contain a usable base64 image");
         }
+      } else {
+        console.warn(`⚠️ Rork AI image generation failed: HTTP ${response.status}`);
       }
-      console.warn(`⚠️ Rork AI image generation failed: HTTP ${response.status}`);
     } catch (error: any) {
       console.warn("⚠️ Rork AI image generation error:", error?.message || error);
     }
 
+    // If we reach this point, AI generation failed
     console.log(`❌ AI generation completely failed for "${recipeName}", returning empty string`);
     return "";
   }, []);
