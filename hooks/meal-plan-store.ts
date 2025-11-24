@@ -7,7 +7,7 @@ import { useRecipes } from './recipe-store';
 
 const MEAL_PLANS_STORAGE_KEY = 'meal-planner-meal-plans';
 
-const [MealPlanContext, useMealPlans] = createContextHook(() => {
+const result = createContextHook(() => {
   const { user } = useAuth();
   const { recipes, getRecipesByCategory } = useRecipes();
   const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
@@ -441,5 +441,8 @@ Categories to use: Produce, Meat & Seafood, Dairy & Eggs, Pantry, Bakery, Frozen
     refreshMealPlans: loadMealPlans,
   }), [mealPlans, currentMealPlan, isLoading, generateMealPlan, saveMealPlan, deleteMealPlan, respinRecipe, updateRecipeMultiplier, generateGroceryList, loadMealPlans]);
 });
+
+const MealPlanContext = result[0];
+const useMealPlans = result[1];
 
 export { MealPlanContext, useMealPlans };
