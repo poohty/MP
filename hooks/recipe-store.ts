@@ -6,6 +6,9 @@ import { useAuth } from './auth-store';
 
 const RECIPES_STORAGE_KEY = 'meal-planner-recipes';
 
+const DEFAULT_THUMBNAIL_DATA_URI =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=";
+
 export const [RecipeContext, useRecipes] = createContextHook(() => {
   const { user } = useAuth();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -121,15 +124,20 @@ export const [RecipeContext, useRecipes] = createContextHook(() => {
 
   const generateFallbackImage = useCallback(async (recipeName: string, category: string): Promise<string> => {
     console.log(`🎨 Fallback image requested for "${recipeName}"`);
-    
-    const aiThumbnail = await generateAiThumbnail(recipeName, category);
-    if (aiThumbnail && aiThumbnail.startsWith('data:')) {
-      console.log(`✅ Using AI-generated thumbnail for "${recipeName}"`);
-      return aiThumbnail;
+
+    try {
+      const aiThumbnail = await generateAiThumbnail(recipeName, category);
+      if (aiThumbnail && aiThumbnail.startsWith("data:")) {
+        console.log(`✅ Using AI-generated thumbnail for "${recipeName}"`);
+        return aiThumbnail;
+      }
+      console.log(`⚠️ AI thumbnail was missing or not a data URI for "${recipeName}", using built-in placeholder.`);
+    } catch (error) {
+      console.warn(`⚠️ Error during AI fallback generation for "${recipeName}", using built-in placeholder:`, error);
     }
 
-    console.log(`❌ AI generation failed for "${recipeName}", returning empty string`);
-    return "";
+    console.log(`❌ Using DEFAULT_THUMBNAIL_DATA_URI for "${recipeName}"`);
+    return DEFAULT_THUMBNAIL_DATA_URI;
   }, [generateAiThumbnail]);
 
   const convertImageToBase64 = useCallback(async (imageUrl: string, recipeName?: string, category?: string): Promise<string | undefined> => {
