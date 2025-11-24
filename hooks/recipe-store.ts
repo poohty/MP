@@ -920,7 +920,7 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
     }
   }, [user?.id, extractRecipeImage, saveRecipes, generateFallbackImage, generateAiThumbnail]);
 
-  const contextValue = useMemo(() => ({
+  return useMemo(() => ({
     recipes,
     isLoading,
     addRecipe,
@@ -941,5 +941,4 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
     convertImageToBase64,
   }), [recipes, isLoading, addRecipe, updateRecipe, updateRecipeStepProgress, deleteRecipe, toggleFavorite, changeRecipeCategory, getRecipesByCategory, loadRecipes, debugStorage, extractRecipeImage, extractRecipeContent, reExtractImages, forceReExtractAllImages, generateFallbackImage, generateAiThumbnail, convertImageToBase64]);
 
-  return contextValue;
 });
