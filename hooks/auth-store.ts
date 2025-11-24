@@ -6,7 +6,7 @@ import { router } from 'expo-router';
 
 const USER_STORAGE_KEY = 'meal-planner-user';
 
-export const [AuthContext, useAuth] = createContextHook(() => {
+const contextResult = createContextHook(() => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -99,3 +99,6 @@ export const [AuthContext, useAuth] = createContextHook(() => {
     isAuthenticated: !!user,
   }), [user, isLoading, login, signup, logout]);
 });
+
+export const AuthContext = contextResult[0];
+export const useAuth = contextResult[1];

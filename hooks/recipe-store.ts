@@ -9,7 +9,7 @@ const RECIPES_STORAGE_KEY = 'meal-planner-recipes';
 const DEFAULT_THUMBNAIL_DATA_URI =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=";
 
-export const [RecipeContext, useRecipes] = createContextHook(() => {
+const contextResult = createContextHook(() => {
   const { user } = useAuth();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -940,5 +940,7 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
     generateAiThumbnail,
     convertImageToBase64,
   }), [recipes, isLoading, addRecipe, updateRecipe, updateRecipeStepProgress, deleteRecipe, toggleFavorite, changeRecipeCategory, getRecipesByCategory, loadRecipes, debugStorage, extractRecipeImage, extractRecipeContent, reExtractImages, forceReExtractAllImages, generateFallbackImage, generateAiThumbnail, convertImageToBase64]);
-
 });
+
+export const RecipeContext = contextResult[0];
+export const useRecipes = contextResult[1];
