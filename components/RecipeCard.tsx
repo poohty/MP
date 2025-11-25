@@ -18,58 +18,28 @@ interface RecipeCardProps {
 export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite }: RecipeCardProps) {
   const [imageSource, setImageSource] = React.useState<string>('');
   const [imageKey, setImageKey] = React.useState(0);
-  const [hadImageError, setHadImageError] = React.useState(false);
-  
 
-  
   React.useEffect(() => {
-    const loadImage = async () => {
-      console.log(`🔍 [RecipeCard] Loading image for "${recipe.name}"`);
-      console.log(`   imageUri value: ${recipe.imageUri}`);
-      console.log(`   imageUri type: ${typeof recipe.imageUri}`);
-      console.log(`   imageUri length: ${recipe.imageUri?.length || 0}`);
-      
-      if (hadImageError) {
-        console.log(`📸 Using fallback thumbnail for "${recipe.name}" after image load error.`);
-        setImageSource(FALLBACK_THUMBNAIL_DATA_URI);
-        setImageKey(prev => prev + 1);
-        return;
-      }
-      
-      if (recipe.imageUri && 
-          typeof recipe.imageUri === 'string' && 
-          recipe.imageUri.trim().length > 10) {
-        const trimmedUri = recipe.imageUri.trim();
-        
-        if (trimmedUri === 'null' || 
-            trimmedUri === 'undefined' || 
-            trimmedUri === '[object Object]') {
-          console.log(`⚠️ Recipe "${recipe.name}" has INVALID imageUri format: ${trimmedUri.substring(0, 50)}`);
-          setImageSource('');
-          return;
-        }
-        
-        if (trimmedUri.startsWith('http://') || 
-            trimmedUri.startsWith('https://') || 
-            trimmedUri.startsWith('data:image/')) {
-          console.log(`✅ Recipe "${recipe.name}" HAS VALID imageUri: ${trimmedUri.substring(0, 100)}...`);
-          setImageSource(trimmedUri);
-          setImageKey(prev => prev + 1);
-          return;
-        } else {
-          console.log(`⚠️ Recipe "${recipe.name}" has imageUri but not HTTP/HTTPS/data: ${trimmedUri.substring(0, 50)}`);
-        }
-      } else {
-        console.log(`⚠️ Recipe "${recipe.name}" has NO valid imageUri (empty, null, or too short)`);
-      }
-      
-      console.log(`📸 No image available for "${recipe.name}"`);
+    const uri = (recipe.imageUri ?? '').toString().trim();
+
+    console.log(`🔍 [RecipeCard] Loading image for "${recipe.name}"`);
+    console.log(`   imageUri value: ${uri}`);
+    console.log(`   imageUri length: ${uri.length}`);
+
+    if (uri &&
+        uri.length > 20 &&
+        (uri.startsWith('http://') ||
+         uri.startsWith('https://') ||
+         uri.startsWith('data:image/'))) {
+      console.log(`✅ Recipe "${recipe.name}" HAS VALID imageUri, using it directly`);
+      setImageSource(uri);
+      setImageKey(prev => prev + 1);
+    } else {
+      console.log(`⚠️ Recipe "${recipe.name}" has NO usable imageUri, clearing to use fallback if needed`);
       setImageSource('');
       setImageKey(prev => prev + 1);
-    };
-    
-    loadImage();
-  }, [recipe.id, recipe.name, recipe.imageUri, hadImageError]);
+    }
+  }, [recipe.id, recipe.imageUri]);
   
   const handleImageLoad = () => {
     console.log(`✅ Image loaded successfully for: ${recipe.name}`);
@@ -79,11 +49,9 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
     console.log(`❌ Image failed to load for recipe: ${recipe.name}`);
     console.log(`   Image URI: ${imageSource}`);
     console.log(`   Error details:`, e?.nativeEvent);
-    console.log(`   Original recipe.imageUri: ${recipe.imageUri}`);
-    console.log(`   Clearing image and using fallback thumbnail`);
-    
-    setHadImageError(true);
-    setImageSource('');
+    console.log(`   Falling back to built-in thumbnail image`);
+
+    setImageSource(FALLBACK_THUMBNAIL_DATA_URI);
     setImageKey(prev => prev + 1);
   };
   
@@ -185,18 +153,14 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
             onError={handleImageError}
           />
         ) : (
-          <View
-            style={[
-              styles.image,
-              {
-                backgroundColor: Colors.surface,
-                alignItems: 'center',
-                justifyContent: 'center',
-              },
-            ]}
-          >
-            <Text style={{ color: Colors.textSecondary, fontSize: 12 }}>No Image</Text>
-          </View>
+          <Image
+            key={`${recipe.id}-${imageKey}-fallback`}
+            source={{ uri: FALLBACK_THUMBNAIL_DATA_URI }}
+            style={styles.image}
+            resizeMode="cover"
+            onLoad={handleImageLoad}
+            onError={handleImageError}
+          />
         )}
 
         <LinearGradient
