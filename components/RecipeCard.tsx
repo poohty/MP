@@ -5,6 +5,9 @@ import Colors from '@/constants/colors';
 import { Link, ExternalLink, Trash2, Heart } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
+const FALLBACK_THUMBNAIL_DATA_URI =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=";
+
 interface RecipeCardProps {
   recipe: Recipe;
   onPress: (recipe: Recipe) => void;
@@ -15,6 +18,7 @@ interface RecipeCardProps {
 export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite }: RecipeCardProps) {
   const [imageSource, setImageSource] = React.useState<string>('');
   const [imageKey, setImageKey] = React.useState(0);
+  const [hadImageError, setHadImageError] = React.useState(false);
   
 
   
@@ -24,6 +28,13 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
       console.log(`   imageUri value: ${recipe.imageUri}`);
       console.log(`   imageUri type: ${typeof recipe.imageUri}`);
       console.log(`   imageUri length: ${recipe.imageUri?.length || 0}`);
+      
+      if (hadImageError) {
+        console.log(`📸 Using fallback thumbnail for "${recipe.name}" after image load error.`);
+        setImageSource(FALLBACK_THUMBNAIL_DATA_URI);
+        setImageKey(prev => prev + 1);
+        return;
+      }
       
       if (recipe.imageUri && 
           typeof recipe.imageUri === 'string' && 
@@ -58,7 +69,7 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
     };
     
     loadImage();
-  }, [recipe.id, recipe.name, recipe.imageUri]);
+  }, [recipe.id, recipe.name, recipe.imageUri, hadImageError]);
   
   const handleImageLoad = () => {
     console.log(`✅ Image loaded successfully for: ${recipe.name}`);
@@ -69,8 +80,9 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
     console.log(`   Image URI: ${imageSource}`);
     console.log(`   Error details:`, e?.nativeEvent);
     console.log(`   Original recipe.imageUri: ${recipe.imageUri}`);
-    console.log(`   Clearing image (no fallback available)`);
+    console.log(`   Clearing image and using fallback thumbnail`);
     
+    setHadImageError(true);
     setImageSource('');
     setImageKey(prev => prev + 1);
   };
