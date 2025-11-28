@@ -146,7 +146,9 @@ export default function RecipeDetailsScreen() {
             line.match(/^\d+\s*(cup|tbsp|tsp|tablespoon|teaspoon|oz|ounce|lb|pound|gram|ml|liter|clove|slice)/i) ||
             line.match(/\d+\s*(cup|tbsp|tsp|tablespoon|teaspoon|oz|ounce|lb|pound|gram|ml|liter|clove|slice)/i) ||
             line.match(/\b(cup|tbsp|tsp|tablespoon|teaspoon|oz|ounce|lb|pound|gram|ml|liter|clove|slice)s?\b/i)) {
-          const cleanedLine = line.replace(/^[-•]\s*/, '').replace(/^\d+\.?\s*/, '');
+          const cleanedLine = line
+            .replace(/^[-•☐]\s*/, '')
+            .trim();
           if (cleanedLine.length > 2) {
             sections.ingredients.push(cleanedLine);
           }
@@ -843,6 +845,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     flex: 1,
+    flexShrink: 1,
+    flexWrap: 'wrap',
   },
   instructionItem: {
     flexDirection: 'row',
