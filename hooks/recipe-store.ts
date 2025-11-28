@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Recipe, RecipeCategory } from '@/types';
 import { useAuth } from './auth-store';
 
@@ -920,13 +920,13 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
     }
   }, [user?.id, extractRecipeImage, saveRecipes, generateFallbackImage, generateAiThumbnail]);
 
-  const importBookmarksWithRetry = useCallback(async (bookmarks: Array<{
+  const importBookmarksWithRetry = useCallback(async (bookmarks: {
     name: string;
     url: string;
     category: RecipeCategory;
     imageUri?: string;
     content?: string;
-  }>) => {
+  }[]) => {
     console.log(`🚀 Starting bulk import of ${bookmarks.length} bookmarks with automatic retry`);
     
     const importedRecipes: Recipe[] = [];
@@ -1067,7 +1067,7 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
     }
   }, [recipes, saveRecipes]);
 
-  return useMemo(() => ({
+  return {
     recipes,
     isLoading,
     addRecipe,
@@ -1088,7 +1088,7 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
     convertImageToBase64,
     importBookmarksWithRetry,
     updateRecipeImage,
-  }), [recipes, isLoading, addRecipe, updateRecipe, updateRecipeStepProgress, deleteRecipe, toggleFavorite, changeRecipeCategory, getRecipesByCategory, loadRecipes, debugStorage, extractRecipeImage, extractRecipeContent, reExtractImages, forceReExtractAllImages, generateFallbackImage, generateAiThumbnail, convertImageToBase64, importBookmarksWithRetry, updateRecipeImage]);
+  };
 });
 
 export { RecipeContext, useRecipes };
