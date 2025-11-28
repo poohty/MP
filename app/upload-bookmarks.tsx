@@ -20,13 +20,13 @@ import { Recipe, RecipeCategory } from '@/types';
 interface ParsedBookmark {
   name: string;
   url: string;
-  category: string;
+  category: RecipeCategory;
   imageUri?: string;
   content?: string;
 }
 
 export default function UploadBookmarksScreen() {
-  const { addRecipe, refreshRecipes } = useRecipes();
+  const { importBookmarksWithRetry, refreshRecipes } = useRecipes();
   const [isProcessing, setIsProcessing] = useState(false);
   const [parsedBookmarks, setParsedBookmarks] = useState<ParsedBookmark[]>([]);
   const [processingStatus, setProcessingStatus] = useState('');
@@ -122,11 +122,16 @@ export default function UploadBookmarksScreen() {
           
           // Add recipe if validated by either method
           if (recipeData?.isRecipe && recipeData.category) {
-            console.log(`✅ [${i + 1}/${potentialRecipes.length}] Recipe accepted: "${name}" -> ${recipeData.category}`);
+            const validCategories: RecipeCategory[] = ['Breakfast', 'Appetizer', 'Salads & Soups', 'Main Course', 'Desserts'];
+            const category = validCategories.includes(recipeData.category as RecipeCategory) 
+              ? (recipeData.category as RecipeCategory) 
+              : ('Main Course' as RecipeCategory);
+            
+            console.log(`✅ [${i + 1}/${potentialRecipes.length}] Recipe accepted: "${name}" -> ${category}`);
             bookmarks.push({ 
               name: name.trim(), 
               url, 
-              category: recipeData.category,
+              category,
               imageUri: recipeData.imageUri,
               content: recipeData.content
             });
@@ -650,88 +655,12 @@ export default function UploadBookmarksScreen() {
   const handleImportBookmarks = async () => {
     try {
       setIsProcessing(true);
-      setProcessingStatus('Importing recipes...');
+      setProcessingStatus('Importing recipes with automatic image retry...');
       
-      let successCount = 0;
-      let failedRecipes: string[] = [];
-      const importedRecipes: string[] = [];
+      console.log(`🚀 Starting bulk import of ${parsedBookmarks.length} bookmarks`);
       
-      console.log(`🚀 Starting import of ${parsedBookmarks.length} recipes`);
-      console.log(`📋 Recipes to import: ${parsedBookmarks.map(b => `"${b.name}" (${b.category})`).join(', ')}`);
-      
-      for (let i = 0; i < parsedBookmarks.length; i++) {
-        const bookmark = parsedBookmarks[i];
-        setProcessingStatus(`Importing ${i + 1}/${parsedBookmarks.length}: ${bookmark.name.substring(0, 25)}...`);
-        console.log(`🔄 [${i + 1}/${parsedBookmarks.length}] Attempting to import: "${bookmark.name}" in category "${bookmark.category}"`);
-        
-        // Retry logic for import as well
-        let importAttempts = 0;
-        const maxImportAttempts = 3;
-        let importSuccess = false;
-        
-        while (importAttempts < maxImportAttempts && !importSuccess) {
-          try {
-            // Ensure we have all required fields with proper typing
-            const recipeToAdd: Omit<Recipe, 'id' | 'createdAt'> = {
-              name: bookmark.name.trim(),
-              category: bookmark.category as RecipeCategory,
-              url: bookmark.url,
-              imageUri: bookmark.imageUri || undefined,
-              content: bookmark.content || undefined,
-            };
-            
-            console.log(`📸 Recipe image data for "${bookmark.name}":`, {
-              hasImageUri: !!bookmark.imageUri,
-              imageUri: bookmark.imageUri?.substring(0, 100) + '...',
-              imageLength: bookmark.imageUri?.length || 0
-            });
-            
-            console.log(`📝 Recipe data to add (attempt ${importAttempts + 1}):`, {
-              name: recipeToAdd.name,
-              category: recipeToAdd.category,
-              hasUrl: !!recipeToAdd.url,
-              hasImage: !!recipeToAdd.imageUri,
-              hasContent: !!recipeToAdd.content
-            });
-            
-            const success = await addRecipe(recipeToAdd);
-            
-            if (success) {
-              successCount++;
-              importedRecipes.push(bookmark.name);
-              importSuccess = true;
-              console.log(`✅ [${i + 1}/${parsedBookmarks.length}] Successfully imported: "${bookmark.name}" (attempt ${importAttempts + 1})`);
-            } else {
-              importAttempts++;
-              console.log(`❌ [${i + 1}/${parsedBookmarks.length}] Failed to import: "${bookmark.name}" - addRecipe returned false (attempt ${importAttempts})`);
-              if (importAttempts < maxImportAttempts) {
-                console.log(`🔄 Retrying import for "${bookmark.name}"...`);
-                await new Promise(resolve => setTimeout(resolve, 500));
-              }
-            }
-          } catch (importError) {
-            importAttempts++;
-            console.error(`❌ [${i + 1}/${parsedBookmarks.length}] Error importing "${bookmark.name}" (attempt ${importAttempts}):`, importError);
-            if (importAttempts < maxImportAttempts) {
-              console.log(`🔄 Retrying import for "${bookmark.name}"...`);
-              await new Promise(resolve => setTimeout(resolve, 500));
-            }
-          }
-        }
-        
-        if (!importSuccess) {
-          failedRecipes.push(bookmark.name);
-          console.log(`❌ [${i + 1}/${parsedBookmarks.length}] Final failure to import: "${bookmark.name}" after ${maxImportAttempts} attempts`);
-        }
-        
-        // No delay between imports for maximum speed
-      }
-      
-      console.log(`📊 FINAL Import Summary:`);
-      console.log(`✅ Successfully imported (${successCount}): ${importedRecipes.join(', ')}`);
-      if (failedRecipes.length > 0) {
-        console.log(`❌ Failed to import (${failedRecipes.length}): ${failedRecipes.join(', ')}`);
-      }
+      // Use the new importBookmarksWithRetry function
+      const result = await importBookmarksWithRetry(parsedBookmarks);
       
       // Clear processing state before showing alert
       setIsProcessing(false);
@@ -746,41 +675,36 @@ export default function UploadBookmarksScreen() {
         console.error('❌ UPLOAD: Error refreshing recipes:', refreshError);
       }
       
-      // Show detailed success message with accurate counts
-      const totalAttempted = parsedBookmarks.length;
+      // Build notification message
       let message = '';
-      let title = 'Import Complete';
+      let title = 'Import Complete! 🎉';
       
-      if (successCount === 0) {
-        // All recipes failed
+      if (result.imported === 0) {
         title = 'Import Failed';
-        message = `⚠️ Failed to import all ${totalAttempted} recipe${totalAttempted !== 1 ? 's' : ''}.\n\nThis could be due to network issues or invalid recipe URLs. Please try again.`;
-        if (failedRecipes.length > 0 && failedRecipes.length <= 3) {
-          message += `\n\n❌ Failed recipes:\n${failedRecipes.join('\n')}`;
-        }
-      } else if (successCount === totalAttempted) {
-        // All recipes succeeded
-        title = 'Import Complete! 🎉';
-        message = `✅ Successfully imported all ${successCount} recipe${successCount !== 1 ? 's' : ''}!`;
-        message += `\n\nYou can now find them in the Cook Book tab.`;
+        message = `⚠️ Failed to import recipes. This could be due to network issues or invalid recipe URLs. Please try again.`;
       } else {
-        // Partial success
-        title = 'Import Partially Complete';
-        message = `✅ Successfully imported ${successCount} out of ${totalAttempted} recipes.`;
+        message = `✅ Successfully imported ${result.imported} recipe${result.imported !== 1 ? 's' : ''}!`;
         
-        if (successCount > 0 && successCount <= 5) {
-          message += `\n\n✅ Imported:\n${importedRecipes.join('\n')}`;
-        } else if (successCount > 5) {
-          message += `\n\n✅ Imported:\n${importedRecipes.slice(0, 5).join('\n')}\n...and ${importedRecipes.length - 5} more`;
+        // Add information about image retry
+        if (result.retried > 0) {
+          message += `\n\n🔄 Automatically retried images for ${result.retried} recipe${result.retried !== 1 ? 's' : ''}.`;
         }
         
-        if (failedRecipes.length > 0 && failedRecipes.length <= 3) {
-          message += `\n\n❌ Failed:\n${failedRecipes.join('\n')}`;
-        } else if (failedRecipes.length > 3) {
-          message += `\n\n❌ Failed: ${failedRecipes.length} recipes`;
+        // Show notification if some recipes only have placeholder images
+        if (result.placeholderOnly.length > 0) {
+          message += `\n\n⚠️ Could not find or generate images for ${result.placeholderOnly.length} recipe${result.placeholderOnly.length !== 1 ? 's' : ''}:`;
+          
+          if (result.placeholderOnly.length <= 5) {
+            message += `\n${result.placeholderOnly.map(name => `• ${name}`).join('\n')}`;
+          } else {
+            message += `\n${result.placeholderOnly.slice(0, 5).map(name => `• ${name}`).join('\n')}`;
+            message += `\n...and ${result.placeholderOnly.length - 5} more`;
+          }
+          
+          message += `\n\n💡 Tip: For best results, try adding these recipes individually using their URLs, or you can manually upload photos for them from the recipe detail screen.`;
         }
         
-        message += `\n\nSuccessful recipes are now in the Cook Book tab.`;
+        message += `\n\nYou can now find them in the Cook Book tab.`;
       }
       
       // Use setTimeout to ensure the alert shows after state updates
@@ -790,15 +714,15 @@ export default function UploadBookmarksScreen() {
           message,
           [
             {
-              text: successCount > 0 ? 'View Cook Book' : 'OK',
+              text: result.imported > 0 ? 'View Cook Book' : 'OK',
               onPress: () => {
                 setParsedBookmarks([]);
-                if (successCount > 0) {
+                if (result.imported > 0) {
                   router.replace('/(tabs)/recipe-book');
                 }
               }
             },
-            ...(successCount > 0 ? [{
+            ...(result.imported > 0 ? [{
               text: 'Stay Here',
               style: 'cancel' as const,
               onPress: () => {

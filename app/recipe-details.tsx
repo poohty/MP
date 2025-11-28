@@ -1,21 +1,25 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert, Platform } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert, Platform, TextInput, Modal } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import Colors from '@/constants/colors';
-import { ExternalLink, Trash2, CheckSquare, Square, Edit3 } from 'lucide-react-native';
+import { ExternalLink, Trash2, CheckSquare, Square, Edit3, Camera, Link as LinkIcon } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import GradientBackground from '@/components/GradientBackground';
 import { Recipe, RecipeCategory } from '@/types';
 import DropdownSelect from '@/components/DropdownSelect';
+import * as ImagePicker from 'expo-image-picker';
 
 export default function RecipeDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { recipes, deleteRecipe, updateRecipe, updateRecipeStepProgress, changeRecipeCategory } = useRecipes();
+  const { recipes, deleteRecipe, updateRecipe, updateRecipeStepProgress, changeRecipeCategory, updateRecipeImage, convertImageToBase64 } = useRecipes();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [checkedSteps, setCheckedSteps] = useState<{ [stepIndex: number]: boolean }>({});
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [showCategorySelector, setShowCategorySelector] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [imageUrlInput, setImageUrlInput] = useState('');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const handleExtractRecipeContent = useCallback(async (recipeToUpdate: Recipe) => {
     if (!recipeToUpdate.url) return;
@@ -263,6 +267,96 @@ export default function RecipeDetailsScreen() {
     }
   };
 
+  const handlePickImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (!permissionResult.granted) {
+        Alert.alert('Permission required', 'Please allow access to your photos to upload an image.');
+        return;
+      }
+
+      setIsUploadingImage(true);
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images' as any],
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        
+        const reader = new FileReader();
+        const response = await fetch(imageUri);
+        const blob = await response.blob();
+        
+        reader.onloadend = async () => {
+          const base64String = reader.result as string;
+          
+          if (recipe) {
+            const success = await updateRecipeImage(recipe.id, base64String);
+            if (success) {
+              setRecipe({ ...recipe, imageUri: base64String });
+              setShowImageModal(false);
+              Alert.alert('Success', 'Recipe image updated successfully!');
+            } else {
+              Alert.alert('Error', 'Failed to update recipe image');
+            }
+          }
+        };
+        
+        reader.readAsDataURL(blob);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to upload image. Please try again.');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handlePasteImageUrl = async () => {
+    if (!recipe) return;
+    
+    const url = imageUrlInput.trim();
+    
+    if (!url) {
+      Alert.alert('Error', 'Please enter an image URL');
+      return;
+    }
+    
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      Alert.alert('Error', 'Please enter a valid image URL starting with http:// or https://');
+      return;
+    }
+
+    try {
+      setIsUploadingImage(true);
+      
+      const base64Image = await convertImageToBase64(url);
+      
+      if (base64Image && base64Image.startsWith('data:')) {
+        const success = await updateRecipeImage(recipe.id, base64Image);
+        if (success) {
+          setRecipe({ ...recipe, imageUri: base64Image });
+          setShowImageModal(false);
+          setImageUrlInput('');
+          Alert.alert('Success', 'Recipe image updated successfully!');
+        } else {
+          Alert.alert('Error', 'Failed to update recipe image');
+        }
+      } else {
+        Alert.alert('Error', 'Failed to load image from URL. Please make sure the URL is a direct image link.');
+      }
+    } catch (error) {
+      console.error('Error loading image from URL:', error);
+      Alert.alert('Error', 'Failed to load image from URL. Please try again.');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
   const categoryOptions = [
     { label: 'Breakfast', value: 'Breakfast' },
     { label: 'Appetizer', value: 'Appetizer' },
@@ -339,6 +433,12 @@ export default function RecipeDetailsScreen() {
           <View style={styles.imageOverlay}>
             <Text style={styles.categoryBadge}>{recipe.category}</Text>
           </View>
+          <TouchableOpacity 
+            style={styles.changeImageButton}
+            onPress={() => setShowImageModal(true)}
+          >
+            <Camera size={20} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
         
         <View style={styles.content}>
@@ -563,6 +663,74 @@ export default function RecipeDetailsScreen() {
           )}
         </View>
         </ScrollView>
+
+        <Modal
+          visible={showImageModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowImageModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Change Recipe Image</Text>
+              <Text style={styles.modalDescription}>
+                Choose a new image for this recipe
+              </Text>
+
+              <TouchableOpacity 
+                style={styles.modalButton}
+                onPress={handlePickImage}
+                disabled={isUploadingImage}
+              >
+                <Camera size={24} color={Colors.primary} />
+                <Text style={styles.modalButtonText}>
+                  {isUploadingImage ? 'Uploading...' : 'Upload from Photos'}
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>OR</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <View style={styles.urlInputContainer}>
+                <LinkIcon size={20} color={Colors.textSecondary} style={styles.urlIcon} />
+                <TextInput
+                  style={styles.urlInput}
+                  placeholder="Paste image URL here..."
+                  placeholderTextColor={Colors.textSecondary}
+                  value={imageUrlInput}
+                  onChangeText={setImageUrlInput}
+                  editable={!isUploadingImage}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.pasteButton]}
+                onPress={handlePasteImageUrl}
+                disabled={isUploadingImage || !imageUrlInput.trim()}
+              >
+                <Text style={styles.modalButtonText}>
+                  {isUploadingImage ? 'Loading...' : 'Use This URL'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => {
+                  setShowImageModal(false);
+                  setImageUrlInput('');
+                }}
+                disabled={isUploadingImage}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </GradientBackground>
     </>
   );
@@ -822,5 +990,102 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: '500',
+  },
+  changeImageButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: Colors.text,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalDescription: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  modalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    gap: 12,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  pasteButton: {
+    backgroundColor: Colors.primary,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.textSecondary + '30',
+  },
+  dividerText: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    marginHorizontal: 12,
+    fontWeight: '600',
+  },
+  urlInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  urlIcon: {
+    marginRight: 8,
+  },
+  urlInput: {
+    flex: 1,
+    fontSize: 14,
+    color: Colors.text,
+    padding: 0,
+  },
+  cancelButton: {
+    padding: 12,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: Colors.textSecondary,
+    fontSize: 16,
   },
 });

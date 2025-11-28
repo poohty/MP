@@ -920,6 +920,153 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
     }
   }, [user?.id, extractRecipeImage, saveRecipes, generateFallbackImage, generateAiThumbnail]);
 
+  const importBookmarksWithRetry = useCallback(async (bookmarks: Array<{
+    name: string;
+    url: string;
+    category: RecipeCategory;
+    imageUri?: string;
+    content?: string;
+  }>) => {
+    console.log(`🚀 Starting bulk import of ${bookmarks.length} bookmarks with automatic retry`);
+    
+    const importedRecipes: Recipe[] = [];
+    const recipesNeedingImageRetry: Recipe[] = [];
+    const recipesWithPlaceholderOnly: string[] = [];
+    
+    // Phase 1: Import all recipes
+    for (let i = 0; i < bookmarks.length; i++) {
+      const bookmark = bookmarks[i];
+      console.log(`📥 [${i + 1}/${bookmarks.length}] Importing: "${bookmark.name}"`);
+      
+      try {
+        const recipeToAdd: Omit<Recipe, 'id' | 'createdAt'> = {
+          name: bookmark.name.trim(),
+          category: bookmark.category,
+          url: bookmark.url,
+          imageUri: bookmark.imageUri || undefined,
+          content: bookmark.content || undefined,
+        };
+        
+        const success = await addRecipe(recipeToAdd);
+        
+        if (success) {
+          const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
+          const storedRecipes = await AsyncStorage.getItem(storageKey);
+          const currentRecipes = storedRecipes ? JSON.parse(storedRecipes) : [];
+          const newRecipe = currentRecipes.find((r: Recipe) => r.url === bookmark.url);
+          
+          if (newRecipe) {
+            importedRecipes.push(newRecipe);
+            console.log(`✅ [${i + 1}/${bookmarks.length}] Successfully imported: "${bookmark.name}"`);
+          }
+        }
+      } catch (error) {
+        console.error(`❌ [${i + 1}/${bookmarks.length}] Error importing "${bookmark.name}":`, error);
+      }
+    }
+    
+    console.log(`📊 Phase 1 complete: Imported ${importedRecipes.length} recipes`);
+    
+    // Phase 2: Identify recipes with no/invalid imageUri
+    for (const recipe of importedRecipes) {
+      const uri = (recipe.imageUri ?? '').toString().trim();
+      const isValid = uri.length >= 20 && 
+                     (uri.startsWith('http://') || uri.startsWith('https://') || uri.startsWith('data:image/'));
+      
+      if (!isValid) {
+        console.log(`🔄 Recipe "${recipe.name}" needs image retry (invalid/missing imageUri)`);
+        recipesNeedingImageRetry.push(recipe);
+      }
+    }
+    
+    console.log(`📊 Found ${recipesNeedingImageRetry.length} recipes needing image retry`);
+    
+    // Phase 3: Automatic retry for recipes with no valid image
+    if (recipesNeedingImageRetry.length > 0) {
+      const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
+      const storedRecipes = await AsyncStorage.getItem(storageKey);
+      let workingRecipes = storedRecipes ? JSON.parse(storedRecipes) : [];
+      
+      for (let i = 0; i < recipesNeedingImageRetry.length; i++) {
+        const recipe = recipesNeedingImageRetry[i];
+        console.log(`🔄 [${i + 1}/${recipesNeedingImageRetry.length}] Retrying image extraction for: "${recipe.name}"`);
+        
+        try {
+          let finalImageUri: string | undefined;
+          
+          // Try to extract image from URL
+          if (recipe.url) {
+            const extractedImage = await extractRecipeImage(recipe.name, recipe.url, 2);
+            if (extractedImage && extractedImage.startsWith('data:')) {
+              finalImageUri = extractedImage;
+              console.log(`✅ Successfully extracted image on retry for: "${recipe.name}"`);
+            }
+          }
+          
+          // If extraction failed, try AI thumbnail generation
+          if (!finalImageUri) {
+            console.log(`🎨 Generating AI thumbnail for: "${recipe.name}"`);
+            const aiThumbnail = await generateAiThumbnail(recipe.name, recipe.category);
+            
+            if (aiThumbnail && aiThumbnail.startsWith('data:')) {
+              finalImageUri = aiThumbnail;
+              console.log(`✅ Generated AI thumbnail for: "${recipe.name}"`);
+            } else {
+              // Last resort: use placeholder
+              finalImageUri = DEFAULT_THUMBNAIL_DATA_URI;
+              recipesWithPlaceholderOnly.push(recipe.name);
+              console.log(`⚠️ Using placeholder for: "${recipe.name}"`);
+            }
+          }
+          
+          // Update recipe with new imageUri
+          workingRecipes = workingRecipes.map((r: Recipe) => 
+            r.id === recipe.id ? { ...r, imageUri: finalImageUri } : r
+          );
+          
+          await saveRecipes(workingRecipes);
+        } catch (error) {
+          console.error(`❌ Error during retry for "${recipe.name}":`, error);
+          // Use placeholder as fallback
+          workingRecipes = workingRecipes.map((r: Recipe) => 
+            r.id === recipe.id ? { ...r, imageUri: DEFAULT_THUMBNAIL_DATA_URI } : r
+          );
+          recipesWithPlaceholderOnly.push(recipe.name);
+          await saveRecipes(workingRecipes);
+        }
+        
+        // Small delay between retries
+        if (i < recipesNeedingImageRetry.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      }
+    }
+    
+    console.log(`🎉 Bulk import complete:`);
+    console.log(`   - Total imported: ${importedRecipes.length}`);
+    console.log(`   - Images retried: ${recipesNeedingImageRetry.length}`);
+    console.log(`   - Placeholder only: ${recipesWithPlaceholderOnly.length}`);
+    
+    return {
+      imported: importedRecipes.length,
+      retried: recipesNeedingImageRetry.length,
+      placeholderOnly: recipesWithPlaceholderOnly,
+    };
+  }, [user?.id, addRecipe, saveRecipes, extractRecipeImage, generateAiThumbnail]);
+
+  const updateRecipeImage = useCallback(async (recipeId: string, newImageUri: string) => {
+    try {
+      const updatedRecipes = recipes.map(recipe => 
+        recipe.id === recipeId ? { ...recipe, imageUri: newImageUri } : recipe
+      );
+      await saveRecipes(updatedRecipes);
+      return true;
+    } catch (error) {
+      console.error('Failed to update recipe image:', error);
+      return false;
+    }
+  }, [recipes, saveRecipes]);
+
   return useMemo(() => ({
     recipes,
     isLoading,
@@ -939,7 +1086,9 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
     generateFallbackImage,
     generateAiThumbnail,
     convertImageToBase64,
-  }), [recipes, isLoading, addRecipe, updateRecipe, updateRecipeStepProgress, deleteRecipe, toggleFavorite, changeRecipeCategory, getRecipesByCategory, loadRecipes, debugStorage, extractRecipeImage, extractRecipeContent, reExtractImages, forceReExtractAllImages, generateFallbackImage, generateAiThumbnail, convertImageToBase64]);
+    importBookmarksWithRetry,
+    updateRecipeImage,
+  }), [recipes, isLoading, addRecipe, updateRecipe, updateRecipeStepProgress, deleteRecipe, toggleFavorite, changeRecipeCategory, getRecipesByCategory, loadRecipes, debugStorage, extractRecipeImage, extractRecipeContent, reExtractImages, forceReExtractAllImages, generateFallbackImage, generateAiThumbnail, convertImageToBase64, importBookmarksWithRetry, updateRecipeImage]);
 });
 
 export { RecipeContext, useRecipes };
