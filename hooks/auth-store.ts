@@ -80,6 +80,23 @@ const result = createContextHook(() => {
     }
   }, []);
 
+  const updateProfile = useCallback(async (updates: Partial<User>) => {
+    try {
+      if (!user) return;
+
+      const updatedUser: User = {
+        ...user,
+        ...updates,
+      };
+
+      console.log('Updating user profile:', updatedUser);
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
+      setUser(updatedUser);
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+    }
+  }, [user]);
+
   const logout = useCallback(async () => {
     try {
       await AsyncStorage.removeItem(USER_STORAGE_KEY);
@@ -96,8 +113,9 @@ const result = createContextHook(() => {
     login,
     signup,
     logout,
+    updateProfile,
     isAuthenticated: !!user,
-  }), [user, isLoading, login, signup, logout]);
+  }), [user, isLoading, login, signup, logout, updateProfile]);
 });
 
 const AuthContext = result[0];

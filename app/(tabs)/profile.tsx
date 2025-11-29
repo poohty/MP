@@ -6,6 +6,7 @@ import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
 import { User, Settings, Info, Heart, Users } from 'lucide-react-native';
+import { router } from 'expo-router';
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -46,7 +47,12 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
           
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => {
+              router.push('/edit-profile');
+            }}
+          >
             <View style={styles.menuIconContainer}>
               <User size={20} color={Colors.primary} />
             </View>
