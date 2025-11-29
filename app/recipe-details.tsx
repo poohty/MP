@@ -76,7 +76,10 @@ export default function RecipeDetailsScreen() {
       ingredients: [] as string[],
       instructions: [] as string[],
       nutritionalFacts: '' as string,
-      times: '' as string,
+      calories: '' as string,
+      prepTime: '' as string,
+      cookTime: '' as string,
+      totalTime: '' as string,
       notes: '' as string
     };
     
@@ -135,7 +138,7 @@ export default function RecipeDetailsScreen() {
         }
         // Time-related lines
         else if (line.toLowerCase().includes('prep time:') || line.toLowerCase().includes('cook time:') || line.toLowerCase().includes('total time:')) {
-          currentSection = 'times';
+          // Process time info inline instead of changing section
         }
       }
       
@@ -175,8 +178,16 @@ export default function RecipeDetailsScreen() {
         }
       } else if (currentSection === 'nutritionalFacts') {
         sections.nutritionalFacts += (sections.nutritionalFacts ? '\n' : '') + line;
-      } else if (currentSection === 'times') {
-        sections.times += (sections.times ? '\n' : '') + line;
+        
+        // Try to extract a specific Calories value if present
+        const caloriesMatch =
+          line.match(/calories\s*[:\-]?\s*([^,;]+)/i) ||
+          line.match(/(\d+)\s*calories\b/i);
+        
+        if (caloriesMatch && !sections.calories) {
+          const caloriesText = caloriesMatch[0].trim();
+          sections.calories = caloriesText;
+        }
       } else if (currentSection === 'notes') {
         sections.notes += (sections.notes ? ' ' : '') + line;
       }
@@ -206,10 +217,44 @@ export default function RecipeDetailsScreen() {
         // Check for nutrition info
         else if (line.toLowerCase().includes('calories:') || line.toLowerCase().includes('protein:') || line.toLowerCase().includes('carbs:') || line.toLowerCase().includes('fat:')) {
           sections.nutritionalFacts += (sections.nutritionalFacts ? '\n' : '') + line;
+          
+          // Try to extract a specific Calories value if present
+          const caloriesMatch =
+            line.match(/calories\s*[:\-]?\s*([^,;]+)/i) ||
+            line.match(/(\d+)\s*calories\b/i);
+          
+          if (caloriesMatch && !sections.calories) {
+            const caloriesText = caloriesMatch[0].trim();
+            sections.calories = caloriesText;
+          }
         }
         // Check for time info
         else if (line.toLowerCase().includes('prep time:') || line.toLowerCase().includes('cook time:') || line.toLowerCase().includes('total time:')) {
-          sections.times += (sections.times ? '\n' : '') + line;
+          const lower = line.toLowerCase();
+          
+          // Extract prep time
+          if (lower.includes('prep time')) {
+            const match = line.match(/prep time\s*[:\-]?\s*(.+)$/i);
+            if (match && !sections.prepTime) {
+              sections.prepTime = match[1].trim();
+            }
+          }
+          
+          // Extract cook time
+          if (lower.includes('cook time')) {
+            const match = line.match(/cook time\s*[:\-]?\s*(.+)$/i);
+            if (match && !sections.cookTime) {
+              sections.cookTime = match[1].trim();
+            }
+          }
+          
+          // Extract total time
+          if (lower.includes('total time')) {
+            const match = line.match(/total time\s*[:\-]?\s*(.+)$/i);
+            if (match && !sections.totalTime) {
+              sections.totalTime = match[1].trim();
+            }
+          }
         }
       });
     }
@@ -487,22 +532,6 @@ export default function RecipeDetailsScreen() {
             
             return (
               <View style={styles.recipeContent}>
-                {/* Nutritional Facts Section */}
-                {parsedContent.nutritionalFacts && (
-                  <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>📊 Nutritional Facts</Text>
-                    <Text style={styles.nutritionText}>{parsedContent.nutritionalFacts}</Text>
-                  </View>
-                )}
-                
-                {/* Times Section */}
-                {parsedContent.times && (
-                  <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>⏱️ Cooking Times</Text>
-                    <Text style={styles.timesText}>{parsedContent.times}</Text>
-                  </View>
-                )}
-                
                 {/* Ingredients Section */}
                 {parsedContent.ingredients.length > 0 && (
                   <View style={styles.section}>
@@ -513,6 +542,28 @@ export default function RecipeDetailsScreen() {
                         <Text style={styles.ingredientText}>{ingredient}</Text>
                       </View>
                     ))}
+                    
+                    {/* Time & Nutrition under ingredients */}
+                    <View style={styles.subSection}>
+                      <Text style={styles.sectionSubtitle}>⏱️ Time</Text>
+                      <Text style={styles.detailText}>
+                        Prep time: {parsedContent.prepTime || 'no data found'}
+                      </Text>
+                      <Text style={styles.detailText}>
+                        Cook time: {parsedContent.cookTime || 'no data found'}
+                      </Text>
+                      <Text style={styles.detailText}>
+                        Total time: {parsedContent.totalTime || 'no data found'}
+                      </Text>
+
+                      <Text style={[styles.sectionSubtitle, { marginTop: 12 }]}>📊 Nutrition</Text>
+                      <Text style={styles.detailText}>
+                        Calories: {parsedContent.calories || 'no data found'}
+                      </Text>
+                      <Text style={styles.detailText}>
+                        Nutritional info: {parsedContent.nutritionalFacts || 'no data found'}
+                      </Text>
+                    </View>
                   </View>
                 )}
                 
@@ -1091,5 +1142,22 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     color: Colors.textSecondary,
     fontSize: 16,
+  },
+  subSection: {
+    marginTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+    paddingTop: 12,
+  },
+  sectionSubtitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 4,
+  },
+  detailText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginBottom: 2,
   },
 });
