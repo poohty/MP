@@ -1,13 +1,16 @@
-import React from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, Switch } from 'react-native';
 import { useAuth } from '@/hooks/auth-store';
+import { useUser } from '@/hooks/user-store';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
-import { User, Settings, Info, Heart } from 'lucide-react-native';
+import { User, Settings, Info, Heart, Users } from 'lucide-react-native';
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
+  const { currentUserProfile, updateShareCookbook } = useUser();
+  const [isUpdatingShare, setIsUpdatingShare] = useState(false);
 
   const handleLogout = () => {
     Alert.alert(
@@ -56,6 +59,36 @@ export default function ProfileScreen() {
             </View>
             <Text style={styles.menuText}>Preferences</Text>
           </TouchableOpacity>
+        </View>
+        
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Social</Text>
+          
+          <View style={styles.menuItem}>
+            <View style={styles.menuIconContainer}>
+              <Users size={20} color={Colors.primary} />
+            </View>
+            <Text style={styles.menuText}>Share Cookbook with Friends</Text>
+            <Switch
+              value={currentUserProfile?.shareCookbookWithFriends || false}
+              onValueChange={async (value) => {
+                setIsUpdatingShare(true);
+                try {
+                  const success = await updateShareCookbook(value);
+                  if (!success) {
+                    Alert.alert('Error', 'Failed to update setting');
+                  }
+                } catch {
+                  Alert.alert('Error', 'Failed to update setting');
+                } finally {
+                  setIsUpdatingShare(false);
+                }
+              }}
+              disabled={isUpdatingShare}
+              trackColor={{ false: Colors.surface, true: Colors.primary }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
         </View>
         
         <View style={styles.section}>

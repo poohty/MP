@@ -7,6 +7,7 @@ import { StatusBar } from "expo-status-bar";
 import { AuthContext } from "@/hooks/auth-store";
 import { RecipeContext } from "@/hooks/recipe-store";
 import { MealPlanContext } from "@/hooks/meal-plan-store";
+import { UserContext } from "@/hooks/user-store";
 import Colors from "@/constants/colors";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -42,6 +43,7 @@ function RootLayoutNav() {
       <Stack.Screen name="create-meal-plan" options={{ title: "Create Meal Plan" }} />
       <Stack.Screen name="meal-plan-details" options={{ title: "Meal Plan Details" }} />
       <Stack.Screen name="grocery-list" options={{ title: "Grocery List" }} />
+      <Stack.Screen name="friend-cookbook" options={{ title: "Friend's Cookbook" }} />
     </Stack>
   );
 }
@@ -55,12 +57,14 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <AuthContext>
-          <RecipeContext>
-            <MealPlanContext>
-              <StatusBar style="light" />
-              <RootLayoutNav />
-            </MealPlanContext>
-          </RecipeContext>
+          <UserContext>
+            <RecipeContext>
+              <MealPlanContext>
+                <StatusBar style="light" />
+                <RootLayoutNav />
+              </MealPlanContext>
+            </RecipeContext>
+          </UserContext>
         </AuthContext>
       </GestureHandlerRootView>
     </QueryClientProvider>

@@ -772,7 +772,7 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     }
   }, []);
 
-  const addRecipe = useCallback(async (recipe: Omit<Recipe, 'id' | 'createdAt'>) => {
+  const addRecipe = useCallback(async (recipe: Omit<Recipe, 'id' | 'createdAt'>, ownerUserId?: string) => {
     try {
       console.log('📝 Adding recipe:', {
         name: recipe.name,
@@ -873,6 +873,7 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
         ...finalRecipe,
         id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         createdAt: Date.now(),
+        ownerUserId: ownerUserId || user?.id,
       };
       
       const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
@@ -1285,6 +1286,46 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     }
   }, [recipes, saveRecipes]);
 
+  const importRecipeFromFriend = useCallback(async (sourceRecipe: Recipe, currentUserId: string) => {
+    try {
+      const importedRecipe: Omit<Recipe, 'id' | 'createdAt'> = {
+        name: sourceRecipe.name,
+        category: sourceRecipe.category,
+        imageUri: sourceRecipe.imageUri,
+        url: sourceRecipe.url,
+        content: sourceRecipe.content,
+        prepTime: sourceRecipe.prepTime,
+        cookTime: sourceRecipe.cookTime,
+        totalTime: sourceRecipe.totalTime,
+        calories: sourceRecipe.calories,
+        nutritionalInfo: sourceRecipe.nutritionalInfo,
+        isFavorite: false,
+        ownerUserId: currentUserId,
+        importedFromUserId: sourceRecipe.ownerUserId,
+      };
+
+      const success = await addRecipe(importedRecipe, currentUserId);
+      return success;
+    } catch (error) {
+      console.error('Failed to import recipe from friend:', error);
+      return false;
+    }
+  }, [addRecipe]);
+
+  const getRecipesForUser = useCallback(async (ownerUserId: string): Promise<Recipe[]> => {
+    try {
+      const storageKey = `${RECIPES_STORAGE_KEY}-${ownerUserId}`;
+      const storedRecipes = await AsyncStorage.getItem(storageKey);
+      if (storedRecipes) {
+        return JSON.parse(storedRecipes);
+      }
+      return [];
+    } catch (error) {
+      console.error('Failed to get recipes for user:', error);
+      return [];
+    }
+  }, []);
+
   return {
     recipes,
     isLoading,
@@ -1306,6 +1347,8 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     convertImageToBase64,
     importBookmarksWithRetry,
     updateRecipeImage,
+    importRecipeFromFriend,
+    getRecipesForUser,
   };
 });
 

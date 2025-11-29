@@ -37,6 +37,8 @@ export type Recipe = {
   isFavorite?: boolean;
   stepProgress?: { [stepIndex: number]: boolean };
   createdAt: number;
+  ownerUserId?: string;
+  importedFromUserId?: string;
 };
 
 export type MealPlanRecipe = {
@@ -81,4 +83,21 @@ export type StoreComparison = {
     price: number;
     available: boolean;
   }[];
+};
+
+export type UserProfile = {
+  id: string;
+  username: string;
+  displayName: string;
+  shareCookbookWithFriends: boolean;
+};
+
+export type FriendStatus = 'pending' | 'accepted';
+
+export type FriendLink = {
+  id: string;
+  userId: string;
+  friendUserId: string;
+  status: FriendStatus;
+  requestedAt: number;
 };

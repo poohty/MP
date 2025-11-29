@@ -2,8 +2,9 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert, Platform, TextInput, Modal } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
+import { useAuth } from '@/hooks/auth-store';
 import Colors from '@/constants/colors';
-import { ExternalLink, Trash2, CheckSquare, Square, Edit3, Camera, Link as LinkIcon } from 'lucide-react-native';
+import { ExternalLink, Trash2, CheckSquare, Square, Edit3, Camera, Link as LinkIcon, BookPlus } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import GradientBackground from '@/components/GradientBackground';
 import { Recipe, RecipeCategory } from '@/types';
@@ -11,8 +12,9 @@ import DropdownSelect from '@/components/DropdownSelect';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function RecipeDetailsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { recipes, deleteRecipe, updateRecipe, updateRecipeStepProgress, changeRecipeCategory, updateRecipeImage, convertImageToBase64 } = useRecipes();
+  const { id, friendUserId } = useLocalSearchParams<{ id: string; friendUserId?: string }>();
+  const { user } = useAuth();
+  const { recipes, deleteRecipe, updateRecipeStepProgress, changeRecipeCategory, updateRecipeImage, convertImageToBase64, importRecipeFromFriend, getRecipesForUser } = useRecipes();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [checkedSteps, setCheckedSteps] = useState<{ [stepIndex: number]: boolean }>({});
   const [isLoadingContent, setIsLoadingContent] = useState(false);
@@ -20,6 +22,7 @@ export default function RecipeDetailsScreen() {
   const [showImageModal, setShowImageModal] = useState(false);
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [, setIsImporting] = useState(false);
 
   const handleExtractRecipeContent = useCallback(async (recipeToUpdate: Recipe) => {
     if (!recipeToUpdate.url) return;
@@ -35,14 +38,22 @@ export default function RecipeDetailsScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    if (id) {
+  const loadRecipe = useCallback(async () => {
+    if (friendUserId) {
+      const friendRecipes = await getRecipesForUser(friendUserId);
+      const foundRecipe = friendRecipes.find(r => r.id === id);
+      if (foundRecipe) {
+        setRecipe(foundRecipe);
+        setCheckedSteps({});
+      } else {
+        Alert.alert('Error', 'Recipe not found');
+        router.back();
+      }
+    } else {
       const foundRecipe = recipes.find(r => r.id === id);
       if (foundRecipe) {
         setRecipe(foundRecipe);
-        // Load existing step progress
         setCheckedSteps(foundRecipe.stepProgress || {});
-        // If recipe doesn't have content but has URL, try to extract it
         if (!foundRecipe.content && foundRecipe.url) {
           handleExtractRecipeContent(foundRecipe);
         }
@@ -51,10 +62,47 @@ export default function RecipeDetailsScreen() {
         router.back();
       }
     }
-  }, [id, recipes, handleExtractRecipeContent]);
+  }, [id, friendUserId, getRecipesForUser, recipes, handleExtractRecipeContent]);
+
+  useEffect(() => {
+    if (id) {
+      loadRecipe();
+    }
+  }, [id, loadRecipe]);
+
+  const handleImportToMyCookbook = async () => {
+    if (!recipe || !user) return;
+
+    setIsImporting(true);
+    try {
+      const success = await importRecipeFromFriend(recipe, user.id);
+      if (success) {
+        Alert.alert(
+          'Success',
+          'Recipe added to your cookbook!',
+          [
+            {
+              text: 'View in My Cookbook',
+              onPress: () => router.push('/(tabs)/recipe-book'),
+            },
+            {
+              text: 'OK',
+              style: 'cancel',
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Error', 'Failed to add recipe to your cookbook');
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to add recipe to your cookbook');
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   const toggleStepCheck = async (stepIndex: number) => {
-    if (!recipe) return;
+    if (!recipe || friendUserId) return;
     
     const newCheckedSteps = {
       ...checkedSteps,
@@ -504,15 +552,26 @@ export default function RecipeDetailsScreen() {
           gestureEnabled: true,
           headerRight: () => (
             <View style={styles.headerButtons}>
-              <TouchableOpacity 
-                onPress={() => setShowCategorySelector(!showCategorySelector)} 
-                style={styles.headerButton}
-              >
-                <Edit3 size={24} color={Colors.primary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleDelete} style={styles.headerButton}>
-                <Trash2 size={24} color={Colors.error} />
-              </TouchableOpacity>
+              {friendUserId ? (
+                <TouchableOpacity 
+                  onPress={handleImportToMyCookbook}
+                  style={styles.headerButton}
+                >
+                  <BookPlus size={24} color={Colors.success} />
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity 
+                    onPress={() => setShowCategorySelector(!showCategorySelector)} 
+                    style={styles.headerButton}
+                  >
+                    <Edit3 size={24} color={Colors.primary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleDelete} style={styles.headerButton}>
+                    <Trash2 size={24} color={Colors.error} />
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           ),
         }} 
