@@ -6,7 +6,7 @@ import { UserProfile, FriendLink } from '@/types';
 import Colors from '@/constants/colors';
 import GradientBackground from '@/components/GradientBackground';
 
-import { Search, UserPlus, Check, X } from 'lucide-react-native';
+import { Search, UserPlus, Check, X, RefreshCw } from 'lucide-react-native';
 
 export default function FriendsScreen() {
   const { 
@@ -118,7 +118,15 @@ export default function FriendsScreen() {
     <GradientBackground>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.searchSection}>
-          <Text style={styles.sectionTitle}>Find Friends</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Find Friends</Text>
+            <TouchableOpacity 
+              style={styles.refreshButton}
+              onPress={loadFriendsAndRequests}
+            >
+              <RefreshCw size={18} color={Colors.primary} />
+            </TouchableOpacity>
+          </View>
           <View style={styles.searchContainer}>
             <TextInput
               style={styles.searchInput}
@@ -137,37 +145,45 @@ export default function FriendsScreen() {
             </TouchableOpacity>
           </View>
 
-          {searchResults.length > 0 && (
+          {searchQuery.trim().length > 0 && (
             <View style={styles.resultsContainer}>
-              {searchResults.map((user) => (
-                <View key={user.id} style={styles.userItem}>
-                  <View style={styles.userAvatar}>
-                    <Text style={styles.userAvatarText}>
-                      {user.displayName.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={styles.userInfo}>
-                    <Text style={styles.userName}>{user.displayName}</Text>
-                    <Text style={styles.userUsername}>@{user.username}</Text>
-                  </View>
-                  {isFriend(user.id) ? (
-                    <View style={styles.friendBadge}>
-                      <Text style={styles.friendBadgeText}>Friend</Text>
+              {isSearching ? (
+                <Text style={styles.searchingText}>Searching...</Text>
+              ) : searchResults.length > 0 ? (
+                searchResults.map((user) => (
+                  <View key={user.id} style={styles.userItem}>
+                    <View style={styles.userAvatar}>
+                      <Text style={styles.userAvatarText}>
+                        {user.displayName.charAt(0).toUpperCase()}
+                      </Text>
                     </View>
-                  ) : hasPendingRequest(user.id) ? (
-                    <View style={styles.pendingBadge}>
-                      <Text style={styles.pendingBadgeText}>Pending</Text>
+                    <View style={styles.userInfo}>
+                      <Text style={styles.userName}>{user.displayName}</Text>
+                      <Text style={styles.userUsername}>@{user.username}</Text>
                     </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.addButton}
-                      onPress={() => handleSendFriendRequest(user.id)}
-                    >
-                      <UserPlus size={18} color={Colors.text} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ))}
+                    {isFriend(user.id) ? (
+                      <View style={styles.friendBadge}>
+                        <Text style={styles.friendBadgeText}>Friend</Text>
+                      </View>
+                    ) : hasPendingRequest(user.id) ? (
+                      <View style={styles.pendingBadge}>
+                        <Text style={styles.pendingBadgeText}>Pending</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.addButton}
+                        onPress={() => handleSendFriendRequest(user.id)}
+                      >
+                        <UserPlus size={18} color={Colors.text} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.noResultsText}>
+                  No users found matching &quot;{searchQuery}&quot;
+                </Text>
+              )}
             </View>
           )}
         </View>
@@ -253,11 +269,21 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 24,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: Colors.text,
-    marginBottom: 16,
+  },
+  refreshButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.surface,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -395,5 +421,17 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
     padding: 24,
+  },
+  searchingText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    padding: 16,
+  },
+  noResultsText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    padding: 16,
   },
 });

@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
-import { UserProfile, FriendLink } from '@/types';
+import { UserProfile, FriendLink, User } from '@/types';
 import { useAuth } from './auth-store';
 
+const GLOBAL_USERS_KEY = 'meal-planner-global-users';
 const USER_PROFILES_STORAGE_KEY = 'social-user-profiles';
 const FRIEND_LINKS_STORAGE_KEY = 'social-friend-links';
 
@@ -17,10 +18,26 @@ const [UserContext, useUser] = createContextHook(() => {
 
   const loadUserProfiles = useCallback(async () => {
     try {
-      const stored = await AsyncStorage.getItem(USER_PROFILES_STORAGE_KEY);
-      const profiles = stored ? JSON.parse(stored) : [];
-      setAllUserProfiles(profiles);
-      return profiles;
+      const globalUsersJson = await AsyncStorage.getItem(GLOBAL_USERS_KEY);
+      const globalUsers: User[] = globalUsersJson ? JSON.parse(globalUsersJson) : [];
+      
+      const profiles: UserProfile[] = globalUsers.map(u => ({
+        id: u.id,
+        username: u.username || u.email.split('@')[0],
+        displayName: u.name || u.username || u.email.split('@')[0],
+        shareCookbookWithFriends: false,
+      }));
+      
+      const storedProfiles = await AsyncStorage.getItem(USER_PROFILES_STORAGE_KEY);
+      const existingProfiles: UserProfile[] = storedProfiles ? JSON.parse(storedProfiles) : [];
+      
+      const mergedProfiles = profiles.map(p => {
+        const existing = existingProfiles.find(ep => ep.id === p.id);
+        return existing || p;
+      });
+      
+      setAllUserProfiles(mergedProfiles);
+      return mergedProfiles;
     } catch (error) {
       console.error('Failed to load user profiles:', error);
       return [];
@@ -124,12 +141,22 @@ const [UserContext, useUser] = createContextHook(() => {
     try {
       const profiles = await loadUserProfiles();
       const lowerQuery = query.toLowerCase().trim();
+      
+      console.log('🔍 Searching users:');
+      console.log('  Query:', lowerQuery);
+      console.log('  Total profiles in system:', profiles.length);
+      console.log('  Current user ID:', currentUserProfile?.id);
+      console.log('  All usernames:', profiles.map(p => p.username).join(', '));
+      
       const results = profiles.filter(
         (p: UserProfile) =>
           p.id !== currentUserProfile?.id &&
           (p.username.toLowerCase().includes(lowerQuery) ||
             p.displayName.toLowerCase().includes(lowerQuery))
       );
+      
+      console.log('  Found matches:', results.length);
+      console.log('  Matched users:', results.map(r => r.username).join(', '));
 
       setSearchResults(results);
     } catch (error) {

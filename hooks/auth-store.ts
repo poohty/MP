@@ -5,6 +5,7 @@ import { User } from '@/types';
 import { router } from 'expo-router';
 
 const USER_STORAGE_KEY = 'meal-planner-user';
+const GLOBAL_USERS_KEY = 'meal-planner-global-users';
 
 const result = createContextHook(() => {
   const [user, setUser] = useState<User | null>(null);
@@ -37,14 +38,23 @@ const result = createContextHook(() => {
 
   const login = useCallback(async (email: string, password: string) => {
     try {
-      // In a real app, you would validate credentials against a backend
-      // For now, we'll simulate a successful login
-      // Use email as consistent ID to maintain data across logins
-      const newUser: User = {
-        id: email.toLowerCase().replace(/[^a-z0-9]/g, ''),
+      const userId = email.toLowerCase().replace(/[^a-z0-9]/g, '');
+      
+      const globalUsersJson = await AsyncStorage.getItem(GLOBAL_USERS_KEY);
+      const globalUsers: User[] = globalUsersJson ? JSON.parse(globalUsersJson) : [];
+      const existingUser = globalUsers.find(u => u.id === userId);
+      
+      const newUser: User = existingUser || {
+        id: userId,
         email,
         name: email.split('@')[0],
       };
+      
+      if (!existingUser) {
+        globalUsers.push(newUser);
+        await AsyncStorage.setItem(GLOBAL_USERS_KEY, JSON.stringify(globalUsers));
+        console.log('Added user to global users list during login');
+      }
       
       console.log('Logging in user:', newUser);
       await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
@@ -59,9 +69,6 @@ const result = createContextHook(() => {
 
   const signup = useCallback(async (name: string, email: string, password: string, locationPermission?: boolean) => {
     try {
-      // In a real app, you would create a user in your backend
-      // For now, we'll simulate a successful signup
-      // Use email as consistent ID to maintain data across logins
       const newUser: User = {
         id: email.toLowerCase().replace(/[^a-z0-9]/g, ''),
         email,
@@ -71,6 +78,24 @@ const result = createContextHook(() => {
       
       console.log('Signing up user:', newUser);
       await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
+      
+      try {
+        const globalUsersJson = await AsyncStorage.getItem(GLOBAL_USERS_KEY);
+        const globalUsers: User[] = globalUsersJson ? JSON.parse(globalUsersJson) : [];
+        
+        const existingIndex = globalUsers.findIndex(u => u.id === newUser.id);
+        if (existingIndex >= 0) {
+          globalUsers[existingIndex] = newUser;
+        } else {
+          globalUsers.push(newUser);
+        }
+        
+        await AsyncStorage.setItem(GLOBAL_USERS_KEY, JSON.stringify(globalUsers));
+        console.log('Added user to global users list:', globalUsers.length, 'total users');
+      } catch (globalError) {
+        console.error('Failed to update global users list:', globalError);
+      }
+      
       setUser(newUser);
       router.replace('/(tabs)');
       return true;
@@ -91,6 +116,21 @@ const result = createContextHook(() => {
 
       console.log('Updating user profile:', updatedUser);
       await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
+      
+      try {
+        const globalUsersJson = await AsyncStorage.getItem(GLOBAL_USERS_KEY);
+        const globalUsers: User[] = globalUsersJson ? JSON.parse(globalUsersJson) : [];
+        const index = globalUsers.findIndex(u => u.id === updatedUser.id);
+        
+        if (index >= 0) {
+          globalUsers[index] = updatedUser;
+          await AsyncStorage.setItem(GLOBAL_USERS_KEY, JSON.stringify(globalUsers));
+          console.log('Updated user in global users list');
+        }
+      } catch (globalError) {
+        console.error('Failed to update global users list:', globalError);
+      }
+      
       setUser(updatedUser);
     } catch (error) {
       console.error('Failed to update profile:', error);
