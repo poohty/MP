@@ -282,6 +282,10 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
     instructions?: string;
     imageUrl?: string;
     category?: RecipeCategory;
+    prepTime?: string;
+    cookTime?: string;
+    totalTime?: string;
+    calories?: string;
   } | undefined> => {
     try {
       console.log(`🔍 Extracting complete recipe content for "${recipeName}" from ${recipeUrl}`);
@@ -482,6 +486,10 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
         instructions?: string;
         imageUrl?: string;
         category?: RecipeCategory;
+        prepTime?: string;
+        cookTime?: string;
+        totalTime?: string;
+        calories?: string;
       } = {};
       
       const lines = result.split('\n');
@@ -554,6 +562,39 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
         }
       }
       
+      // Derive structured times from the TIMES section (if present)
+      if (extractedData.times) {
+        const timesText = extractedData.times;
+
+        const prepMatch = timesText.match(/prep\s*time\s*:\s*([^\n]+)/i);
+        if (prepMatch && prepMatch[1]) {
+          extractedData.prepTime = prepMatch[1].trim();
+        }
+
+        const cookMatch = timesText.match(/cook\s*time\s*:\s*([^\n]+)/i);
+        if (cookMatch && cookMatch[1]) {
+          extractedData.cookTime = cookMatch[1].trim();
+        }
+
+        const totalMatch = timesText.match(/total\s*time\s*:\s*([^\n]+)/i);
+        if (totalMatch && totalMatch[1]) {
+          extractedData.totalTime = totalMatch[1].trim();
+        }
+      }
+
+      // Derive calories from nutritionalFacts (if present)
+      if (extractedData.nutritionalFacts) {
+        const nfText = extractedData.nutritionalFacts;
+
+        const caloriesMatch =
+          nfText.match(/calories?\s*[:\-]?\s*([^\n]+)/i) ||
+          nfText.match(/(\d+)\s*calories\b/i);
+
+        if (caloriesMatch && caloriesMatch[1]) {
+          extractedData.calories = caloriesMatch[1].trim();
+        }
+      }
+      
       console.log(`✅ Successfully extracted recipe content for "${recipeName}"`, {
         hasIngredients: !!extractedData.ingredients,
         hasNutrition: !!extractedData.nutritionalFacts,
@@ -591,6 +632,23 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
             if (extractedContent.category) {
               finalRecipe.category = extractedContent.category;
               console.log(`🎯 AI updated category to: ${extractedContent.category}`);
+            }
+            
+            // Persist structured time/nutrition fields
+            if (extractedContent.prepTime) {
+              finalRecipe.prepTime = extractedContent.prepTime;
+            }
+            if (extractedContent.cookTime) {
+              finalRecipe.cookTime = extractedContent.cookTime;
+            }
+            if (extractedContent.totalTime) {
+              finalRecipe.totalTime = extractedContent.totalTime;
+            }
+            if (extractedContent.calories) {
+              finalRecipe.calories = extractedContent.calories;
+            }
+            if (extractedContent.nutritionalFacts) {
+              finalRecipe.nutritionalInfo = extractedContent.nutritionalFacts;
             }
             
             let content = '';

@@ -588,6 +588,18 @@ export default function RecipeDetailsScreen() {
           {recipe.content && (() => {
             const parsedContent = parseRecipeContent(recipe.content);
             
+            // Use structured fields from Recipe object, falling back to parsed content
+            const displayPrepTime =
+              recipe.prepTime || parsedContent.prepTime || 'no data found';
+            const displayCookTime =
+              recipe.cookTime || parsedContent.cookTime || 'no data found';
+            const displayTotalTime =
+              recipe.totalTime || parsedContent.totalTime || 'no data found';
+            const displayCalories =
+              recipe.calories || parsedContent.calories || 'no data found';
+            const displayNutrition =
+              recipe.nutritionalInfo || parsedContent.nutritionalFacts || 'no data found';
+            
             return (
               <View style={styles.recipeContent}>
                 {/* Ingredients Section */}
@@ -605,21 +617,21 @@ export default function RecipeDetailsScreen() {
                     <View style={styles.subSection}>
                       <Text style={styles.sectionSubtitle}>⏱️ Time</Text>
                       <Text style={styles.detailText}>
-                        Prep time: {parsedContent.prepTime || 'no data found'}
+                        Prep time: {displayPrepTime}
                       </Text>
                       <Text style={styles.detailText}>
-                        Cook time: {parsedContent.cookTime || 'no data found'}
+                        Cook time: {displayCookTime}
                       </Text>
                       <Text style={styles.detailText}>
-                        Total time: {parsedContent.totalTime || 'no data found'}
+                        Total time: {displayTotalTime}
                       </Text>
 
                       <Text style={[styles.sectionSubtitle, { marginTop: 12 }]}>📊 Nutrition</Text>
                       <Text style={styles.detailText}>
-                        Calories: {parsedContent.calories || 'no data found'}
+                        Calories: {displayCalories}
                       </Text>
                       <Text style={styles.detailText}>
-                        Nutritional info: {parsedContent.nutritionalFacts || 'no data found'}
+                        Nutritional info: {displayNutrition}
                       </Text>
                     </View>
                   </View>

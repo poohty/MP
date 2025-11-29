@@ -29,6 +29,11 @@ export type Recipe = {
     sugar?: string;
     sodium?: string;
   };
+  prepTime?: string;
+  cookTime?: string;
+  totalTime?: string;
+  calories?: string;
+  nutritionalInfo?: string;
   isFavorite?: boolean;
   stepProgress?: { [stepIndex: number]: boolean };
   createdAt: number;
