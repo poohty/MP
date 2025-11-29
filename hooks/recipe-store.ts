@@ -317,9 +317,100 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         return undefined;
       }
       
+      interface ScrapedRecipeMeta {
+        prepTime?: string;
+        cookTime?: string;
+        totalTime?: string;
+        calories?: string;
+        nutritionalFacts?: string;
+      }
+      
+      const scrapedMeta: ScrapedRecipeMeta = {};
+      
+      function convertIsoDurationToReadable(duration: string): string {
+        try {
+          const match = duration.match(/^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/i);
+          if (!match) return duration;
+          const [, days, hours, minutes, seconds] = match;
+          const parts: string[] = [];
+          if (days) parts.push(`${days} day${days === '1' ? '' : 's'}`);
+          if (hours) parts.push(`${hours} hour${hours === '1' ? '' : 's'}`);
+          if (minutes) parts.push(`${minutes} minute${minutes === '1' ? '' : 's'}`);
+          if (seconds) parts.push(`${seconds} second${seconds === '1' ? '' : 's'}`);
+          return parts.join(' ') || duration;
+        } catch {
+          return duration;
+        }
+      }
+      
+      console.log('🔍 Attempting to extract structured data from HTML (JSON-LD/schema.org)...');
+      
+      const ldJsonBlocks = webpageHtml.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
+      
+      for (const block of ldJsonBlocks) {
+        const jsonMatch = block.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
+        if (!jsonMatch) continue;
+        const jsonText = jsonMatch[1].trim();
+        try {
+          const parsed = JSON.parse(jsonText);
+          
+          const candidates = Array.isArray(parsed) ? parsed : [parsed];
+          
+          for (const item of candidates) {
+            if (!item || typeof item !== 'object') continue;
+            const types = Array.isArray(item['@type']) ? item['@type'] : [item['@type']];
+            if (!types || !types.some((t: any) => typeof t === 'string' && t.toLowerCase() === 'recipe')) {
+              continue;
+            }
+            
+            console.log('✅ Found Recipe schema in JSON-LD');
+            
+            if (typeof item.prepTime === 'string' && !scrapedMeta.prepTime) {
+              scrapedMeta.prepTime = convertIsoDurationToReadable(item.prepTime);
+              console.log(`  Prep Time: ${scrapedMeta.prepTime}`);
+            }
+            if (typeof item.cookTime === 'string' && !scrapedMeta.cookTime) {
+              scrapedMeta.cookTime = convertIsoDurationToReadable(item.cookTime);
+              console.log(`  Cook Time: ${scrapedMeta.cookTime}`);
+            }
+            if (typeof item.totalTime === 'string' && !scrapedMeta.totalTime) {
+              scrapedMeta.totalTime = convertIsoDurationToReadable(item.totalTime);
+              console.log(`  Total Time: ${scrapedMeta.totalTime}`);
+            }
+            
+            if (item.nutrition && typeof item.nutrition === 'object') {
+              const nutrition = item.nutrition;
+              if (typeof nutrition.calories === 'string' && !scrapedMeta.calories) {
+                scrapedMeta.calories = nutrition.calories.trim();
+                console.log(`  Calories: ${scrapedMeta.calories}`);
+              }
+              
+              const nutritionLines: string[] = [];
+              for (const key of Object.keys(nutrition)) {
+                const value = nutrition[key];
+                if (!value || typeof value !== 'string') continue;
+                nutritionLines.push(`${key}: ${value}`);
+              }
+              if (nutritionLines.length && !scrapedMeta.nutritionalFacts) {
+                scrapedMeta.nutritionalFacts = nutritionLines.join('\n');
+                console.log(`  Nutrition Facts: ${nutritionLines.length} fields`);
+              }
+            }
+          }
+        } catch (jsonError) {
+          console.log('⚠️ Failed to parse JSON-LD block:', jsonError);
+        }
+      }
+      
+      if (scrapedMeta.prepTime || scrapedMeta.cookTime || scrapedMeta.totalTime || scrapedMeta.calories) {
+        console.log('✅ Successfully extracted structured recipe metadata from HTML');
+      } else {
+        console.log('⚠️ No structured recipe metadata found in HTML, will rely on AI extraction');
+      }
+      
       console.log(`🤖 Analyzing HTML content with AI for complete recipe extraction...`);
       const aiController = new AbortController();
-      const aiTimeoutId = setTimeout(() => aiController.abort(), 20000);
+      const aiTimeoutId = setTimeout(() => aiController.abort(), 25000);
       
       const response = await fetch('https://toolkit.rork.com/text/llm/', {
         method: 'POST',
@@ -331,9 +422,44 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
           messages: [
             {
               role: 'system',
-              content: `🚨 ULTRA-PRECISE RECIPE DATA EXTRACTOR & CATEGORIZER 🚨
+              content: `🚨 STRICT JSON RECIPE EXTRACTOR 🚨
 
-You are an expert recipe parser with ENHANCED categorization capabilities. Your task is to analyze the provided recipe web page and extract 6 sections:
+You are an expert recipe parser. Extract recipe data from HTML and return ONLY valid JSON.
+
+🎯 REQUIRED OUTPUT FORMAT (STRICT JSON):
+{
+  "ingredients": "one ingredient per line",
+  "instructions": "one step per line with checkboxes",
+  "times": "formatted human-readable summary of times",
+  "prepTime": "prep time only, human-readable like '15 minutes'",
+  "cookTime": "cook time only, human-readable like '30 minutes'",
+  "totalTime": "total time only, human-readable like '45 minutes'",
+  "nutritionalFacts": "multi-line nutrition summary",
+  "calories": "calories only, like '320 kcal' or '320'",
+  "category": "one of: Breakfast, Appetizer, Salads & Soups, Main Course, Desserts",
+  "imageUrl": "direct image URL if available"
+}
+
+🔍 EXTRACTION PRIORITY:
+1. JSON-LD structured data (highest priority - look for @type:Recipe)
+2. Recipe schema markup (schema.org/Recipe)
+3. Recipe card sections
+4. Meta tags
+
+🍲 CATEGORIZATION RULES:
+1. Soups & Salads: soup, stew, chili, salad (HIGHEST PRIORITY)
+2. Desserts: cake, pie, cookie, sweet
+3. Breakfast: eggs, pancakes, waffles
+4. Appetizer: dips, wings, small plates
+5. Main Course: everything else
+
+⚠️ CRITICAL RULES:
+- Return ONLY valid JSON, NO markdown, NO backticks, NO extra text
+- If a field is missing, set it to empty string ""
+- All values must be strings
+- Instructions must have checkboxes like "☐ 1. Step text"
+- Times must be human-readable (not ISO durations)
+- Category must be exactly one of the 5 options
 
 🎯 EXTRACT THESE 6 FIELDS:
 1. **INGREDIENTS** - Complete list with exact measurements
@@ -430,34 +556,20 @@ CATEGORY: [Breakfast|Appetizer|Salads & Soups|Main Course|Desserts]
             },
             {
               role: 'user',
-              content: `🎯 EXTRACT COMPLETE RECIPE DATA FROM HTML
+              content: `Extract recipe data from this HTML and return ONLY valid JSON.
 
 Recipe Name: "${recipeName}"
-Webpage URL: ${recipeUrl}
+URL: ${recipeUrl}
 
-📋 HTML CONTENT TO ANALYZE:
+HTML:
 ${webpageHtml.substring(0, 80000)}
 
-🔍 CRITICAL EXTRACTION TASK:
-1. Scan the ENTIRE HTML content above for recipe data
-2. Extract ALL 6 required fields: ingredients, nutritional facts, times, instructions, image, and category
-3. Focus on structured data (JSON-LD, schema.org) first - look for recipe objects
-4. Use exact text from the webpage - do not summarize or modify
-5. Number instruction steps sequentially with checkboxes (☐ 1. ☐ 2. etc.)
-6. Find the main recipe image URL (og:image, twitter:image, or main food photo)
-7. Categorize using the strict rules: Soups & Salads takes priority over everything
+⚠️ RETURN ONLY JSON - NO MARKDOWN, NO BACKTICKS, NO EXTRA TEXT
 
-🍲 CATEGORIZATION FOR "${recipeName}":
-- If recipe contains ANY soup/stew/chili/broth words → Soups & Salads
-- If sweet/dessert → Desserts
-- If breakfast food → Breakfast
-- If small plate/appetizer → Appetizer
-- Otherwise → Main Course
+Example output:
+{"ingredients":"1 cup flour\\n2 eggs\\n1/2 tsp salt","instructions":"☐ 1. Mix flour\\n☐ 2. Add eggs","times":"Prep: 10 min, Cook: 20 min","prepTime":"10 minutes","cookTime":"20 minutes","totalTime":"30 minutes","nutritionalFacts":"Calories: 250\\nProtein: 8g","calories":"250","category":"Main Course","imageUrl":"https://example.com/image.jpg"}
 
-✅ SUCCESS: Return all 6 fields in the exact format specified
-❌ FAILURE: Return "Error: No recipe data detected on page." if no recipe found
-
-Be extremely thorough - scan every section, every JSON-LD block, every schema markup.`
+Extract all fields. If missing, use empty string. Convert ISO durations to readable format.`
             }
           ]
         })
@@ -476,8 +588,8 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
         return undefined;
       }
       
-      const result = data.completion.trim();
-      console.log(`🤖 AI recipe extraction result for "${recipeName}": ${result.substring(0, 800)}...`);
+      let result = data.completion.trim();
+      console.log(`🤖 AI recipe extraction result for "${recipeName}": ${result.substring(0, 400)}...`);
       
       const extractedData: {
         ingredients?: string;
@@ -492,104 +604,152 @@ Be extremely thorough - scan every section, every JSON-LD block, every schema ma
         calories?: string;
       } = {};
       
-      const lines = result.split('\n');
-      let currentSection: string | null = null;
-      let sectionContent: string[] = [];
-      
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const upperLine = line.toUpperCase();
+      try {
+        if (result.startsWith('```json')) {
+          result = result.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (result.startsWith('```')) {
+          result = result.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
         
-        if (upperLine.match(/^[A-Z][A-Z ]*:/) && !line.startsWith(' ')) {
-          if (currentSection && sectionContent.length > 0) {
-            const content = sectionContent.join('\n').trim();
-            if (currentSection === 'INGREDIENTS') {
-              extractedData.ingredients = content;
-            } else if (currentSection === 'NUTRITIONAL' || currentSection === 'NUTRITION') {
-              extractedData.nutritionalFacts = content;
-            } else if (currentSection === 'TIMES' || currentSection === 'TIME') {
-              extractedData.times = content;
-            } else if (currentSection === 'INSTRUCTIONS' || currentSection === 'DIRECTIONS') {
-              extractedData.instructions = content;
-            }
+        const jsonData = JSON.parse(result);
+        console.log('✅ Successfully parsed JSON response from AI');
+        
+        if (jsonData.ingredients && typeof jsonData.ingredients === 'string') {
+          extractedData.ingredients = jsonData.ingredients;
+        }
+        if (jsonData.instructions && typeof jsonData.instructions === 'string') {
+          extractedData.instructions = jsonData.instructions;
+        }
+        if (jsonData.nutritionalFacts && typeof jsonData.nutritionalFacts === 'string') {
+          extractedData.nutritionalFacts = jsonData.nutritionalFacts;
+        }
+        if (jsonData.times && typeof jsonData.times === 'string') {
+          extractedData.times = jsonData.times;
+        }
+        if (jsonData.prepTime && typeof jsonData.prepTime === 'string') {
+          extractedData.prepTime = jsonData.prepTime;
+        }
+        if (jsonData.cookTime && typeof jsonData.cookTime === 'string') {
+          extractedData.cookTime = jsonData.cookTime;
+        }
+        if (jsonData.totalTime && typeof jsonData.totalTime === 'string') {
+          extractedData.totalTime = jsonData.totalTime;
+        }
+        if (jsonData.calories && typeof jsonData.calories === 'string') {
+          extractedData.calories = jsonData.calories;
+        }
+        if (jsonData.imageUrl && typeof jsonData.imageUrl === 'string' && 
+            (jsonData.imageUrl.startsWith('http://') || jsonData.imageUrl.startsWith('https://'))) {
+          extractedData.imageUrl = jsonData.imageUrl;
+        }
+        if (jsonData.category && typeof jsonData.category === 'string') {
+          const validCategories: RecipeCategory[] = ['Breakfast', 'Appetizer', 'Salads & Soups', 'Main Course', 'Desserts'];
+          if (validCategories.includes(jsonData.category as RecipeCategory)) {
+            extractedData.category = jsonData.category as RecipeCategory;
           }
+        }
+      } catch (jsonError) {
+        console.log('⚠️ Failed to parse JSON from AI, falling back to text parsing');
+        
+        const lines = result.split('\n');
+        let currentSection: string | null = null;
+        let sectionContent: string[] = [];
+        
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          const upperLine = line.toUpperCase();
           
-          const colonIndex = line.indexOf(':');
-          const header = line.substring(0, colonIndex).toUpperCase().trim();
-          const valueAfterColon = line.substring(colonIndex + 1).trim();
-          
-          if (header === 'IMAGE') {
-            const imageUrl = valueAfterColon;
-            if (imageUrl && imageUrl !== 'Not available' && imageUrl !== 'NONE' && 
-                (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
-              console.log(`✅ Found IMAGE in AI response: ${imageUrl}`);
-              extractedData.imageUrl = imageUrl;
-            } else {
-              console.log(`⚠️ Invalid or missing IMAGE in AI response: ${imageUrl}`);
+          if (upperLine.match(/^[A-Z][A-Z ]*:/) && !line.startsWith(' ')) {
+            if (currentSection && sectionContent.length > 0) {
+              const content = sectionContent.join('\n').trim();
+              if (currentSection === 'INGREDIENTS') {
+                extractedData.ingredients = content;
+              } else if (currentSection === 'NUTRITIONAL' || currentSection === 'NUTRITION') {
+                extractedData.nutritionalFacts = content;
+              } else if (currentSection === 'TIMES' || currentSection === 'TIME') {
+                extractedData.times = content;
+              } else if (currentSection === 'INSTRUCTIONS' || currentSection === 'DIRECTIONS') {
+                extractedData.instructions = content;
+              }
             }
-            currentSection = null;
-            sectionContent = [];
-          } else if (header === 'CATEGORY') {
-            const category = valueAfterColon;
-            const validCategories: RecipeCategory[] = ['Breakfast', 'Appetizer', 'Salads & Soups', 'Main Course', 'Desserts'];
-            if (validCategories.includes(category as RecipeCategory)) {
-              console.log(`✅ Found CATEGORY in AI response: ${category}`);
-              extractedData.category = category as RecipeCategory;
+            
+            const colonIndex = line.indexOf(':');
+            const header = line.substring(0, colonIndex).toUpperCase().trim();
+            const valueAfterColon = line.substring(colonIndex + 1).trim();
+            
+            if (header === 'IMAGE') {
+              const imageUrl = valueAfterColon;
+              if (imageUrl && imageUrl !== 'Not available' && imageUrl !== 'NONE' && 
+                  (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
+                extractedData.imageUrl = imageUrl;
+              }
+              currentSection = null;
+              sectionContent = [];
+            } else if (header === 'CATEGORY') {
+              const category = valueAfterColon;
+              const validCategories: RecipeCategory[] = ['Breakfast', 'Appetizer', 'Salads & Soups', 'Main Course', 'Desserts'];
+              if (validCategories.includes(category as RecipeCategory)) {
+                extractedData.category = category as RecipeCategory;
+              }
+              currentSection = null;
+              sectionContent = [];
             } else {
-              console.log(`⚠️ Invalid CATEGORY in AI response: ${category}`);
+              currentSection = header;
+              sectionContent = valueAfterColon ? [valueAfterColon] : [];
             }
-            currentSection = null;
-            sectionContent = [];
-          } else {
-            currentSection = header;
-            sectionContent = valueAfterColon ? [valueAfterColon] : [];
+          } else if (currentSection) {
+            sectionContent.push(line);
           }
-        } else if (currentSection) {
-          sectionContent.push(line);
+        }
+        
+        if (currentSection && sectionContent.length > 0) {
+          const content = sectionContent.join('\n').trim();
+          if (currentSection === 'INGREDIENTS') {
+            extractedData.ingredients = content;
+          } else if (currentSection === 'NUTRITIONAL' || currentSection === 'NUTRITION') {
+            extractedData.nutritionalFacts = content;
+          } else if (currentSection === 'TIMES' || currentSection === 'TIME') {
+            extractedData.times = content;
+          } else if (currentSection === 'INSTRUCTIONS' || currentSection === 'DIRECTIONS') {
+            extractedData.instructions = content;
+          }
         }
       }
       
-      if (currentSection && sectionContent.length > 0) {
-        const content = sectionContent.join('\n').trim();
-        if (currentSection === 'INGREDIENTS') {
-          extractedData.ingredients = content;
-        } else if (currentSection === 'NUTRITIONAL' || currentSection === 'NUTRITION') {
-          extractedData.nutritionalFacts = content;
-        } else if (currentSection === 'TIMES' || currentSection === 'TIME') {
-          extractedData.times = content;
-        } else if (currentSection === 'INSTRUCTIONS' || currentSection === 'DIRECTIONS') {
-          extractedData.instructions = content;
-        }
+      extractedData.prepTime = scrapedMeta.prepTime || extractedData.prepTime;
+      extractedData.cookTime = scrapedMeta.cookTime || extractedData.cookTime;
+      extractedData.totalTime = scrapedMeta.totalTime || extractedData.totalTime;
+      extractedData.calories = scrapedMeta.calories || extractedData.calories;
+      if (scrapedMeta.nutritionalFacts && !extractedData.nutritionalFacts) {
+        extractedData.nutritionalFacts = scrapedMeta.nutritionalFacts;
       }
       
-      // Derive structured times from the TIMES section (if present)
-      if (extractedData.times) {
-        const timesText = extractedData.times;
-
-        const prepMatch = timesText.match(/prep\s*time\s*:\s*([^\n]+)/i);
+      if (!extractedData.prepTime && extractedData.times) {
+        const prepMatch = extractedData.times.match(/prep\s*(?:time)?\s*[:\-]?\s*([^\n,]+)/i);
         if (prepMatch && prepMatch[1]) {
           extractedData.prepTime = prepMatch[1].trim();
         }
-
-        const cookMatch = timesText.match(/cook\s*time\s*:\s*([^\n]+)/i);
+      }
+      
+      if (!extractedData.cookTime && extractedData.times) {
+        const cookMatch = extractedData.times.match(/cook\s*(?:time)?\s*[:\-]?\s*([^\n,]+)/i);
         if (cookMatch && cookMatch[1]) {
           extractedData.cookTime = cookMatch[1].trim();
         }
-
-        const totalMatch = timesText.match(/total\s*time\s*:\s*([^\n]+)/i);
+      }
+      
+      if (!extractedData.totalTime && extractedData.times) {
+        const totalMatch = extractedData.times.match(/total\s*(?:time)?\s*[:\-]?\s*([^\n,]+)/i);
         if (totalMatch && totalMatch[1]) {
           extractedData.totalTime = totalMatch[1].trim();
         }
       }
-
-      // Derive calories from nutritionalFacts (if present)
-      if (extractedData.nutritionalFacts) {
-        const nfText = extractedData.nutritionalFacts;
-
+      
+      if (!extractedData.calories && extractedData.nutritionalFacts) {
         const caloriesMatch =
-          nfText.match(/calories?\s*[:\-]?\s*([^\n]+)/i) ||
-          nfText.match(/(\d+)\s*calories\b/i);
-
+          extractedData.nutritionalFacts.match(/calories?\s*[:\-]?\s*([^\n,]+)/i) ||
+          extractedData.nutritionalFacts.match(/(\d+)\s*calories\b/i);
+        
         if (caloriesMatch && caloriesMatch[1]) {
           extractedData.calories = caloriesMatch[1].trim();
         }
