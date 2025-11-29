@@ -259,6 +259,64 @@ export default function RecipeDetailsScreen() {
       });
     }
     
+    // ---------------------------
+    // Fallback parsing from full content
+    // ---------------------------
+    try {
+      const fullText = content;
+
+      // Prep time (e.g., "Prep Time: 15 minutes" or "Prep: 15 mins")
+      if (!sections.prepTime) {
+        const prepMatch =
+          fullText.match(/prep(?:\s+time)?\s*[:\-]?\s*([^\n]+)/i);
+        if (prepMatch && prepMatch[1]) {
+          sections.prepTime = prepMatch[1].trim();
+        }
+      }
+
+      // Cook time (e.g., "Cook Time: 30 minutes" or "Cook: 30 mins")
+      if (!sections.cookTime) {
+        const cookMatch =
+          fullText.match(/cook(?:\s+time)?\s*[:\-]?\s*([^\n]+)/i);
+        if (cookMatch && cookMatch[1]) {
+          sections.cookTime = cookMatch[1].trim();
+        }
+      }
+
+      // Total time (e.g., "Total Time: 45 minutes" or "Total: 45 mins")
+      if (!sections.totalTime) {
+        const totalMatch =
+          fullText.match(/total(?:\s+time)?\s*[:\-]?\s*([^\n]+)/i);
+        if (totalMatch && totalMatch[1]) {
+          sections.totalTime = totalMatch[1].trim();
+        }
+      }
+
+      // Calories (e.g., "Calories: 320 kcal" or "320 calories")
+      if (!sections.calories) {
+        const caloriesMatch =
+          fullText.match(/calories?\s*[:\-]?\s*([^\n]+)/i) ||
+          fullText.match(/(\d+)\s*calories\b/i);
+
+        if (caloriesMatch && caloriesMatch[1]) {
+          sections.calories = caloriesMatch[1].trim();
+        }
+      }
+
+      // Nutritional Facts block (from the AI-generated section)
+      // Look for the "**Nutritional Facts:**" heading and capture everything until the next bold heading or end
+      if (!sections.nutritionalFacts) {
+        const nutritionBlockMatch = fullText.match(
+          /\*\*Nutritional Facts:\*\*\s*([\s\S]+?)(\n\*\*|$)/i
+        );
+        if (nutritionBlockMatch && nutritionBlockMatch[1]) {
+          sections.nutritionalFacts = nutritionBlockMatch[1].trim();
+        }
+      }
+    } catch (e) {
+      console.log('⚠️ Fallback time/nutrition parsing error:', e);
+    }
+    
     return sections;
   };
 
