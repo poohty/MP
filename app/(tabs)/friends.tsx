@@ -117,7 +117,7 @@ export default function FriendsScreen() {
 
   const debugBackendUsers = async () => {
     try {
-      console.log('🐛 DEBUG: Fetching all users from backend...');
+      console.log('🐛 ======== DEBUG: Fetching all users from backend ========');
       const result = await trpcClient.users.getAllUsers.query();
       
       console.log('🐛 DEBUG: Backend users result:', result);
@@ -125,17 +125,31 @@ export default function FriendsScreen() {
       const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? 'NOT SET';
       
       const userList = result.users.length > 0
-        ? result.users.map((u: any) => `${u.displayName} (@${u.username}) [${u.email}]`).join('\n')
+        ? result.users.map((u: any) => `• ${u.displayName}\n  @${u.username}\n  ${u.email}\n  ID: ${u.id}`).join('\n\n')
         : 'No users in backend';
       
+      const debugInfo = [
+        '🌐 BACKEND CONNECTION',
+        `URL: ${baseUrl}`,
+        '',
+        '🔑 BACKEND IDENTITY',
+        `Instance ID: ${result.backendInstanceId}`,
+        `Start Time: ${result.backendStartTime}`,
+        `Process PID: ${result.processPid}`,
+        '',
+        `👥 USERS IN THIS BACKEND: ${result.total}`,
+        '',
+        userList,
+      ].join('\n');
+      
       Alert.alert(
-        '🔍 Backend User Directory',
-        `Backend URL: ${baseUrl}\n\nBackend Instance ID: ${result.backendInstanceId}\n\nTotal Users: ${result.total}\n\n${userList}`,
+        '🔍 Backend Debug Info',
+        debugInfo,
         [{ text: 'OK' }]
       );
     } catch (error) {
       console.error('🐛 DEBUG ERROR: Failed to fetch backend users:', error);
-      Alert.alert('Debug Error', `Failed to fetch backend users: ${String(error)}`);
+      Alert.alert('Debug Error', `Failed to fetch backend users:\n\n${String(error)}`);
     }
   };
 

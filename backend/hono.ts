@@ -5,8 +5,13 @@ import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 
 export const BACKEND_INSTANCE_ID = Math.random().toString(36).slice(2);
+export const BACKEND_START_TIME = new Date().toISOString();
 
-console.log('🚀 Backend started with instance ID:', BACKEND_INSTANCE_ID);
+console.log('🚀🚀🚀 ======== BACKEND INSTANCE STARTING ======== ');
+console.log('🚀 Backend Instance ID:', BACKEND_INSTANCE_ID);
+console.log('🚀 Backend Start Time:', BACKEND_START_TIME);
+console.log('🚀 Process PID:', process.pid);
+console.log('🚀🚀🚀 ============================================= ');
 
 const app = new Hono();
 
@@ -22,7 +27,13 @@ app.use(
 );
 
 app.get("/", (c) => {
-  return c.json({ status: "ok", message: "API is running" });
+  return c.json({ 
+    status: "ok", 
+    message: "API is running",
+    instanceId: BACKEND_INSTANCE_ID,
+    startTime: BACKEND_START_TIME,
+    pid: process.pid,
+  });
 });
 
 export default app;
