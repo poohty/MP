@@ -9,7 +9,7 @@ const USER_PROFILES_STORAGE_KEY = 'social-user-profiles';
 const FRIEND_LINKS_STORAGE_KEY = 'social-friend-links';
 
 const [UserContext, useUser] = createContextHook(() => {
-  const { user: authUser } = useAuth();
+  const { user: authUser, updateProfile: updateAuthProfile } = useAuth();
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
   const [, setAllUserProfiles] = useState<UserProfile[]>([]);
   const [friendLinks, setFriendLinks] = useState<FriendLink[]>([]);
@@ -25,19 +25,11 @@ const [UserContext, useUser] = createContextHook(() => {
         id: u.id,
         username: u.username || u.email.split('@')[0],
         displayName: u.name || u.username || u.email.split('@')[0],
-        shareCookbookWithFriends: false,
+        shareCookbookWithFriends: u.shareCookbookWithFriends || false,
       }));
       
-      const storedProfiles = await AsyncStorage.getItem(USER_PROFILES_STORAGE_KEY);
-      const existingProfiles: UserProfile[] = storedProfiles ? JSON.parse(storedProfiles) : [];
-      
-      const mergedProfiles = profiles.map(p => {
-        const existing = existingProfiles.find(ep => ep.id === p.id);
-        return existing || p;
-      });
-      
-      setAllUserProfiles(mergedProfiles);
-      return mergedProfiles;
+      setAllUserProfiles(profiles);
+      return profiles;
     } catch (error) {
       console.error('Failed to load user profiles:', error);
       return [];
@@ -89,11 +81,17 @@ const [UserContext, useUser] = createContextHook(() => {
       if (!profile) {
         profile = {
           id: authUser.id,
-          username: authUser.email.split('@')[0],
+          username: authUser.username || authUser.email.split('@')[0],
           displayName: authUser.name,
-          shareCookbookWithFriends: false,
+          shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
         };
-        await saveUserProfiles([...profiles, profile]);
+      } else {
+        profile = {
+          ...profile,
+          username: authUser.username || profile.username,
+          displayName: authUser.name || profile.displayName,
+          shareCookbookWithFriends: authUser.shareCookbookWithFriends ?? profile.shareCookbookWithFriends,
+        };
       }
 
       setCurrentUserProfile(profile);
@@ -103,34 +101,32 @@ const [UserContext, useUser] = createContextHook(() => {
     } finally {
       setIsLoading(false);
     }
-  }, [authUser, loadUserProfiles, saveUserProfiles, loadFriendLinks]);
+  }, [authUser, loadUserProfiles, loadFriendLinks]);
 
   useEffect(() => {
     loadCurrentUser();
   }, [loadCurrentUser]);
 
   const updateShareCookbook = useCallback(async (shareCookbook: boolean) => {
-    if (!currentUserProfile) return false;
+    if (!currentUserProfile || !authUser) return false;
 
     try {
+      await updateAuthProfile({ shareCookbookWithFriends: shareCookbook });
+      
       const updatedProfile = {
         ...currentUserProfile,
         shareCookbookWithFriends: shareCookbook,
       };
 
-      const profiles = await loadUserProfiles();
-      const updatedProfiles = profiles.map((p: UserProfile) =>
-        p.id === currentUserProfile.id ? updatedProfile : p
-      );
-
-      await saveUserProfiles(updatedProfiles);
       setCurrentUserProfile(updatedProfile);
+      
+      console.log('✅ Updated share cookbook setting:', shareCookbook);
       return true;
     } catch (error) {
       console.error('Failed to update share cookbook setting:', error);
       return false;
     }
-  }, [currentUserProfile, loadUserProfiles, saveUserProfiles]);
+  }, [currentUserProfile, authUser, updateAuthProfile]);
 
   const searchUsersByUsername = useCallback(async (query: string) => {
     if (!query || query.trim().length === 0) {

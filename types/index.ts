@@ -5,6 +5,7 @@ export type User = {
   username?: string;
   avatarUrl?: string;
   bio?: string;
+  shareCookbookWithFriends?: boolean;
   locationPermission?: boolean;
 };
 
