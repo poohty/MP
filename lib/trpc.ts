@@ -7,10 +7,15 @@ export const trpc = createTRPCReact<AppRouter>();
 
 const getBaseUrl = () => {
   if (process.env.EXPO_PUBLIC_RORK_API_BASE_URL) {
-    console.log('🌐 tRPC base URL:', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
-    return process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
+    const url = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
+    console.log('🌐🌐🌐 ========================================');
+    console.log('🌐 tRPC CONFIGURATION');
+    console.log('🌐 Base URL:', url);
+    console.log('🌐 Full tRPC URL:', `${url}/api/trpc`);
+    console.log('🌐🌐🌐 ========================================');
+    return url;
   }
-  console.warn('⚠️ EXPO_PUBLIC_RORK_API_BASE_URL is NOT set. tRPC backend may be unavailable.');
+  console.warn('⚠️⚠️⚠️ EXPO_PUBLIC_RORK_API_BASE_URL is NOT set. tRPC backend may be unavailable.');
   return null;
 };
 

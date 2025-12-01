@@ -118,38 +118,54 @@ export default function FriendsScreen() {
   const debugBackendUsers = async () => {
     try {
       console.log('🐛 ======== DEBUG: Fetching all users from backend ========');
+      const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '❌ NOT SET - THIS IS THE PROBLEM!';
+      const fullUrl = baseUrl !== '❌ NOT SET - THIS IS THE PROBLEM!' ? `${baseUrl}/api/trpc` : 'N/A';
+      
+      console.log('🐛 Base URL:', baseUrl);
+      console.log('🐛 Full tRPC URL:', fullUrl);
+      
       const result = await trpcClient.users.getAllUsers.query();
       
       console.log('🐛 DEBUG: Backend users result:', result);
       
-      const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? 'NOT SET';
-      
       const userList = result.users.length > 0
-        ? result.users.map((u: any) => `• ${u.displayName}\n  @${u.username}\n  ${u.email}\n  ID: ${u.id}`).join('\n\n')
-        : 'No users in backend';
+        ? result.users.map((u: any) => `• ${u.displayName}\n  @${u.username}\n  ${u.email}\n  ID: ${u.id.substring(0, 12)}...`).join('\n\n')
+        : '⚠️ NO USERS IN BACKEND';
       
       const debugInfo = [
-        '🌐 BACKEND CONNECTION',
-        `URL: ${baseUrl}`,
+        '🔴 CRITICAL: CHECK IF BOTH DEVICES SHOW THE SAME INFO BELOW',
         '',
-        '🔑 BACKEND IDENTITY',
-        `Instance ID: ${result.backendInstanceId}`,
-        `Start Time: ${result.backendStartTime}`,
-        `Process PID: ${result.processPid}`,
+        '🌐 BACKEND URL',
+        baseUrl === '❌ NOT SET - THIS IS THE PROBLEM!' ? baseUrl : `✅ ${baseUrl}`,
+        `Full: ${fullUrl}`,
         '',
-        `👥 USERS IN THIS BACKEND: ${result.total}`,
+        '🔑 BACKEND INSTANCE',
+        `ID: ${result.backendInstanceId}`,
+        `Started: ${new Date(result.backendStartTime).toLocaleTimeString()}`,
+        `PID: ${result.processPid}`,
+        '',
+        `👥 TOTAL USERS: ${result.total}`,
         '',
         userList,
+        '',
+        '👉 If two devices show DIFFERENT instance IDs,',
+        'they are hitting DIFFERENT backends.',
       ].join('\n');
       
       Alert.alert(
-        '🔍 Backend Debug Info',
+        '🔍 Backend Debug',
         debugInfo,
-        [{ text: 'OK' }]
+        [{ text: 'OK' }],
+        { cancelable: true }
       );
     } catch (error) {
       console.error('🐛 DEBUG ERROR: Failed to fetch backend users:', error);
-      Alert.alert('Debug Error', `Failed to fetch backend users:\n\n${String(error)}`);
+      const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? 'NOT SET';
+      Alert.alert(
+        '❌ Debug Error', 
+        `Backend URL: ${baseUrl}\n\nError: ${String(error)}`,
+        [{ text: 'OK' }]
+      );
     }
   };
 
