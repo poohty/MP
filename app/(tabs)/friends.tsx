@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { router } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUser } from '@/hooks/user-store';
+import { trpcClient } from '@/lib/trpc';
 import { UserProfile, FriendLink } from '@/types';
 import Colors from '@/constants/colors';
 import GradientBackground from '@/components/GradientBackground';
@@ -115,22 +115,25 @@ export default function FriendsScreen() {
     });
   };
 
-  const debugGlobalUsers = async () => {
+  const debugBackendUsers = async () => {
     try {
-      const globalUsersJson = await AsyncStorage.getItem('meal-planner-global-users');
-      if (!globalUsersJson) {
-        Alert.alert('Debug', 'No global users found in storage');
-        return;
-      }
-      const users = JSON.parse(globalUsersJson);
-      const userList = users.map((u: any) => `${u.name} (@${u.username || 'no-username'})`).join('\n');
+      console.log('🐛 DEBUG: Fetching all users from backend...');
+      const result = await trpcClient.users.getAllUsers.query();
+      
+      console.log('🐛 DEBUG: Backend users result:', result);
+      
+      const userList = result.users.length > 0
+        ? result.users.map((u: any) => `${u.displayName} (@${u.username}) [${u.email}]`).join('\n')
+        : 'No users in backend';
+      
       Alert.alert(
-        'Debug: Global Users',
-        `Total: ${users.length}\n\n${userList}`,
+        '🔍 Backend User Directory',
+        `Total Users: ${result.total}\n\n${userList}`,
         [{ text: 'OK' }]
       );
     } catch (error) {
-      Alert.alert('Debug Error', String(error));
+      console.error('🐛 DEBUG ERROR:', error);
+      Alert.alert('Debug Error', `Failed to fetch backend users: ${String(error)}`);
     }
   };
 
@@ -143,7 +146,7 @@ export default function FriendsScreen() {
             <View style={styles.headerButtons}>
               <TouchableOpacity 
                 style={styles.refreshButton}
-                onPress={debugGlobalUsers}
+                onPress={debugBackendUsers}
               >
                 <Bug size={18} color={Colors.warning} />
               </TouchableOpacity>
