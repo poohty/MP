@@ -135,31 +135,44 @@ const [UserContext, useUser] = createContextHook(() => {
     }
 
     try {
-      const profiles = await loadUserProfiles();
+      const globalUsersJson = await AsyncStorage.getItem(GLOBAL_USERS_KEY);
+      const globalUsers: User[] = globalUsersJson ? JSON.parse(globalUsersJson) : [];
+      
       const lowerQuery = query.toLowerCase().trim();
       
       console.log('🔍 Searching users:');
       console.log('  Query:', lowerQuery);
-      console.log('  Total profiles in system:', profiles.length);
+      console.log('  Total users in global store:', globalUsers.length);
       console.log('  Current user ID:', currentUserProfile?.id);
-      console.log('  All usernames:', profiles.map(p => p.username).join(', '));
+      
+      const profiles: UserProfile[] = globalUsers.map(u => ({
+        id: u.id,
+        username: u.username || u.email.split('@')[0],
+        displayName: u.name || u.username || u.email.split('@')[0],
+        shareCookbookWithFriends: u.shareCookbookWithFriends || false,
+      }));
+      
+      console.log('  All profiles:', profiles.map(p => `${p.username} (${p.displayName})`).join(', '));
       
       const results = profiles.filter(
-        (p: UserProfile) =>
-          p.id !== currentUserProfile?.id &&
-          (p.username.toLowerCase().includes(lowerQuery) ||
-            p.displayName.toLowerCase().includes(lowerQuery))
+        (p: UserProfile) => {
+          const matchesId = p.id !== currentUserProfile?.id;
+          const matchesUsername = p.username.toLowerCase().includes(lowerQuery);
+          const matchesDisplayName = p.displayName.toLowerCase().includes(lowerQuery);
+          
+          return matchesId && (matchesUsername || matchesDisplayName);
+        }
       );
       
       console.log('  Found matches:', results.length);
-      console.log('  Matched users:', results.map(r => r.username).join(', '));
+      console.log('  Matched users:', results.map(r => `@${r.username} (${r.displayName})`).join(', '));
 
       setSearchResults(results);
     } catch (error) {
       console.error('Failed to search users:', error);
       setSearchResults([]);
     }
-  }, [currentUserProfile, loadUserProfiles]);
+  }, [currentUserProfile]);
 
   const sendFriendRequest = useCallback(async (targetUserId: string) => {
     if (!currentUserProfile) return false;
