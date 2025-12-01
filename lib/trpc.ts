@@ -9,17 +9,41 @@ const getBaseUrl = () => {
   if (process.env.EXPO_PUBLIC_RORK_API_BASE_URL) {
     return process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
   }
-
-  throw new Error(
-    "No base url found, please set EXPO_PUBLIC_RORK_API_BASE_URL"
-  );
+  return null;
 };
+
+const baseUrl = getBaseUrl();
 
 export const trpcClient = trpc.createClient({
   links: [
     httpLink({
-      url: `${getBaseUrl()}/api/trpc`,
+      url: baseUrl ? `${baseUrl}/api/trpc` : 'http://localhost:3000/api/trpc',
       transformer: superjson,
+      fetch: async (url, options) => {
+        if (!baseUrl) {
+          console.warn('Backend is not configured. tRPC calls will fail gracefully.');
+          return new Response(
+            JSON.stringify({ error: 'Backend not configured' }),
+            { 
+              status: 503,
+              headers: { 'Content-Type': 'application/json' }
+            }
+          );
+        }
+
+        try {
+          return await fetch(url, options);
+        } catch (error) {
+          console.error('tRPC fetch error:', error);
+          return new Response(
+            JSON.stringify({ error: 'Backend unavailable' }),
+            { 
+              status: 503,
+              headers: { 'Content-Type': 'application/json' }
+            }
+          );
+        }
+      },
     }),
   ],
 });
