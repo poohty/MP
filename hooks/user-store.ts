@@ -2,10 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
 import { UserProfile, FriendLink, User } from '@/types';
-import { useAuth } from './auth-store';
+import { useAuth, ALL_USERS_STORAGE_KEY } from './auth-store';
 
-const GLOBAL_USERS_KEY = 'meal-planner-global-users';
-const USER_PROFILES_STORAGE_KEY = 'social-user-profiles';
 const FRIEND_LINKS_STORAGE_KEY = 'social-friend-links';
 
 const [UserContext, useUser] = createContextHook(() => {
@@ -18,8 +16,10 @@ const [UserContext, useUser] = createContextHook(() => {
 
   const loadUserProfiles = useCallback(async () => {
     try {
-      const globalUsersJson = await AsyncStorage.getItem(GLOBAL_USERS_KEY);
+      const globalUsersJson = await AsyncStorage.getItem(ALL_USERS_STORAGE_KEY);
       const globalUsers: User[] = globalUsersJson ? JSON.parse(globalUsersJson) : [];
+      
+      console.log('📚 loadUserProfiles: loaded', globalUsers.length, 'users from', ALL_USERS_STORAGE_KEY);
       
       const profiles: UserProfile[] = globalUsers.map(u => ({
         id: u.id,
@@ -36,14 +36,7 @@ const [UserContext, useUser] = createContextHook(() => {
     }
   }, []);
 
-  const saveUserProfiles = useCallback(async (profiles: UserProfile[]) => {
-    try {
-      await AsyncStorage.setItem(USER_PROFILES_STORAGE_KEY, JSON.stringify(profiles));
-      setAllUserProfiles(profiles);
-    } catch (error) {
-      console.error('Failed to save user profiles:', error);
-    }
-  }, []);
+
 
   const loadFriendLinks = useCallback(async () => {
     try {
@@ -143,7 +136,7 @@ const [UserContext, useUser] = createContextHook(() => {
     }
 
     try {
-      const globalUsersJson = await AsyncStorage.getItem(GLOBAL_USERS_KEY);
+      const globalUsersJson = await AsyncStorage.getItem(ALL_USERS_STORAGE_KEY);
       console.log('🔍 Raw global users JSON:', globalUsersJson ? 'EXISTS' : 'NULL');
       console.log('🔍 JSON length:', globalUsersJson?.length || 0);
       
