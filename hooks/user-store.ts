@@ -1,38 +1,27 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
-import { UserProfile, FriendLink, User } from '@/types';
-import { useAuth, ALL_USERS_STORAGE_KEY } from './auth-store';
+import { UserProfile, FriendLink } from '@/types';
+import { useAuth } from './auth-store';
+import { trpcClient } from '@/lib/trpc';
 
 const FRIEND_LINKS_STORAGE_KEY = 'social-friend-links';
 
 const [UserContext, useUser] = createContextHook(() => {
   const { user: authUser, updateProfile: updateAuthProfile } = useAuth();
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
-  const [, setAllUserProfiles] = useState<UserProfile[]>([]);
+
   const [friendLinks, setFriendLinks] = useState<FriendLink[]>([]);
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadUserProfiles = useCallback(async () => {
+  const loadUserProfileFromBackend = useCallback(async (userId: string): Promise<UserProfile | null> => {
     try {
-      const globalUsersJson = await AsyncStorage.getItem(ALL_USERS_STORAGE_KEY);
-      const globalUsers: User[] = globalUsersJson ? JSON.parse(globalUsersJson) : [];
-      
-      console.log('📚 loadUserProfiles: loaded', globalUsers.length, 'users from', ALL_USERS_STORAGE_KEY);
-      
-      const profiles: UserProfile[] = globalUsers.map(u => ({
-        id: u.id,
-        username: u.username || u.email.split('@')[0],
-        displayName: u.name || u.username || u.email.split('@')[0],
-        shareCookbookWithFriends: u.shareCookbookWithFriends || false,
-      }));
-      
-      setAllUserProfiles(profiles);
-      return profiles;
+      const profile = await trpcClient.users.getUserProfile.query({ userId });
+      return profile;
     } catch (error) {
-      console.error('Failed to load user profiles:', error);
-      return [];
+      console.error('Failed to load user profile from backend:', error);
+      return null;
     }
   }, []);
 
@@ -68,24 +57,12 @@ const [UserContext, useUser] = createContextHook(() => {
 
     setIsLoading(true);
     try {
-      const profiles = await loadUserProfiles();
-      let profile = profiles.find((p: UserProfile) => p.id === authUser.id);
-
-      if (!profile) {
-        profile = {
-          id: authUser.id,
-          username: authUser.username || authUser.email.split('@')[0],
-          displayName: authUser.name,
-          shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
-        };
-      } else {
-        profile = {
-          ...profile,
-          username: authUser.username || profile.username,
-          displayName: authUser.name || profile.displayName,
-          shareCookbookWithFriends: authUser.shareCookbookWithFriends ?? profile.shareCookbookWithFriends,
-        };
-      }
+      const profile: UserProfile = {
+        id: authUser.id,
+        username: authUser.username || authUser.email.split('@')[0],
+        displayName: authUser.name,
+        shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
+      };
 
       setCurrentUserProfile(profile);
       await loadFriendLinks();
@@ -94,7 +71,7 @@ const [UserContext, useUser] = createContextHook(() => {
     } finally {
       setIsLoading(false);
     }
-  }, [authUser, loadUserProfiles, loadFriendLinks]);
+  }, [authUser, loadFriendLinks]);
 
   useEffect(() => {
     loadCurrentUser();
@@ -124,7 +101,7 @@ const [UserContext, useUser] = createContextHook(() => {
   const searchUsersByUsername = useCallback(async (query: string) => {
     const normalized = query.trim().toLowerCase();
     
-    console.log('🔍 ======== USERNAME SEARCH START ======== ');
+    console.log('🔍 ======== FRONTEND USERNAME SEARCH START ======== ');
     console.log('🔍 Input query:', query);
     console.log('🔍 Normalized query:', normalized);
     console.log('🔍 Current user:', currentUserProfile?.id, currentUserProfile?.username);
@@ -136,62 +113,23 @@ const [UserContext, useUser] = createContextHook(() => {
     }
 
     try {
-      const globalUsersJson = await AsyncStorage.getItem(ALL_USERS_STORAGE_KEY);
-      console.log('🔍 Raw global users JSON:', globalUsersJson ? 'EXISTS' : 'NULL');
-      console.log('🔍 JSON length:', globalUsersJson?.length || 0);
+      console.log('🔍 FRONTEND: Calling backend search...');
       
-      const globalUsers: User[] = globalUsersJson ? JSON.parse(globalUsersJson) : [];
-      
-      console.log('🔍 ======== GLOBAL USERS DATA ========');
-      console.log('🔍 Total users in global store:', globalUsers.length);
-      console.log('🔍 All user IDs:', globalUsers.map(u => u.id).join(', '));
-      console.log('🔍 All user emails:', globalUsers.map(u => u.email).join(', '));
-      console.log('🔍 All usernames:', globalUsers.map(u => u.username || 'NO_USERNAME').join(', '));
-      
-      const profiles: UserProfile[] = globalUsers.map(u => {
-        const username = (u.username || u.email.split('@')[0]).toLowerCase();
-        return {
-          id: u.id,
-          username,
-          displayName: u.name || u.username || u.email.split('@')[0],
-          shareCookbookWithFriends: u.shareCookbookWithFriends || false,
-        };
+      const results = await trpcClient.users.searchUsers.query({
+        query: normalized,
+        excludeUserId: currentUserProfile?.id,
       });
       
-      console.log('🔍 ======== CONVERTED PROFILES ========');
-      profiles.forEach((p, i) => {
-        console.log(`🔍 Profile ${i + 1}: @${p.username} (${p.displayName}) [${p.id}]`);
-      });
-      
-      console.log('🔍 ======== FILTERING RESULTS ========');
-      const results = profiles.filter(
-        (p: UserProfile) => {
-          const isNotMe = p.id !== currentUserProfile?.id;
-          const matchesUsername = p.username.includes(normalized);
-          const matchesDisplayName = p.displayName.toLowerCase().includes(normalized);
-          
-          console.log(`🔍 Checking ${p.username}:`);
-          console.log(`   isNotMe: ${isNotMe}`);
-          console.log(`   matchesUsername: ${matchesUsername} ("${p.username}" includes "${normalized}")`);
-          console.log(`   matchesDisplayName: ${matchesDisplayName} ("${p.displayName.toLowerCase()}" includes "${normalized}")`);
-          
-          const matches = isNotMe && (matchesUsername || matchesDisplayName);
-          console.log(`   → Final result: ${matches ? '✅ MATCH' : '❌ NO MATCH'}`);
-          
-          return matches;
-        }
-      );
-      
-      console.log('🔍 ======== SEARCH RESULTS ========');
-      console.log('🔍 Total matches:', results.length);
+      console.log('🔍 ======== FRONTEND SEARCH RESULTS ========');
+      console.log('🔍 Total matches from backend:', results.length);
       results.forEach((r, i) => {
-        console.log(`🔍 Result ${i + 1}: @${r.username} (${r.displayName})`);
+        console.log(`🔍 Result ${i + 1}: @${r.username} (${r.displayName}) [${r.id}]`);
       });
-      console.log('🔍 ======== USERNAME SEARCH END ========');
+      console.log('🔍 ======== FRONTEND USERNAME SEARCH END ========');
 
       setSearchResults(results);
     } catch (error) {
-      console.error('❌ Failed to search users:', error);
+      console.error('❌ FRONTEND: Failed to search users:', error);
       setSearchResults([]);
     }
   }, [currentUserProfile]);
@@ -279,14 +217,8 @@ const [UserContext, useUser] = createContextHook(() => {
   }, [currentUserProfile, loadFriendLinks, saveFriendLinks]);
 
   const getUserProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
-    try {
-      const profiles = await loadUserProfiles();
-      return profiles.find((p: UserProfile) => p.id === userId) || null;
-    } catch (error) {
-      console.error('Failed to get user profile:', error);
-      return null;
-    }
-  }, [loadUserProfiles]);
+    return await loadUserProfileFromBackend(userId);
+  }, [loadUserProfileFromBackend]);
 
   const getMyFriendLinks = useCallback(() => {
     if (!currentUserProfile) return [];
@@ -320,9 +252,12 @@ const [UserContext, useUser] = createContextHook(() => {
       link.userId === currentUserProfile?.id ? link.friendUserId : link.userId
     );
 
-    const profiles = await loadUserProfiles();
-    return profiles.filter((p: UserProfile) => friendIds.includes(p.id));
-  }, [currentUserProfile, getMyFriendLinks, loadUserProfiles]);
+    const profiles = await Promise.all(
+      friendIds.map(async (id) => await loadUserProfileFromBackend(id))
+    );
+    
+    return profiles.filter((p): p is UserProfile => p !== null);
+  }, [currentUserProfile, getMyFriendLinks, loadUserProfileFromBackend]);
 
   const isFriend = useCallback((userId: string): boolean => {
     if (!currentUserProfile) return false;

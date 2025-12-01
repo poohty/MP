@@ -3,37 +3,35 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { User } from '@/types';
 import { router } from 'expo-router';
+import { trpcClient } from '@/lib/trpc';
 
 const USER_STORAGE_KEY = 'meal-planner-user';
-export const ALL_USERS_STORAGE_KEY = 'meal-planner-global-users';
 
 const result = createContextHook(() => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const upsertUserIntoGlobalDirectory = useCallback(async (userToStore: User) => {
+  const upsertUserIntoBackend = useCallback(async (userToStore: User) => {
     try {
-      const globalUsersJson = await AsyncStorage.getItem(ALL_USERS_STORAGE_KEY);
-      const globalUsers: User[] = globalUsersJson ? JSON.parse(globalUsersJson) : [];
-      
-      const index = globalUsers.findIndex(u => u.id === userToStore.id);
-      if (index >= 0) {
-        globalUsers[index] = userToStore;
-      } else {
-        globalUsers.push(userToStore);
-      }
-      
-      await AsyncStorage.setItem(ALL_USERS_STORAGE_KEY, JSON.stringify(globalUsers));
-      console.log('✅ GLOBAL USER UPSERT:', {
+      console.log('📤 FRONTEND: Upserting user to backend:', {
         id: userToStore.id,
         email: userToStore.email,
         username: userToStore.username,
         name: userToStore.name,
         shareCookbookWithFriends: userToStore.shareCookbookWithFriends,
-        totalUsersInGlobalStore: globalUsers.length,
       });
+
+      const result = await trpcClient.users.upsertUserProfile.mutate({
+        id: userToStore.id,
+        email: userToStore.email,
+        name: userToStore.name,
+        username: userToStore.username,
+        shareCookbookWithFriends: userToStore.shareCookbookWithFriends,
+      });
+
+      console.log('✅ FRONTEND: User upserted to backend successfully:', result);
     } catch (error) {
-      console.error('Failed to upsert user into global directory:', error);
+      console.error('❌ FRONTEND: Failed to upsert user to backend:', error);
     }
   }, []);
 
@@ -47,7 +45,7 @@ const result = createContextHook(() => {
         console.log('Parsed user:', parsedUser);
         setUser(parsedUser);
         
-        await upsertUserIntoGlobalDirectory(parsedUser);
+        await upsertUserIntoBackend(parsedUser);
       } else {
         console.log('No user found in storage');
       }
@@ -56,7 +54,7 @@ const result = createContextHook(() => {
     } finally {
       setIsLoading(false);
     }
-  }, [upsertUserIntoGlobalDirectory]);
+  }, [upsertUserIntoBackend]);
 
   useEffect(() => {
     loadUser();
@@ -68,12 +66,8 @@ const result = createContextHook(() => {
     try {
       const userId = email.toLowerCase().replace(/[^a-z0-9]/g, '');
       
-      const globalUsersJson = await AsyncStorage.getItem(ALL_USERS_STORAGE_KEY);
-      const globalUsers: User[] = globalUsersJson ? JSON.parse(globalUsersJson) : [];
-      const existingUser = globalUsers.find(u => u.id === userId);
-      
       const username = email.split('@')[0].toLowerCase();
-      const newUser: User = existingUser || {
+      const newUser: User = {
         id: userId,
         email,
         name: email.split('@')[0],
@@ -85,7 +79,7 @@ const result = createContextHook(() => {
       await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
       setUser(newUser);
       
-      await upsertUserIntoGlobalDirectory(newUser);
+      await upsertUserIntoBackend(newUser);
       
       router.replace('/(tabs)');
       return true;
@@ -93,7 +87,7 @@ const result = createContextHook(() => {
       console.error('Login failed:', error);
       return false;
     }
-  }, [upsertUserIntoGlobalDirectory]);
+  }, [upsertUserIntoBackend]);
 
   const signup = useCallback(async (name: string, email: string, password: string, locationPermission?: boolean) => {
     try {
@@ -112,7 +106,7 @@ const result = createContextHook(() => {
       await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
       setUser(newUser);
       
-      await upsertUserIntoGlobalDirectory(newUser);
+      await upsertUserIntoBackend(newUser);
       
       router.replace('/(tabs)');
       return true;
@@ -120,7 +114,7 @@ const result = createContextHook(() => {
       console.error('Signup failed:', error);
       return false;
     }
-  }, [upsertUserIntoGlobalDirectory]);
+  }, [upsertUserIntoBackend]);
 
   const updateProfile = useCallback(async (updates: Partial<User>) => {
     try {
@@ -135,11 +129,11 @@ const result = createContextHook(() => {
       await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
       setUser(updatedUser);
       
-      await upsertUserIntoGlobalDirectory(updatedUser);
+      await upsertUserIntoBackend(updatedUser);
     } catch (error) {
       console.error('Failed to update profile:', error);
     }
-  }, [user, upsertUserIntoGlobalDirectory]);
+  }, [user, upsertUserIntoBackend]);
 
   const logout = useCallback(async () => {
     try {
