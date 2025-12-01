@@ -1,12 +1,12 @@
 import { publicProcedure } from "@/backend/trpc/create-context";
-import { userProfiles } from "./upsert-user-profile";
+import { loadAllUserProfiles } from "./user-store";
 
-export default publicProcedure.query(() => {
-  const allProfiles = Array.from(userProfiles.values());
-  
-  console.log('📊 BACKEND GET ALL USERS:', {
+export default publicProcedure.query(async () => {
+  const allProfiles = await loadAllUserProfiles();
+
+  console.log("📊 BACKEND GET ALL USERS (JSON store):", {
     totalCount: allProfiles.length,
-    users: allProfiles.map(p => ({
+    users: allProfiles.map((p) => ({
       id: p.id,
       username: p.username,
       email: p.email,

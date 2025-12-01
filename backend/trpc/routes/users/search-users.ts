@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { publicProcedure } from "@/backend/trpc/create-context";
-import { userProfiles } from "./upsert-user-profile";
+import { searchUsersByUsername, loadAllUserProfiles } from "./user-store";
 
 export default publicProcedure
   .input(
@@ -9,50 +9,35 @@ export default publicProcedure
       excludeUserId: z.string().optional(),
     })
   )
-  .query(({ input }) => {
+  .query(async ({ input }) => {
     const normalized = input.query.trim().toLowerCase();
 
-    console.log('🔍 BACKEND SEARCH USERS:', {
+    const allProfiles = await loadAllUserProfiles();
+
+    console.log("🔍 BACKEND SEARCH USERS:", {
       query: input.query,
       normalized,
       excludeUserId: input.excludeUserId,
-      totalProfilesInBackend: userProfiles.size,
+      totalProfilesInBackend: allProfiles.length,
     });
 
     if (!normalized || normalized.length < 2) {
-      console.log('🔍 BACKEND: Query too short, returning empty results');
+      console.log("🔍 BACKEND: Query too short, returning empty list");
       return [];
     }
 
-    const allProfiles = Array.from(userProfiles.values());
-    console.log('🔍 BACKEND: All profiles:', allProfiles.map(p => `${p.username} (${p.id})`).join(', '));
+    const matches = await searchUsersByUsername(normalized, input.excludeUserId);
 
-    const results = allProfiles
-      .filter((profile) => {
-        const isNotExcluded = !input.excludeUserId || profile.id !== input.excludeUserId;
-        const matchesUsername = profile.username.toLowerCase().includes(normalized);
-        const matchesDisplayName = profile.displayName.toLowerCase().includes(normalized);
-        
-        const matches = isNotExcluded && (matchesUsername || matchesDisplayName);
-        
-        console.log(`🔍 BACKEND: Checking ${profile.username}:`, {
-          isNotExcluded,
-          matchesUsername,
-          matchesDisplayName,
-          matches,
-        });
-        
-        return matches;
-      })
-      .map((profile) => ({
-        id: profile.id,
-        username: profile.username,
-        displayName: profile.displayName,
-        shareCookbookWithFriends: profile.shareCookbookWithFriends,
-      }));
+    console.log("🔍 BACKEND: Search results count:", matches.length);
+    console.log(
+      "🔍 BACKEND: Search results:",
+      matches.map((r) => `${r.username} (${r.id})`).join(", ")
+    );
 
-    console.log('🔍 BACKEND: Search results count:', results.length);
-    console.log('🔍 BACKEND: Search results:', results.map(r => `${r.username} (${r.id})`).join(', '));
-
-    return results;
+    return matches.map((profile) => ({
+      id: profile.id,
+      username: profile.username,
+      displayName: profile.displayName,
+      shareCookbookWithFriends: profile.shareCookbookWithFriends,
+    }));
   });
