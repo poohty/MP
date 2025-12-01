@@ -44,17 +44,25 @@ const result = createContextHook(() => {
       const globalUsers: User[] = globalUsersJson ? JSON.parse(globalUsersJson) : [];
       const existingUser = globalUsers.find(u => u.id === userId);
       
+      const username = email.split('@')[0].toLowerCase();
       const newUser: User = existingUser || {
         id: userId,
         email,
         name: email.split('@')[0],
-        username: email.split('@')[0],
+        username,
+        shareCookbookWithFriends: false,
       };
       
       if (!existingUser) {
         globalUsers.push(newUser);
         await AsyncStorage.setItem(GLOBAL_USERS_KEY, JSON.stringify(globalUsers));
-        console.log('Added user to global users list during login. Total users:', globalUsers.length);
+        console.log('✅ GLOBAL USER UPSERT (login):', {
+          id: newUser.id,
+          email: newUser.email,
+          username: newUser.username,
+          name: newUser.name,
+          totalUsersInGlobalStore: globalUsers.length,
+        });
       }
       
       console.log('Logging in user:', newUser);
@@ -71,12 +79,14 @@ const result = createContextHook(() => {
   const signup = useCallback(async (name: string, email: string, password: string, locationPermission?: boolean) => {
     try {
       const userId = email.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const username = email.split('@')[0].toLowerCase();
       const newUser: User = {
         id: userId,
         email,
         name,
-        username: email.split('@')[0],
+        username,
         locationPermission,
+        shareCookbookWithFriends: false,
       };
       
       console.log('Signing up user:', newUser);
@@ -94,8 +104,13 @@ const result = createContextHook(() => {
         }
         
         await AsyncStorage.setItem(GLOBAL_USERS_KEY, JSON.stringify(globalUsers));
-        console.log('Added user to global users list:', globalUsers.length, 'total users');
-        console.log('User data:', JSON.stringify(newUser, null, 2));
+        console.log('✅ GLOBAL USER UPSERT (signup):', {
+          id: newUser.id,
+          email: newUser.email,
+          username: newUser.username,
+          name: newUser.name,
+          totalUsersInGlobalStore: globalUsers.length,
+        });
       } catch (globalError) {
         console.error('Failed to update global users list:', globalError);
       }
@@ -133,8 +148,14 @@ const result = createContextHook(() => {
         }
         
         await AsyncStorage.setItem(GLOBAL_USERS_KEY, JSON.stringify(globalUsers));
-        console.log('Updated user in global users list. Total users:', globalUsers.length);
-        console.log('Updated user data:', JSON.stringify(updatedUser, null, 2));
+        console.log('✅ GLOBAL USER UPSERT (updateProfile):', {
+          id: updatedUser.id,
+          email: updatedUser.email,
+          username: updatedUser.username,
+          name: updatedUser.name,
+          shareCookbookWithFriends: updatedUser.shareCookbookWithFriends,
+          totalUsersInGlobalStore: globalUsers.length,
+        });
       } catch (globalError) {
         console.error('Failed to update global users list:', globalError);
       }

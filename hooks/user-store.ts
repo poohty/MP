@@ -129,47 +129,64 @@ const [UserContext, useUser] = createContextHook(() => {
   }, [currentUserProfile, authUser, updateAuthProfile]);
 
   const searchUsersByUsername = useCallback(async (query: string) => {
-    if (!query || query.trim().length === 0) {
+    const normalized = query.trim().toLowerCase();
+    
+    console.log('🔍 searchUsersByUsername called with:', query);
+    console.log('🔍 normalized query:', normalized);
+
+    if (!normalized || normalized.length < 2) {
+      console.log('🔍 Query too short, clearing results');
       setSearchResults([]);
       return;
     }
 
     try {
       const globalUsersJson = await AsyncStorage.getItem(GLOBAL_USERS_KEY);
+      console.log('🔍 Raw global users JSON length:', globalUsersJson?.length || 0);
+      
       const globalUsers: User[] = globalUsersJson ? JSON.parse(globalUsersJson) : [];
       
-      const lowerQuery = query.toLowerCase().trim();
-      
-      console.log('🔍 Searching users:');
-      console.log('  Query:', lowerQuery);
+      console.log('🔍 SEARCH DEBUG:');
+      console.log('  Query (normalized):', normalized);
       console.log('  Total users in global store:', globalUsers.length);
       console.log('  Current user ID:', currentUserProfile?.id);
+      console.log('  All user IDs:', globalUsers.map(u => u.id).join(', '));
+      console.log('  All usernames:', globalUsers.map(u => u.username || 'NO_USERNAME').join(', '));
       
-      const profiles: UserProfile[] = globalUsers.map(u => ({
-        id: u.id,
-        username: u.username || u.email.split('@')[0],
-        displayName: u.name || u.username || u.email.split('@')[0],
-        shareCookbookWithFriends: u.shareCookbookWithFriends || false,
-      }));
+      const profiles: UserProfile[] = globalUsers.map(u => {
+        const username = (u.username || u.email.split('@')[0]).toLowerCase();
+        return {
+          id: u.id,
+          username,
+          displayName: u.name || u.username || u.email.split('@')[0],
+          shareCookbookWithFriends: u.shareCookbookWithFriends || false,
+        };
+      });
       
-      console.log('  All profiles:', profiles.map(p => `${p.username} (${p.displayName})`).join(', '));
+      console.log('  Converted profiles:', profiles.map(p => `${p.username} (${p.displayName})`).join(', '));
       
       const results = profiles.filter(
         (p: UserProfile) => {
-          const matchesId = p.id !== currentUserProfile?.id;
-          const matchesUsername = p.username.toLowerCase().includes(lowerQuery);
-          const matchesDisplayName = p.displayName.toLowerCase().includes(lowerQuery);
+          const isNotMe = p.id !== currentUserProfile?.id;
+          const matchesUsername = p.username.includes(normalized);
+          const matchesDisplayName = p.displayName.toLowerCase().includes(normalized);
           
-          return matchesId && (matchesUsername || matchesDisplayName);
+          const matches = isNotMe && (matchesUsername || matchesDisplayName);
+          
+          if (matches) {
+            console.log('  ✅ Match found:', p.username, 'because username:', matchesUsername, 'displayName:', matchesDisplayName);
+          }
+          
+          return matches;
         }
       );
       
-      console.log('  Found matches:', results.length);
+      console.log('🔍 searchUsersByUsername results from global store:', results.length);
       console.log('  Matched users:', results.map(r => `@${r.username} (${r.displayName})`).join(', '));
 
       setSearchResults(results);
     } catch (error) {
-      console.error('Failed to search users:', error);
+      console.error('❌ Failed to search users:', error);
       setSearchResults([]);
     }
   }, [currentUserProfile]);
