@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/auth-store';
 import { useRecipes } from '@/hooks/recipe-store';
@@ -267,9 +267,11 @@ function WelcomeScreen() {
     <GradientBackground style={welcomeStyles.container}>
       <View style={welcomeStyles.content}>
         <View style={welcomeStyles.logoContainer}>
-          <View style={[welcomeStyles.image, { backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' }]}>
-            <Text style={{ fontSize: 80 }}>🍳</Text>
-          </View>
+          <Image
+            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/3hcmxxxhnr8aykl1w78r1' }}
+            style={welcomeStyles.image}
+            resizeMode="cover"
+          />
         </View>
         
         <View style={welcomeStyles.textContainer}>
