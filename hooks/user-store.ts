@@ -131,27 +131,29 @@ const [UserContext, useUser] = createContextHook(() => {
   const searchUsersByUsername = useCallback(async (query: string) => {
     const normalized = query.trim().toLowerCase();
     
-    console.log('🔍 searchUsersByUsername called with:', query);
-    console.log('🔍 normalized query:', normalized);
+    console.log('🔍 ======== USERNAME SEARCH START ======== ');
+    console.log('🔍 Input query:', query);
+    console.log('🔍 Normalized query:', normalized);
+    console.log('🔍 Current user:', currentUserProfile?.id, currentUserProfile?.username);
 
     if (!normalized || normalized.length < 2) {
-      console.log('🔍 Query too short, clearing results');
+      console.log('🔍 Query too short (<2 chars), clearing results');
       setSearchResults([]);
       return;
     }
 
     try {
       const globalUsersJson = await AsyncStorage.getItem(GLOBAL_USERS_KEY);
-      console.log('🔍 Raw global users JSON length:', globalUsersJson?.length || 0);
+      console.log('🔍 Raw global users JSON:', globalUsersJson ? 'EXISTS' : 'NULL');
+      console.log('🔍 JSON length:', globalUsersJson?.length || 0);
       
       const globalUsers: User[] = globalUsersJson ? JSON.parse(globalUsersJson) : [];
       
-      console.log('🔍 SEARCH DEBUG:');
-      console.log('  Query (normalized):', normalized);
-      console.log('  Total users in global store:', globalUsers.length);
-      console.log('  Current user ID:', currentUserProfile?.id);
-      console.log('  All user IDs:', globalUsers.map(u => u.id).join(', '));
-      console.log('  All usernames:', globalUsers.map(u => u.username || 'NO_USERNAME').join(', '));
+      console.log('🔍 ======== GLOBAL USERS DATA ========');
+      console.log('🔍 Total users in global store:', globalUsers.length);
+      console.log('🔍 All user IDs:', globalUsers.map(u => u.id).join(', '));
+      console.log('🔍 All user emails:', globalUsers.map(u => u.email).join(', '));
+      console.log('🔍 All usernames:', globalUsers.map(u => u.username || 'NO_USERNAME').join(', '));
       
       const profiles: UserProfile[] = globalUsers.map(u => {
         const username = (u.username || u.email.split('@')[0]).toLowerCase();
@@ -163,26 +165,36 @@ const [UserContext, useUser] = createContextHook(() => {
         };
       });
       
-      console.log('  Converted profiles:', profiles.map(p => `${p.username} (${p.displayName})`).join(', '));
+      console.log('🔍 ======== CONVERTED PROFILES ========');
+      profiles.forEach((p, i) => {
+        console.log(`🔍 Profile ${i + 1}: @${p.username} (${p.displayName}) [${p.id}]`);
+      });
       
+      console.log('🔍 ======== FILTERING RESULTS ========');
       const results = profiles.filter(
         (p: UserProfile) => {
           const isNotMe = p.id !== currentUserProfile?.id;
           const matchesUsername = p.username.includes(normalized);
           const matchesDisplayName = p.displayName.toLowerCase().includes(normalized);
           
-          const matches = isNotMe && (matchesUsername || matchesDisplayName);
+          console.log(`🔍 Checking ${p.username}:`);
+          console.log(`   isNotMe: ${isNotMe}`);
+          console.log(`   matchesUsername: ${matchesUsername} ("${p.username}" includes "${normalized}")`);
+          console.log(`   matchesDisplayName: ${matchesDisplayName} ("${p.displayName.toLowerCase()}" includes "${normalized}")`);
           
-          if (matches) {
-            console.log('  ✅ Match found:', p.username, 'because username:', matchesUsername, 'displayName:', matchesDisplayName);
-          }
+          const matches = isNotMe && (matchesUsername || matchesDisplayName);
+          console.log(`   → Final result: ${matches ? '✅ MATCH' : '❌ NO MATCH'}`);
           
           return matches;
         }
       );
       
-      console.log('🔍 searchUsersByUsername results from global store:', results.length);
-      console.log('  Matched users:', results.map(r => `@${r.username} (${r.displayName})`).join(', '));
+      console.log('🔍 ======== SEARCH RESULTS ========');
+      console.log('🔍 Total matches:', results.length);
+      results.forEach((r, i) => {
+        console.log(`🔍 Result ${i + 1}: @${r.username} (${r.displayName})`);
+      });
+      console.log('🔍 ======== USERNAME SEARCH END ========');
 
       setSearchResults(results);
     } catch (error) {

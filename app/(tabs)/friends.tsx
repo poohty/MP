@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUser } from '@/hooks/user-store';
 import { UserProfile, FriendLink } from '@/types';
 import Colors from '@/constants/colors';
 import GradientBackground from '@/components/GradientBackground';
 
-import { Search, UserPlus, Check, X, RefreshCw } from 'lucide-react-native';
+import { Search, UserPlus, Check, X, RefreshCw, Bug } from 'lucide-react-native';
 
 export default function FriendsScreen() {
   const { 
@@ -114,18 +115,45 @@ export default function FriendsScreen() {
     });
   };
 
+  const debugGlobalUsers = async () => {
+    try {
+      const globalUsersJson = await AsyncStorage.getItem('meal-planner-global-users');
+      if (!globalUsersJson) {
+        Alert.alert('Debug', 'No global users found in storage');
+        return;
+      }
+      const users = JSON.parse(globalUsersJson);
+      const userList = users.map((u: any) => `${u.name} (@${u.username || 'no-username'})`).join('\n');
+      Alert.alert(
+        'Debug: Global Users',
+        `Total: ${users.length}\n\n${userList}`,
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      Alert.alert('Debug Error', String(error));
+    }
+  };
+
   return (
     <GradientBackground>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.searchSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Find Friends</Text>
-            <TouchableOpacity 
-              style={styles.refreshButton}
-              onPress={loadFriendsAndRequests}
-            >
-              <RefreshCw size={18} color={Colors.primary} />
-            </TouchableOpacity>
+            <View style={styles.headerButtons}>
+              <TouchableOpacity 
+                style={styles.refreshButton}
+                onPress={debugGlobalUsers}
+              >
+                <Bug size={18} color={Colors.warning} />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.refreshButton}
+                onPress={loadFriendsAndRequests}
+              >
+                <RefreshCw size={18} color={Colors.primary} />
+              </TouchableOpacity>
+            </View>
           </View>
           <View style={styles.searchContainer}>
             <TextInput
@@ -275,6 +303,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 16,
   },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
@@ -284,6 +316,9 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 8,
     backgroundColor: Colors.surface,
+    minWidth: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   searchContainer: {
     flexDirection: 'row',
