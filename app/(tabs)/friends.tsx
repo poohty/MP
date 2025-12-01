@@ -122,17 +122,19 @@ export default function FriendsScreen() {
       
       console.log('🐛 DEBUG: Backend users result:', result);
       
+      const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? 'NOT SET';
+      
       const userList = result.users.length > 0
         ? result.users.map((u: any) => `${u.displayName} (@${u.username}) [${u.email}]`).join('\n')
         : 'No users in backend';
       
       Alert.alert(
         '🔍 Backend User Directory',
-        `Total Users: ${result.total}\n\n${userList}`,
+        `Backend URL: ${baseUrl}\n\nBackend Instance ID: ${result.backendInstanceId}\n\nTotal Users: ${result.total}\n\n${userList}`,
         [{ text: 'OK' }]
       );
     } catch (error) {
-      console.error('🐛 DEBUG ERROR:', error);
+      console.error('🐛 DEBUG ERROR: Failed to fetch backend users:', error);
       Alert.alert('Debug Error', `Failed to fetch backend users: ${String(error)}`);
     }
   };
