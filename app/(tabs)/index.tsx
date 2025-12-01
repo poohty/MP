@@ -38,9 +38,11 @@ export default function HomeScreen() {
         </View>
         
         <View style={styles.heroContainer}>
-          <View style={[styles.heroImage, { backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' }]}>
-            <Text style={{ fontSize: 48 }}>🍲</Text>
-          </View>
+          <Image
+            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/xxp7z8fju73cgthkxv61d' }}
+            style={styles.heroImage}
+            resizeMode="cover"
+          />
           <LinearGradient
             colors={['transparent', 'rgba(0,0,0,0.8)']}
             style={styles.heroGradient}
