@@ -9,6 +9,7 @@ import { RecipeContext } from "@/hooks/recipe-store";
 import { MealPlanContext } from "@/hooks/meal-plan-store";
 import { UserContext } from "@/hooks/user-store";
 import Colors from "@/constants/colors";
+import { trpc, trpcClient } from "@/lib/trpc";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -55,19 +56,21 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <AuthContext>
-          <UserContext>
-            <RecipeContext>
-              <MealPlanContext>
-                <StatusBar style="light" />
-                <RootLayoutNav />
-              </MealPlanContext>
-            </RecipeContext>
-          </UserContext>
-        </AuthContext>
-      </GestureHandlerRootView>
-    </QueryClientProvider>
+    <trpc.Provider client={trpcClient} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <AuthContext>
+            <UserContext>
+              <RecipeContext>
+                <MealPlanContext>
+                  <StatusBar style="light" />
+                  <RootLayoutNav />
+                </MealPlanContext>
+              </RecipeContext>
+            </UserContext>
+          </AuthContext>
+        </GestureHandlerRootView>
+      </QueryClientProvider>
+    </trpc.Provider>
   );
 }
