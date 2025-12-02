@@ -48,11 +48,6 @@ export const trpcClient = trpc.createClient({
             contentType: response.headers.get('content-type')
           });
           
-          if (!response.ok) {
-            const text = await response.text();
-            console.error('🌐 tRPC fetch error response body:', text.substring(0, 500));
-          }
-          
           return response;
         } catch (error) {
           console.error('🌐 tRPC fetch error:', error);
