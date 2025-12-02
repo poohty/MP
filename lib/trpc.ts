@@ -38,10 +38,24 @@ export const trpcClient = trpc.createClient({
           );
         }
 
+        console.log('🌐 tRPC fetch request:', { url, method: options?.method });
+
         try {
-          return await fetch(url, options);
+          const response = await fetch(url, options);
+          console.log('🌐 tRPC fetch response:', { 
+            status: response.status, 
+            statusText: response.statusText,
+            contentType: response.headers.get('content-type')
+          });
+          
+          if (!response.ok) {
+            const text = await response.text();
+            console.error('🌐 tRPC fetch error response body:', text.substring(0, 500));
+          }
+          
+          return response;
         } catch (error) {
-          console.error('tRPC fetch error:', error);
+          console.error('🌐 tRPC fetch error:', error);
           return new Response(
             JSON.stringify({ error: 'Backend unavailable' }),
             { 
