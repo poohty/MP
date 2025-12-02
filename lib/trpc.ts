@@ -38,14 +38,23 @@ export const trpcClient = trpc.createClient({
           );
         }
 
-        console.log('🌐 tRPC fetch request:', { url, method: options?.method });
+        console.log('🌐 tRPC fetch request:', { 
+          url: String(url), 
+          method: options?.method,
+          body: options?.body ? String(options.body).substring(0, 200) : 'none'
+        });
 
         try {
           const response = await fetch(url, options);
+          
+          const clonedResponse = response.clone();
+          const text = await clonedResponse.text();
+          
           console.log('🌐 tRPC fetch response:', { 
             status: response.status, 
             statusText: response.statusText,
-            contentType: response.headers.get('content-type')
+            contentType: response.headers.get('content-type'),
+            bodyPreview: text.substring(0, 500)
           });
           
           return response;
