@@ -47,10 +47,14 @@ export const trpcClient = trpc.createClient({
         try {
           const response = await fetch(url, options);
           
+          const clonedResponse = response.clone();
+          const responseText = await clonedResponse.text();
+          
           console.log('🌐 tRPC fetch response:', { 
             status: response.status, 
             statusText: response.statusText,
             contentType: response.headers.get('content-type'),
+            bodyPreview: responseText.substring(0, 200)
           });
           
           return response;

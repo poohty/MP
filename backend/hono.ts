@@ -17,6 +17,16 @@ const app = new Hono();
 
 app.use("*", cors());
 
+app.get("/api/trpc/health", (c) => {
+  return c.json({ 
+    status: "ok", 
+    message: "tRPC is mounted at /api/trpc",
+    instanceId: BACKEND_INSTANCE_ID,
+    startTime: BACKEND_START_TIME,
+    pid: process.pid,
+  });
+});
+
 app.use(
   "/api/trpc/*",
   trpcServer({

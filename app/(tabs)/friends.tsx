@@ -124,6 +124,21 @@ export default function FriendsScreen() {
       console.log('🐛 Base URL:', baseUrl);
       console.log('🐛 Full tRPC URL:', fullUrl);
       
+      console.log('🐛 Testing health endpoint first...');
+      if (baseUrl !== '❌ NOT SET - THIS IS THE PROBLEM!') {
+        const healthUrl = `${baseUrl}/api/trpc/health`;
+        console.log('🐛 Health URL:', healthUrl);
+        try {
+          const healthResponse = await fetch(healthUrl);
+          const healthText = await healthResponse.text();
+          console.log('🐛 Health response status:', healthResponse.status);
+          console.log('🐛 Health response body:', healthText.substring(0, 200));
+        } catch (healthError) {
+          console.error('🐛 Health check failed:', healthError);
+        }
+      }
+      
+      console.log('🐛 Now calling tRPC getAllUsers...');
       const result = await trpcClient.users.getAllUsers.query();
       
       console.log('🐛 DEBUG: Backend users result:', result);
