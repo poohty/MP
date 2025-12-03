@@ -91,6 +91,7 @@ export type StoreComparison = {
 
 export type UserProfile = {
   id: string;
+  email: string;
   username: string;
   displayName: string;
   shareCookbookWithFriends: boolean;

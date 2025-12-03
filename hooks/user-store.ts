@@ -1,11 +1,8 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
 import { UserProfile, FriendLink } from '@/types';
 import { useAuth } from './auth-store';
-import { trpcClient } from '@/lib/trpc';
-
-const FRIEND_LINKS_STORAGE_KEY = 'social-friend-links';
+import { supabase } from '@/lib/supabase';
 
 const [UserContext, useUser] = createContextHook(() => {
   const { user: authUser, updateProfile: updateAuthProfile } = useAuth();
@@ -15,12 +12,30 @@ const [UserContext, useUser] = createContextHook(() => {
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadUserProfileFromBackend = useCallback(async (userId: string): Promise<UserProfile | null> => {
+  const loadUserProfileFromSupabase = useCallback(async (userId: string): Promise<UserProfile | null> => {
     try {
-      const profile = await trpcClient.users.getUserProfile.query({ userId });
-      return profile;
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Failed to load user profile from Supabase:', error);
+        return null;
+      }
+
+      if (!data) return null;
+
+      return {
+        id: data.id,
+        email: data.email,
+        username: data.username,
+        displayName: data.display_name,
+        shareCookbookWithFriends: data.share_cookbook_with_friends,
+      };
     } catch (error) {
-      console.error('Failed to load user profile from backend:', error);
+      console.error('Unexpected error loading user profile from Supabase:', error);
       return null;
     }
   }, []);
@@ -28,25 +43,36 @@ const [UserContext, useUser] = createContextHook(() => {
 
 
   const loadFriendLinks = useCallback(async () => {
+    if (!currentUserProfile?.id) return [];
+
     try {
-      const stored = await AsyncStorage.getItem(FRIEND_LINKS_STORAGE_KEY);
-      const links = stored ? JSON.parse(stored) : [];
+      const { data, error } = await supabase
+        .from('friend_links')
+        .select('*')
+        .or(`user_id.eq.${currentUserProfile.id},friend_user_id.eq.${currentUserProfile.id}`);
+
+      if (error) {
+        console.error('❌ Supabase load friend links error:', error);
+        return [];
+      }
+
+      const links: FriendLink[] = (data || []).map((row: any) => ({
+        id: row.id,
+        userId: row.user_id,
+        friendUserId: row.friend_user_id,
+        status: row.status,
+        requestedAt: new Date(row.created_at).getTime(),
+      }));
+
       setFriendLinks(links);
       return links;
     } catch (error) {
-      console.error('Failed to load friend links:', error);
+      console.error('Failed to load friend links from Supabase:', error);
       return [];
     }
-  }, []);
+  }, [currentUserProfile]);
 
-  const saveFriendLinks = useCallback(async (links: FriendLink[]) => {
-    try {
-      await AsyncStorage.setItem(FRIEND_LINKS_STORAGE_KEY, JSON.stringify(links));
-      setFriendLinks(links);
-    } catch (error) {
-      console.error('Failed to save friend links:', error);
-    }
-  }, []);
+
 
   const loadCurrentUser = useCallback(async () => {
     if (!authUser) {
@@ -57,14 +83,33 @@ const [UserContext, useUser] = createContextHook(() => {
 
     setIsLoading(true);
     try {
-      const profile: UserProfile = {
-        id: authUser.id,
-        username: authUser.username || authUser.email.split('@')[0],
-        displayName: authUser.name,
-        shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
-      };
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
 
-      setCurrentUserProfile(profile);
+      if (error) {
+        console.error('❌ Supabase load current user profile error:', error);
+        const fallbackProfile: UserProfile = {
+          id: authUser.id,
+          email: authUser.email,
+          username: authUser.username || authUser.email.split('@')[0],
+          displayName: authUser.name,
+          shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
+        };
+        setCurrentUserProfile(fallbackProfile);
+      } else if (data) {
+        const profile: UserProfile = {
+          id: data.id,
+          email: data.email,
+          username: data.username,
+          displayName: data.display_name,
+          shareCookbookWithFriends: data.share_cookbook_with_friends,
+        };
+        setCurrentUserProfile(profile);
+      }
+
       await loadFriendLinks();
     } catch (error) {
       console.error('Failed to load current user:', error);
@@ -100,36 +145,46 @@ const [UserContext, useUser] = createContextHook(() => {
 
   const searchUsersByUsername = useCallback(async (query: string) => {
     const normalized = query.trim().toLowerCase();
-    
-    console.log('🔍 ======== FRONTEND USERNAME SEARCH START ======== ');
-    console.log('🔍 Input query:', query);
-    console.log('🔍 Normalized query:', normalized);
-    console.log('🔍 Current user:', currentUserProfile?.id, currentUserProfile?.username);
+
+    console.log('🔍 USER SEARCH query:', query, 'normalized:', normalized);
 
     if (!normalized || normalized.length < 2) {
-      console.log('🔍 Query too short (<2 chars), clearing results');
+      setSearchResults([]);
+      return;
+    }
+
+    if (!currentUserProfile?.id) {
       setSearchResults([]);
       return;
     }
 
     try {
-      console.log('🔍 FRONTEND: Calling backend search...');
-      
-      const results = await trpcClient.users.searchUsers.query({
-        query: normalized,
-        excludeUserId: currentUserProfile?.id,
-      });
-      
-      console.log('🔍 ======== FRONTEND SEARCH RESULTS ========');
-      console.log('🔍 Total matches from backend:', results.length);
-      results.forEach((r, i) => {
-        console.log(`🔍 Result ${i + 1}: @${r.username} (${r.displayName}) [${r.id}]`);
-      });
-      console.log('🔍 ======== FRONTEND USERNAME SEARCH END ========');
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .ilike('username', `%${normalized}%`);
+
+      if (error) {
+        console.error('❌ Supabase searchUsers error:', error);
+        setSearchResults([]);
+        return;
+      }
+
+      const results: UserProfile[] = (data || [])
+        .filter((row: any) => row.id !== currentUserProfile.id)
+        .map((row: any) => ({
+          id: row.id,
+          email: row.email,
+          username: row.username,
+          displayName: row.display_name,
+          shareCookbookWithFriends: row.share_cookbook_with_friends,
+        }));
+
+      console.log('🔍 USER SEARCH results count:', results.length);
 
       setSearchResults(results);
-    } catch (error) {
-      console.error('❌ FRONTEND: Failed to search users:', error);
+    } catch (e) {
+      console.error('❌ searchUsersByUsername unexpected error:', e);
       setSearchResults([]);
     }
   }, [currentUserProfile]);
@@ -151,74 +206,106 @@ const [UserContext, useUser] = createContextHook(() => {
         return false;
       }
 
+      const { data, error } = await supabase
+        .from('friend_links')
+        .insert({
+          user_id: currentUserProfile.id,
+          friend_user_id: targetUserId,
+          status: 'pending',
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Supabase send friend request error:', error);
+        return false;
+      }
+
       const newLink: FriendLink = {
-        id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-        userId: currentUserProfile.id,
-        friendUserId: targetUserId,
-        status: 'pending',
-        requestedAt: Date.now(),
+        id: data.id,
+        userId: data.user_id,
+        friendUserId: data.friend_user_id,
+        status: data.status,
+        requestedAt: new Date(data.created_at).getTime(),
       };
 
-      await saveFriendLinks([...links, newLink]);
+      setFriendLinks([...links, newLink]);
+      console.log('✅ Friend request sent successfully');
       return true;
     } catch (error) {
       console.error('Failed to send friend request:', error);
       return false;
     }
-  }, [currentUserProfile, loadFriendLinks, saveFriendLinks]);
+  }, [currentUserProfile, loadFriendLinks]);
 
   const acceptFriendRequest = useCallback(async (friendLinkId: string) => {
     try {
-      const links = await loadFriendLinks();
-      const updatedLinks = links.map((link: FriendLink) =>
-        link.id === friendLinkId ? { ...link, status: 'accepted' as const } : link
-      );
+      const { error } = await supabase
+        .from('friend_links')
+        .update({ status: 'accepted', updated_at: new Date().toISOString() })
+        .eq('id', friendLinkId);
 
-      await saveFriendLinks(updatedLinks);
+      if (error) {
+        console.error('❌ Supabase accept friend request error:', error);
+        return false;
+      }
+
+      await loadFriendLinks();
+      console.log('✅ Friend request accepted successfully');
       return true;
     } catch (error) {
       console.error('Failed to accept friend request:', error);
       return false;
     }
-  }, [loadFriendLinks, saveFriendLinks]);
+  }, [loadFriendLinks]);
 
   const rejectFriendRequest = useCallback(async (friendLinkId: string) => {
     try {
-      const links = await loadFriendLinks();
-      const updatedLinks = links.filter((link: FriendLink) => link.id !== friendLinkId);
+      const { error } = await supabase
+        .from('friend_links')
+        .delete()
+        .eq('id', friendLinkId);
 
-      await saveFriendLinks(updatedLinks);
+      if (error) {
+        console.error('❌ Supabase reject friend request error:', error);
+        return false;
+      }
+
+      await loadFriendLinks();
+      console.log('✅ Friend request rejected successfully');
       return true;
     } catch (error) {
       console.error('Failed to reject friend request:', error);
       return false;
     }
-  }, [loadFriendLinks, saveFriendLinks]);
+  }, [loadFriendLinks]);
 
   const removeFriend = useCallback(async (friendUserId: string) => {
     if (!currentUserProfile) return false;
 
     try {
-      const links = await loadFriendLinks();
-      const updatedLinks = links.filter(
-        (link: FriendLink) =>
-          !(
-            (link.userId === currentUserProfile.id && link.friendUserId === friendUserId) ||
-            (link.userId === friendUserId && link.friendUserId === currentUserProfile.id)
-          )
-      );
+      const { error } = await supabase
+        .from('friend_links')
+        .delete()
+        .or(`and(user_id.eq.${currentUserProfile.id},friend_user_id.eq.${friendUserId}),and(user_id.eq.${friendUserId},friend_user_id.eq.${currentUserProfile.id})`);
 
-      await saveFriendLinks(updatedLinks);
+      if (error) {
+        console.error('❌ Supabase remove friend error:', error);
+        return false;
+      }
+
+      await loadFriendLinks();
+      console.log('✅ Friend removed successfully');
       return true;
     } catch (error) {
       console.error('Failed to remove friend:', error);
       return false;
     }
-  }, [currentUserProfile, loadFriendLinks, saveFriendLinks]);
+  }, [currentUserProfile, loadFriendLinks]);
 
   const getUserProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
-    return await loadUserProfileFromBackend(userId);
-  }, [loadUserProfileFromBackend]);
+    return await loadUserProfileFromSupabase(userId);
+  }, [loadUserProfileFromSupabase]);
 
   const getMyFriendLinks = useCallback(() => {
     if (!currentUserProfile) return [];
@@ -253,11 +340,11 @@ const [UserContext, useUser] = createContextHook(() => {
     );
 
     const profiles = await Promise.all(
-      friendIds.map(async (id) => await loadUserProfileFromBackend(id))
+      friendIds.map(async (id) => await loadUserProfileFromSupabase(id))
     );
     
     return profiles.filter((p): p is UserProfile => p !== null);
-  }, [currentUserProfile, getMyFriendLinks, loadUserProfileFromBackend]);
+  }, [currentUserProfile, getMyFriendLinks, loadUserProfileFromSupabase]);
 
   const isFriend = useCallback((userId: string): boolean => {
     if (!currentUserProfile) return false;

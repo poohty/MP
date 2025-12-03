@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { useUser } from '@/hooks/user-store';
-import { trpcClient } from '@/lib/trpc';
+import { supabase } from '@/lib/supabase';
 import { UserProfile, FriendLink } from '@/types';
 import Colors from '@/constants/colors';
 import GradientBackground from '@/components/GradientBackground';
@@ -117,70 +117,33 @@ export default function FriendsScreen() {
 
   const debugBackendUsers = async () => {
     try {
-      console.log('🐛 ======== DEBUG: Fetching all users from backend ========');
-      const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '❌ NOT SET - THIS IS THE PROBLEM!';
-      const fullUrl = baseUrl !== '❌ NOT SET - THIS IS THE PROBLEM!' ? `${baseUrl}/api/trpc` : 'N/A';
+      console.log('🐛 ======== DEBUG: Fetching all users from Supabase ========');
       
-      console.log('🐛 Base URL:', baseUrl);
-      console.log('🐛 Full tRPC URL:', fullUrl);
-      
-      console.log('🐛 Testing health endpoint first...');
-      if (baseUrl !== '❌ NOT SET - THIS IS THE PROBLEM!') {
-        const healthUrl = `${baseUrl}/api/trpc/health`;
-        console.log('🐛 Health URL:', healthUrl);
-        try {
-          const healthResponse = await fetch(healthUrl);
-          const healthText = await healthResponse.text();
-          console.log('🐛 Health response status:', healthResponse.status);
-          console.log('🐛 Health response body:', healthText.substring(0, 200));
-        } catch (healthError) {
-          console.error('🐛 Health check failed:', healthError);
-        }
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('🐛 DEBUG Supabase getAllUsers error:', error);
+        Alert.alert('Debug Error', `Failed to fetch Supabase users: ${String(error.message || error)}`);
+        return;
       }
-      
-      console.log('🐛 Now calling tRPC getAllUsers...');
-      const result = await trpcClient.users.getAllUsers.query();
-      
-      console.log('🐛 DEBUG: Backend users result:', result);
-      
-      const userList = result.users.length > 0
-        ? result.users.map((u: any) => `• ${u.displayName}\n  @${u.username}\n  ${u.email}\n  ID: ${u.id.substring(0, 12)}...`).join('\n\n')
-        : '⚠️ NO USERS IN BACKEND';
-      
-      const debugInfo = [
-        '🔴 CRITICAL: CHECK IF BOTH DEVICES SHOW THE SAME INFO BELOW',
-        '',
-        '🌐 BACKEND URL',
-        baseUrl === '❌ NOT SET - THIS IS THE PROBLEM!' ? baseUrl : `✅ ${baseUrl}`,
-        `Full: ${fullUrl}`,
-        '',
-        '🔑 BACKEND INSTANCE',
-        `ID: ${result.backendInstanceId}`,
-        `Started: ${new Date(result.backendStartTime).toLocaleTimeString()}`,
-        `PID: ${result.processPid}`,
-        '',
-        `👥 TOTAL USERS: ${result.total}`,
-        '',
-        userList,
-        '',
-        '👉 If two devices show DIFFERENT instance IDs,',
-        'they are hitting DIFFERENT backends.',
-      ].join('\n');
-      
+
+      const users = data || [];
+      const total = users.length;
+      const list = users
+        .map((u: any) => `${u.display_name} (@${u.username}) [${u.email}]`)
+        .join('\n');
+
       Alert.alert(
-        '🔍 Backend Debug',
-        debugInfo,
-        [{ text: 'OK' }],
-        { cancelable: true }
-      );
-    } catch (error) {
-      console.error('🐛 DEBUG ERROR: Failed to fetch backend users:', error);
-      const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? 'NOT SET';
-      Alert.alert(
-        '❌ Debug Error', 
-        `Backend URL: ${baseUrl}\n\nError: ${String(error)}`,
+        '🔍 Supabase User Directory',
+        `Supabase URL: ${process.env.EXPO_PUBLIC_SUPABASE_URL || 'NOT SET'}\n\nTotal Users: ${total}\n\n${list || 'No users found'}`,
         [{ text: 'OK' }]
       );
+    } catch (e) {
+      console.error('🐛 DEBUG unexpected error:', e);
+      Alert.alert('Debug Error', `Unexpected error: ${String(e)}`);
     }
   };
 

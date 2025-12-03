@@ -3,7 +3,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { User } from '@/types';
 import { router } from 'expo-router';
-import { trpcClient } from '@/lib/trpc';
+import { supabase } from '@/lib/supabase';
 
 const USER_STORAGE_KEY = 'meal-planner-user';
 
@@ -11,27 +11,42 @@ const result = createContextHook(() => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const upsertUserIntoBackend = useCallback(async (userToStore: User) => {
+  const upsertUserProfileToSupabase = useCallback(async (userToStore: User) => {
+    if (!userToStore?.id || !userToStore?.email) {
+      console.warn('⚠️ Cannot upsert user without id or email');
+      return;
+    }
+
     try {
-      console.log('📤 FRONTEND: Upserting user to backend:', {
+      const username = (userToStore.username || userToStore.email.split('@')[0] || '').toLowerCase();
+      const displayName = userToStore.name || userToStore.username || userToStore.email;
+
+      console.log('📤 Upserting user to Supabase:', {
         id: userToStore.id,
         email: userToStore.email,
-        username: userToStore.username,
-        name: userToStore.name,
-        shareCookbookWithFriends: userToStore.shareCookbookWithFriends,
+        username,
+        displayName,
+        shareCookbookWithFriends: !!userToStore.shareCookbookWithFriends,
       });
 
-      const result = await trpcClient.users.upsertUserProfile.mutate({
-        id: userToStore.id,
-        email: userToStore.email,
-        name: userToStore.name,
-        username: userToStore.username,
-        shareCookbookWithFriends: userToStore.shareCookbookWithFriends,
-      });
+      const { error } = await supabase
+        .from('user_profiles')
+        .upsert({
+          id: userToStore.id,
+          email: userToStore.email,
+          username,
+          display_name: displayName,
+          share_cookbook_with_friends: !!userToStore.shareCookbookWithFriends,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
 
-      console.log('✅ FRONTEND: User upserted to backend successfully:', result);
+      if (error) {
+        console.error('❌ Supabase upsertUserProfile error:', error);
+      } else {
+        console.log('✅ Supabase user_profiles upserted:', { id: userToStore.id, username });
+      }
     } catch (error) {
-      console.error('❌ FRONTEND: Failed to upsert user to backend:', error);
+      console.error('❌ Failed to upsert user to Supabase:', error);
     }
   }, []);
 
@@ -45,7 +60,7 @@ const result = createContextHook(() => {
         console.log('Parsed user:', parsedUser);
         setUser(parsedUser);
         
-        await upsertUserIntoBackend(parsedUser);
+        await upsertUserProfileToSupabase(parsedUser);
       } else {
         console.log('No user found in storage');
       }
@@ -54,7 +69,7 @@ const result = createContextHook(() => {
     } finally {
       setIsLoading(false);
     }
-  }, [upsertUserIntoBackend]);
+  }, [upsertUserProfileToSupabase]);
 
   useEffect(() => {
     loadUser();
@@ -79,7 +94,7 @@ const result = createContextHook(() => {
       await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
       setUser(newUser);
       
-      await upsertUserIntoBackend(newUser);
+      await upsertUserProfileToSupabase(newUser);
       
       router.replace('/(tabs)');
       return true;
@@ -87,7 +102,7 @@ const result = createContextHook(() => {
       console.error('Login failed:', error);
       return false;
     }
-  }, [upsertUserIntoBackend]);
+  }, [upsertUserProfileToSupabase]);
 
   const signup = useCallback(async (name: string, email: string, password: string, locationPermission?: boolean) => {
     try {
@@ -106,7 +121,7 @@ const result = createContextHook(() => {
       await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
       setUser(newUser);
       
-      await upsertUserIntoBackend(newUser);
+      await upsertUserProfileToSupabase(newUser);
       
       router.replace('/(tabs)');
       return true;
@@ -114,7 +129,7 @@ const result = createContextHook(() => {
       console.error('Signup failed:', error);
       return false;
     }
-  }, [upsertUserIntoBackend]);
+  }, [upsertUserProfileToSupabase]);
 
   const updateProfile = useCallback(async (updates: Partial<User>) => {
     try {
@@ -129,11 +144,11 @@ const result = createContextHook(() => {
       await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
       setUser(updatedUser);
       
-      await upsertUserIntoBackend(updatedUser);
+      await upsertUserProfileToSupabase(updatedUser);
     } catch (error) {
       console.error('Failed to update profile:', error);
     }
-  }, [user, upsertUserIntoBackend]);
+  }, [user, upsertUserProfileToSupabase]);
 
   const logout = useCallback(async () => {
     try {
