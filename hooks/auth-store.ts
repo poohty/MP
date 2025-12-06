@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { User } from '@/types';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -161,7 +161,7 @@ const result = createContextHook(() => {
     }
   }, []);
 
-  return useMemo(() => ({
+  return {
     user,
     isLoading,
     login,
@@ -169,7 +169,7 @@ const result = createContextHook(() => {
     logout,
     updateProfile,
     isAuthenticated: !!user,
-  }), [user, isLoading, login, signup, logout, updateProfile]);
+  };
 });
 
 const AuthContext = result[0];
