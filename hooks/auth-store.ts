@@ -42,6 +42,7 @@ const result = createContextHook(() => {
 
       if (error) {
         console.error('❌ Supabase upsertUserProfile error:', error);
+        console.error('❌ Full error details:', JSON.stringify(error, null, 2));
       } else {
         console.log('✅ Supabase user_profiles upserted:', { id: userToStore.id, username });
       }

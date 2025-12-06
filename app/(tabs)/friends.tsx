@@ -119,6 +119,20 @@ export default function FriendsScreen() {
     try {
       console.log('🐛 ======== DEBUG: Fetching all users from Supabase ========');
       
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      
+      console.log('🐛 Supabase URL:', supabaseUrl);
+      console.log('🐛 Supabase Key exists:', !!supabaseKey);
+      
+      if (!supabaseUrl || !supabaseKey) {
+        Alert.alert(
+          '⚠️ Environment Variables Missing',
+          `Supabase URL: ${supabaseUrl ? '✅ SET' : '❌ NOT SET'}\nSupabase Key: ${supabaseKey ? '✅ SET' : '❌ NOT SET'}\n\nPlease configure environment variables in Rork settings.`
+        );
+        return;
+      }
+      
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
@@ -126,19 +140,28 @@ export default function FriendsScreen() {
 
       if (error) {
         console.error('🐛 DEBUG Supabase getAllUsers error:', error);
-        Alert.alert('Debug Error', `Failed to fetch Supabase users: ${String(error.message || error)}`);
+        console.error('🐛 Full error:', JSON.stringify(error, null, 2));
+        Alert.alert(
+          'Debug Error', 
+          `Failed to fetch Supabase users:\n\nError: ${error.message || error.code || 'Unknown'}\n\nDetails: ${error.details || 'None'}\n\nHint: ${error.hint || 'Check table exists and RLS policies'}`
+        );
         return;
       }
 
       const users = data || [];
       const total = users.length;
       const list = users
-        .map((u: any) => `${u.display_name} (@${u.username}) [${u.email}]`)
-        .join('\n');
+        .map((u: any) => {
+          const shareIcon = u.share_cookbook_with_friends ? '📖' : '🔒';
+          return `${shareIcon} ${u.display_name}\n   @${u.username}\n   ${u.email}`;
+        })
+        .join('\n\n');
 
       Alert.alert(
         '🔍 Supabase User Directory',
-        `Supabase URL: ${process.env.EXPO_PUBLIC_SUPABASE_URL || 'NOT SET'}\n\nTotal Users: ${total}\n\n${list || 'No users found'}`,
+        `Supabase URL: ${supabaseUrl.substring(0, 30)}...\n\nTotal Users: ${total}\n\n${
+          list || 'No users found - ask your wife to check console logs on her device after signing up'
+        }`,
         [{ text: 'OK' }]
       );
     } catch (e) {
