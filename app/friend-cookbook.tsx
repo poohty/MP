@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useUser } from '@/hooks/user-store';
 import { useRecipes } from '@/hooks/recipe-store';
+import { useAuth } from '@/hooks/auth-store';
 import { Recipe } from '@/types';
 import Colors from '@/constants/colors';
 import GradientBackground from '@/components/GradientBackground';
 import RecipeCard from '@/components/RecipeCard';
+import { Download, Plus } from 'lucide-react-native';
 
 export default function FriendCookbookScreen() {
   const { friendUserId } = useLocalSearchParams<{ friendUserId: string }>();
   const { getUserProfile } = useUser();
-  const { getRecipesForUser } = useRecipes();
+  const { getRecipesForUser, importRecipeFromFriend } = useRecipes();
+  const { user } = useAuth();
   
   const [friendProfile, setFriendProfile] = useState<any>(null);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -59,6 +62,71 @@ export default function FriendCookbookScreen() {
       pathname: '../recipe-details' as any,
       params: { id: recipe.id, friendUserId },
     });
+  };
+
+  const handleImportRecipe = async (recipe: Recipe) => {
+    if (!user?.id) {
+      Alert.alert('Error', 'You must be logged in to import recipes');
+      return;
+    }
+
+    try {
+      const success = await importRecipeFromFriend(recipe, user.id);
+      if (success) {
+        Alert.alert('Success', `"${recipe.name}" has been added to your cookbook`);
+      } else {
+        Alert.alert('Info', 'This recipe may already be in your cookbook');
+      }
+    } catch (error) {
+      console.error('Failed to import recipe:', error);
+      Alert.alert('Error', 'Failed to import recipe');
+    }
+  };
+
+  const handleImportAllRecipes = async () => {
+    if (!user?.id) {
+      Alert.alert('Error', 'You must be logged in to import recipes');
+      return;
+    }
+
+    if (recipes.length === 0) {
+      Alert.alert('Info', 'No recipes to import');
+      return;
+    }
+
+    Alert.alert(
+      'Import All Recipes',
+      `Import all ${recipes.length} recipes from ${friendProfile?.displayName}'s cookbook?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Import',
+          onPress: async () => {
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const recipe of recipes) {
+              try {
+                const success = await importRecipeFromFriend(recipe, user.id);
+                if (success) {
+                  successCount++;
+                } else {
+                  failCount++;
+                }
+              } catch (error) {
+                console.error('Failed to import recipe:', error);
+                failCount++;
+              }
+            }
+
+            Alert.alert(
+              'Import Complete',
+              `Successfully imported ${successCount} recipes${failCount > 0 ? ` (${failCount} skipped)` : ''}`
+            );
+          },
+        },
+      ]
+    );
   };
 
   if (isLoading) {
@@ -110,6 +178,16 @@ export default function FriendCookbookScreen() {
           </View>
           <Text style={styles.friendName}>{friendProfile.displayName}&apos;s Cookbook</Text>
           <Text style={styles.recipeCount}>{recipes.length} recipes</Text>
+
+          {recipes.length > 0 && (
+            <TouchableOpacity
+              style={styles.importAllButton}
+              onPress={handleImportAllRecipes}
+            >
+              <Download size={20} color={Colors.text} />
+              <Text style={styles.importAllButtonText}>Import All Recipes</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {recipes.length === 0 ? (
@@ -118,11 +196,20 @@ export default function FriendCookbookScreen() {
           </Text>
         ) : (
           recipes.map((recipe) => (
-            <RecipeCard
-              key={recipe.id}
-              recipe={recipe}
-              onPress={handleRecipePress}
-            />
+            <View key={recipe.id} style={styles.recipeContainer}>
+              <View style={styles.recipeCardWrapper}>
+                <RecipeCard
+                  recipe={recipe}
+                  onPress={handleRecipePress}
+                />
+              </View>
+              <TouchableOpacity
+                style={styles.importButton}
+                onPress={() => handleImportRecipe(recipe)}
+              >
+                <Plus size={18} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
           ))
         )}
       </ScrollView>
@@ -182,5 +269,38 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
     padding: 24,
+  },
+  importAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Colors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginTop: 16,
+  },
+  importAllButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  recipeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  recipeCardWrapper: {
+    flex: 1,
+  },
+  importButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -3,6 +3,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
 import { Recipe, RecipeCategory } from '@/types';
 import { useAuth } from './auth-store';
+import { supabase } from '@/lib/supabase';
 
 const RECIPES_STORAGE_KEY = 'meal-planner-recipes';
 
@@ -14,37 +15,95 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const loadRecipesFromSupabase = useCallback(async (ownerUserId: string): Promise<Recipe[]> => {
+    try {
+      console.log(`📥 Loading recipes from Supabase for user: ${ownerUserId}`);
+      const { data, error } = await supabase
+        .from('recipes')
+        .select('*')
+        .eq('owner_user_id', ownerUserId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('❌ Supabase loadRecipes error:', error);
+        return [];
+      }
+
+      const recipes = (data || []).map((row: any) => ({
+        ...row.data_json,
+        id: row.id,
+      })) as Recipe[];
+
+      console.log(`✅ Loaded ${recipes.length} recipes from Supabase`);
+      return recipes;
+    } catch (error) {
+      console.error('❌ Failed to load recipes from Supabase:', error);
+      return [];
+    }
+  }, []);
+
+  const syncRecipeToSupabase = useCallback(async (recipe: Recipe, ownerUserId: string) => {
+    try {
+      console.log(`📤 Syncing recipe to Supabase: ${recipe.name}`);
+      const { error } = await supabase
+        .from('recipes')
+        .upsert({
+          id: recipe.id,
+          owner_user_id: ownerUserId,
+          name: recipe.name,
+          category: recipe.category,
+          data_json: recipe,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+
+      if (error) {
+        console.error('❌ Supabase syncRecipe error:', error);
+      } else {
+        console.log(`✅ Synced recipe to Supabase: ${recipe.name}`);
+      }
+    } catch (error) {
+      console.error('❌ Failed to sync recipe to Supabase:', error);
+    }
+  }, []);
+
   const loadRecipes = useCallback(async () => {
     try {
       setIsLoading(true);
-      const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
-      const storedRecipes = await AsyncStorage.getItem(storageKey);
-      if (storedRecipes) {
-        const parsedRecipes = JSON.parse(storedRecipes);
-        console.log(`📊 Loading ${parsedRecipes.length} recipes from storage`);
-        
-        parsedRecipes.forEach((recipe: Recipe) => {
-          if (recipe.imageUri) {
-            console.log(`✅ Recipe "${recipe.name}" has imageUri: ${recipe.imageUri.substring(0, 50)}...`);
-          } else {
-            console.log(`⚠️ Recipe "${recipe.name}" has NO imageUri`);
-          }
-        });
-        
-        setRecipes(parsedRecipes);
-        
-        const recipesWithImages = parsedRecipes.filter((r: Recipe) => r.imageUri).length;
-        const recipesWithoutImages = parsedRecipes.filter((r: Recipe) => !r.imageUri).length;
-        console.log(`📊 Loaded ${parsedRecipes.length} recipes: ${recipesWithImages} with images, ${recipesWithoutImages} without`);
-      } else {
+      
+      if (!user?.id) {
         setRecipes([]);
+        return;
+      }
+
+      const supabaseRecipes = await loadRecipesFromSupabase(user.id);
+      
+      if (supabaseRecipes.length > 0) {
+        console.log(`📊 Loaded ${supabaseRecipes.length} recipes from Supabase`);
+        setRecipes(supabaseRecipes);
+        
+        const storageKey = `${RECIPES_STORAGE_KEY}-${user.id}`;
+        await AsyncStorage.setItem(storageKey, JSON.stringify(supabaseRecipes));
+      } else {
+        const storageKey = `${RECIPES_STORAGE_KEY}-${user.id}`;
+        const storedRecipes = await AsyncStorage.getItem(storageKey);
+        if (storedRecipes) {
+          const parsedRecipes = JSON.parse(storedRecipes);
+          console.log(`📊 Loaded ${parsedRecipes.length} recipes from local storage`);
+          setRecipes(parsedRecipes);
+          
+          for (const recipe of parsedRecipes) {
+            await syncRecipeToSupabase(recipe, user.id);
+          }
+        } else {
+          setRecipes([]);
+        }
       }
     } catch (error) {
       console.error('Failed to load recipes:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, loadRecipesFromSupabase, syncRecipeToSupabase]);
 
   useEffect(() => {
     if (user) {
@@ -61,11 +120,19 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
       const jsonString = JSON.stringify(updatedRecipes);
       await AsyncStorage.setItem(storageKey, jsonString);
       setRecipes(updatedRecipes);
+      
+      if (user?.id) {
+        for (const recipe of updatedRecipes) {
+          if (recipe.ownerUserId === user.id) {
+            await syncRecipeToSupabase(recipe, user.id);
+          }
+        }
+      }
     } catch (error) {
       console.error('Failed to save recipes:', error);
       throw error;
     }
-  }, [user?.id]);
+  }, [user?.id, syncRecipeToSupabase]);
 
   const generateAiThumbnail = useCallback(async (recipeName: string, category: string): Promise<string> => {
     console.log(`🎨 Rork AI thumbnail generation for "${recipeName}" in category "${category}"`);
@@ -648,7 +715,7 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
             extractedData.category = jsonData.category as RecipeCategory;
           }
         }
-      } catch (jsonError) {
+      } catch {
         console.log('⚠️ Failed to parse JSON from AI, falling back to text parsing');
         
         const lines = result.split('\n');
@@ -888,13 +955,18 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
       
       const updatedRecipes = [...currentRecipes, newRecipe];
       await saveRecipes(updatedRecipes);
+      
+      if (user?.id) {
+        await syncRecipeToSupabase(newRecipe, user.id);
+      }
+      
       console.log('✅ Recipe added successfully with guaranteed image');
       return true;
     } catch (error) {
       console.error('Failed to add recipe:', error);
       return false;
     }
-  }, [user?.id, saveRecipes, extractRecipeContent, generateFallbackImage, generateAiThumbnail, convertImageToBase64]);
+  }, [user?.id, saveRecipes, syncRecipeToSupabase, extractRecipeContent, generateFallbackImage, generateAiThumbnail, convertImageToBase64]);
 
   const updateRecipe = useCallback(async (updatedRecipe: Recipe) => {
     try {
@@ -1314,17 +1386,13 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
 
   const getRecipesForUser = useCallback(async (ownerUserId: string): Promise<Recipe[]> => {
     try {
-      const storageKey = `${RECIPES_STORAGE_KEY}-${ownerUserId}`;
-      const storedRecipes = await AsyncStorage.getItem(storageKey);
-      if (storedRecipes) {
-        return JSON.parse(storedRecipes);
-      }
-      return [];
+      const recipes = await loadRecipesFromSupabase(ownerUserId);
+      return recipes;
     } catch (error) {
       console.error('Failed to get recipes for user:', error);
       return [];
     }
-  }, []);
+  }, [loadRecipesFromSupabase]);
 
   return {
     recipes,
@@ -1349,6 +1417,8 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     updateRecipeImage,
     importRecipeFromFriend,
     getRecipesForUser,
+    loadRecipesFromSupabase,
+    syncRecipeToSupabase,
   };
 });
 
