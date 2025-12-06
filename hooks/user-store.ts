@@ -42,14 +42,18 @@ const [UserContext, useUser] = createContextHook(() => {
 
 
 
-  const loadFriendLinks = useCallback(async () => {
-    if (!currentUserProfile?.id) return [];
+  const loadFriendLinks = useCallback(async (userId?: string) => {
+    const profileId = userId || currentUserProfile?.id;
+    if (!profileId) {
+      setFriendLinks([]);
+      return [];
+    }
 
     try {
       const { data, error } = await supabase
         .from('friend_links')
         .select('*')
-        .or(`user_id.eq.${currentUserProfile.id},friend_user_id.eq.${currentUserProfile.id}`);
+        .or(`user_id.eq.${profileId},friend_user_id.eq.${profileId}`);
 
       if (error) {
         console.error('❌ Supabase load friend links error:', error);
@@ -77,6 +81,7 @@ const [UserContext, useUser] = createContextHook(() => {
   const loadCurrentUser = useCallback(async () => {
     if (!authUser) {
       setCurrentUserProfile(null);
+      setFriendLinks([]);
       setIsLoading(false);
       return;
     }
@@ -99,6 +104,7 @@ const [UserContext, useUser] = createContextHook(() => {
           shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
         };
         setCurrentUserProfile(fallbackProfile);
+        await loadFriendLinks(authUser.id);
       } else if (data) {
         const profile: UserProfile = {
           id: data.id,
@@ -108,9 +114,8 @@ const [UserContext, useUser] = createContextHook(() => {
           shareCookbookWithFriends: data.share_cookbook_with_friends,
         };
         setCurrentUserProfile(profile);
+        await loadFriendLinks(data.id);
       }
-
-      await loadFriendLinks();
     } catch (error) {
       console.error('Failed to load current user:', error);
     } finally {
