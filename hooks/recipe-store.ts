@@ -25,7 +25,10 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('❌ Supabase loadRecipes error:', error);
+        console.error('❌ Supabase loadRecipes error:', JSON.stringify(error, null, 2));
+        console.error('❌ Error message:', error.message);
+        console.error('❌ Error details:', error.details);
+        console.error('❌ Error hint:', error.hint);
         return [];
       }
 
@@ -57,7 +60,10 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         }, { onConflict: 'id' });
 
       if (error) {
-        console.error('❌ Supabase syncRecipe error:', error);
+        console.error('❌ Supabase syncRecipe error:', JSON.stringify(error, null, 2));
+        console.error('❌ Error message:', error.message);
+        console.error('❌ Error details:', error.details);
+        console.error('❌ Error hint:', error.hint);
       } else {
         console.log(`✅ Synced recipe to Supabase: ${recipe.name}`);
       }
