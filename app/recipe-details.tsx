@@ -80,8 +80,8 @@ export default function RecipeDetailsScreen() {
 
     if (Platform.OS !== 'web') {
       Alert.alert(
-        'Web Only Feature',
-        'Voice-guided cooking is currently only available on web browsers. Please open this recipe on a web browser to use this feature.'
+        'Voice-Guided Cooking Not Available',
+        'Voice-guided cooking requires native speech recognition and text-to-speech capabilities that are not available in Expo Go. This feature works in web browsers, or would require a custom development build with native modules.'
       );
       return;
     }
