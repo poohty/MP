@@ -47,17 +47,25 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
 
   const syncRecipeToSupabase = useCallback(async (recipe: Recipe, ownerUserId: string) => {
     try {
+      if (!ownerUserId) {
+        console.error('❌ syncRecipeToSupabase called without ownerUserId', { recipeId: recipe.id });
+        return;
+      }
+
       console.log(`📤 Syncing recipe to Supabase: ${recipe.name}`);
       const { error } = await supabase
         .from('recipes')
-        .upsert({
-          id: recipe.id,
-          owner_user_id: ownerUserId,
-          name: recipe.name,
-          category: recipe.category,
-          data_json: recipe,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' });
+        .upsert(
+          {
+            id: recipe.id,
+            owner_user_id: ownerUserId,
+            name: recipe.name,
+            category: recipe.category,
+            data_json: recipe,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        );
 
       if (error) {
         console.error('❌ Supabase syncRecipe error:', JSON.stringify(error, null, 2));
@@ -65,7 +73,7 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         console.error('❌ Error details:', error.details);
         console.error('❌ Error hint:', error.hint);
       } else {
-        console.log(`✅ Synced recipe to Supabase: ${recipe.name}`);
+        console.log('✅ Synced recipe to Supabase', recipe.id, ownerUserId);
       }
     } catch (error) {
       console.error('❌ Failed to sync recipe to Supabase:', error);
@@ -94,10 +102,16 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         const storedRecipes = await AsyncStorage.getItem(storageKey);
         if (storedRecipes) {
           const parsedRecipes = JSON.parse(storedRecipes);
-          console.log(`📊 Loaded ${parsedRecipes.length} recipes from local storage`);
-          setRecipes(parsedRecipes);
+          console.log(`📊 Loaded ${parsedRecipes.length} recipes from local storage, syncing to Supabase...`);
           
-          for (const recipe of parsedRecipes) {
+          const recipesWithOwner = parsedRecipes.map((recipe: Recipe) => ({
+            ...recipe,
+            ownerUserId: user.id
+          }));
+          
+          setRecipes(recipesWithOwner);
+          
+          for (const recipe of recipesWithOwner) {
             await syncRecipeToSupabase(recipe, user.id);
           }
         } else {
@@ -122,16 +136,19 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
 
   const saveRecipes = useCallback(async (updatedRecipes: Recipe[]) => {
     try {
+      const recipesWithOwner = updatedRecipes.map(recipe => ({
+        ...recipe,
+        ownerUserId: recipe.ownerUserId || user?.id
+      }));
+
       const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
-      const jsonString = JSON.stringify(updatedRecipes);
+      const jsonString = JSON.stringify(recipesWithOwner);
       await AsyncStorage.setItem(storageKey, jsonString);
-      setRecipes(updatedRecipes);
+      setRecipes(recipesWithOwner);
       
       if (user?.id) {
-        for (const recipe of updatedRecipes) {
-          if (recipe.ownerUserId === user.id) {
-            await syncRecipeToSupabase(recipe, user.id);
-          }
+        for (const recipe of recipesWithOwner) {
+          await syncRecipeToSupabase(recipe, recipe.ownerUserId || user.id);
         }
       }
     } catch (error) {
@@ -946,7 +963,7 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
         ...finalRecipe,
         id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         createdAt: Date.now(),
-        ownerUserId: ownerUserId || user?.id,
+        ownerUserId: recipe.ownerUserId || ownerUserId || user?.id,
       };
       
       const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
@@ -1392,7 +1409,9 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
 
   const getRecipesForUser = useCallback(async (ownerUserId: string): Promise<Recipe[]> => {
     try {
+      console.log(`🔍 Getting recipes for user: ${ownerUserId}`);
       const recipes = await loadRecipesFromSupabase(ownerUserId);
+      console.log(`✅ Found ${recipes.length} recipes for user ${ownerUserId}`);
       return recipes;
     } catch (error) {
       console.error('Failed to get recipes for user:', error);
