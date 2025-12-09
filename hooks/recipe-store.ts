@@ -1421,6 +1421,24 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     }
   }, [loadRecipesFromSupabase]);
 
+  const debugSupabaseRecipesForUser = useCallback(async (ownerUserId: string) => {
+    console.log('🐛 DEBUG: Checking Supabase recipes for', ownerUserId);
+
+    const { data, error } = await supabase
+      .from('recipes')
+      .select('id, owner_user_id, name, category, created_at')
+      .eq('owner_user_id', ownerUserId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('🐛 DEBUG Supabase error:', error);
+      return;
+    }
+
+    console.log('🐛 DEBUG Supabase recipe count:', data?.length || 0);
+    console.log('🐛 DEBUG Supabase rows:', data);
+  }, []);
+
   return {
     recipes,
     isLoading,
@@ -1446,6 +1464,7 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     getRecipesForUser,
     loadRecipesFromSupabase,
     syncRecipeToSupabase,
+    debugSupabaseRecipesForUser,
   };
 });
 

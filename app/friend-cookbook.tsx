@@ -13,7 +13,7 @@ import { Download, Plus } from 'lucide-react-native';
 export default function FriendCookbookScreen() {
   const { friendUserId } = useLocalSearchParams<{ friendUserId: string }>();
   const { getUserProfile } = useUser();
-  const { getRecipesForUser, importRecipeFromFriend } = useRecipes();
+  const { getRecipesForUser, importRecipeFromFriend, debugSupabaseRecipesForUser } = useRecipes();
   const { user } = useAuth();
   
   const [friendProfile, setFriendProfile] = useState<any>(null);
@@ -45,13 +45,15 @@ export default function FriendCookbookScreen() {
 
       const friendRecipes = await getRecipesForUser(friendUserId);
       setRecipes(friendRecipes);
+
+      await debugSupabaseRecipesForUser(friendUserId);
     } catch (error) {
       console.error('Failed to load friend cookbook:', error);
       Alert.alert('Error', 'Failed to load cookbook');
     } finally {
       setIsLoading(false);
     }
-  }, [friendUserId, getUserProfile, getRecipesForUser]);
+  }, [friendUserId, getUserProfile, getRecipesForUser, debugSupabaseRecipesForUser]);
 
   useEffect(() => {
     loadFriendCookbook();
