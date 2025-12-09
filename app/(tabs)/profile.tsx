@@ -5,11 +5,11 @@ import { useUser } from '@/hooks/user-store';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
-import { User, Settings, Info, Heart, Users } from 'lucide-react-native';
+import { User, Settings, Info, Heart, Users, Mic } from 'lucide-react-native';
 import { router } from 'expo-router';
 
 export default function ProfileScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateProfile } = useAuth();
   const { currentUserProfile, updateShareCookbook } = useUser();
   const [isUpdatingShare, setIsUpdatingShare] = useState(false);
 
@@ -65,6 +65,49 @@ export default function ProfileScreen() {
             </View>
             <Text style={styles.menuText}>Preferences</Text>
           </TouchableOpacity>
+        </View>
+        
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Voice Instructions</Text>
+          
+          <View style={styles.menuItem}>
+            <View style={styles.menuIconContainer}>
+              <Mic size={20} color={Colors.primary} />
+            </View>
+            <View style={styles.voiceOptionContainer}>
+              <Text style={styles.menuText}>Instruction Voice</Text>
+              <View style={styles.voiceButtons}>
+                <TouchableOpacity
+                  style={[
+                    styles.voiceButton,
+                    (user?.instructionVoice || 'female') === 'female' && styles.voiceButtonActive
+                  ]}
+                  onPress={async () => {
+                    await updateProfile({ instructionVoice: 'female' });
+                  }}
+                >
+                  <Text style={[
+                    styles.voiceButtonText,
+                    (user?.instructionVoice || 'female') === 'female' && styles.voiceButtonTextActive
+                  ]}>Female</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.voiceButton,
+                    user?.instructionVoice === 'male' && styles.voiceButtonActive
+                  ]}
+                  onPress={async () => {
+                    await updateProfile({ instructionVoice: 'male' });
+                  }}
+                >
+                  <Text style={[
+                    styles.voiceButtonText,
+                    user?.instructionVoice === 'male' && styles.voiceButtonTextActive
+                  ]}>Male</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
         </View>
         
         <View style={styles.section}>
@@ -201,5 +244,35 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: Colors.textSecondary,
     fontSize: 14,
+  },
+  voiceOptionContainer: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  voiceButtons: {
+    flexDirection: 'row',
+    marginTop: 8,
+    gap: 8,
+  },
+  voiceButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.textSecondary + '30',
+  },
+  voiceButtonActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  voiceButtonText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    fontWeight: '500',
+  },
+  voiceButtonTextActive: {
+    color: Colors.text,
+    fontWeight: '600',
   },
 });
