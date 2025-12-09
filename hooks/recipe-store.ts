@@ -52,7 +52,6 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         return;
       }
 
-      console.log(`📤 Syncing recipe to Supabase: ${recipe.name}`);
       const { error } = await supabase
         .from('recipes')
         .upsert(
@@ -98,6 +97,7 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         const storageKey = `${RECIPES_STORAGE_KEY}-${user.id}`;
         await AsyncStorage.setItem(storageKey, JSON.stringify(supabaseRecipes));
       } else {
+        console.log('📦 No recipes in Supabase, checking AsyncStorage for legacy data...');
         const storageKey = `${RECIPES_STORAGE_KEY}-${user.id}`;
         const storedRecipes = await AsyncStorage.getItem(storageKey);
         if (storedRecipes) {
@@ -965,6 +965,8 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
         createdAt: Date.now(),
         ownerUserId: recipe.ownerUserId || ownerUserId || user?.id,
       };
+      
+      newRecipe.ownerUserId = newRecipe.ownerUserId || user?.id;
       
       const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
       const storedRecipes = await AsyncStorage.getItem(storageKey);
