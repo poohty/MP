@@ -46,10 +46,7 @@ export default function CategorySelector({
           <Text
             style={[
               styles.categoryText,
-              { color: theme.textSecondary },
-              selectedCategory === category && {
-                color: isDark ? '#FFFFFF' : theme.primary,
-              }
+              { color: '#FFFFFF' },
             ]}
           >
             {category}
