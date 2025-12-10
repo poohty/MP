@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image } from 'rea
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/auth-store';
 import { useRecipes } from '@/hooks/recipe-store';
+import { useTheme } from '@/hooks/theme-store';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
@@ -12,6 +13,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 export default function HomeScreen() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const { recipes } = useRecipes();
+  const { isDark } = useTheme();
+  const themeColors = isDark ? Colors.dark : Colors.light;
 
   // Show welcome screen if not authenticated
   if (!isLoading && !isAuthenticated) {
@@ -33,8 +36,8 @@ export default function HomeScreen() {
     <GradientBackground>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.greeting}>{getGreeting()}</Text>
-          <Text style={styles.name}>{user?.name || 'Chef'}</Text>
+          <Text style={[styles.greeting, { color: themeColors.textSecondary }]}>{getGreeting()}</Text>
+          <Text style={[styles.name, { color: themeColors.text }]}>{user?.name || 'Chef'}</Text>
         </View>
         
         <View style={styles.heroContainer}>
@@ -56,64 +59,64 @@ export default function HomeScreen() {
         </View>
         
         <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{recipes.length}</Text>
-            <Text style={styles.statLabel}>Recipes</Text>
+          <View style={[styles.statCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+            <Text style={[styles.statNumber, { color: themeColors.text }]}>{recipes.length}</Text>
+            <Text style={[styles.statLabel, { color: themeColors.textSecondary }]}>Recipes</Text>
           </View>
           
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>
+          <View style={[styles.statCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+            <Text style={[styles.statNumber, { color: themeColors.text }]}>
               {recipes.filter(r => r.category === 'Main Course').length}
             </Text>
-            <Text style={styles.statLabel}>Main Courses</Text>
+            <Text style={[styles.statLabel, { color: themeColors.textSecondary }]}>Main Courses</Text>
           </View>
           
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>
+          <View style={[styles.statCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+            <Text style={[styles.statNumber, { color: themeColors.text }]}>
               {recipes.filter(r => r.category === 'Desserts').length}
             </Text>
-            <Text style={styles.statLabel}>Desserts</Text>
+            <Text style={[styles.statLabel, { color: themeColors.textSecondary }]}>Desserts</Text>
           </View>
         </View>
         
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Quick Actions</Text>
         
         <View style={styles.actionsContainer}>
           <TouchableOpacity 
-            style={styles.actionCard}
+            style={[styles.actionCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
             onPress={() => router.push('../add-recipe-photo')}
           >
-            <View style={styles.actionIconContainer}>
-              <Camera size={24} color={Colors.primary} />
+            <View style={[styles.actionIconContainer, { backgroundColor: themeColors.muted }]}>
+              <Camera size={24} color={themeColors.primary} />
             </View>
-            <Text style={styles.actionTitle}>Upload Recipe</Text>
-            <Text style={styles.actionDescription}>
+            <Text style={[styles.actionTitle, { color: themeColors.text }]}>Upload Recipe</Text>
+            <Text style={[styles.actionDescription, { color: themeColors.textSecondary }]}>
               Take a photo or upload from gallery
             </Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={styles.actionCard}
+            style={[styles.actionCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
             onPress={() => router.push('../add-recipe-url')}
           >
-            <View style={styles.actionIconContainer}>
-              <Link size={24} color={Colors.secondary} />
+            <View style={[styles.actionIconContainer, { backgroundColor: themeColors.muted }]}>
+              <Link size={24} color={themeColors.primary} />
             </View>
-            <Text style={styles.actionTitle}>Add Recipe URL</Text>
-            <Text style={styles.actionDescription}>
+            <Text style={[styles.actionTitle, { color: themeColors.text }]}>Add Recipe URL</Text>
+            <Text style={[styles.actionDescription, { color: themeColors.textSecondary }]}>
               Save a recipe from the web
             </Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={styles.actionCard}
+            style={[styles.actionCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
             onPress={() => router.push('../upload-bookmarks')}
           >
-            <View style={styles.actionIconContainer}>
-              <FolderOpen size={24} color={Colors.accent} />
+            <View style={[styles.actionIconContainer, { backgroundColor: themeColors.muted }]}>
+              <FolderOpen size={24} color={themeColors.primary} />
             </View>
-            <Text style={styles.actionTitle}>Upload Bookmarks</Text>
-            <Text style={styles.actionDescription}>
+            <Text style={[styles.actionTitle, { color: themeColors.text }]}>Upload Bookmarks</Text>
+            <Text style={[styles.actionDescription, { color: themeColors.textSecondary }]}>
               Import recipes from browser bookmarks
             </Text>
           </TouchableOpacity>
@@ -144,13 +147,11 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: 15,
-    color: Colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: '500' as const,
   },
   name: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: Colors.text,
+    fontWeight: 'bold' as const,
   },
   heroContainer: {
     height: 180,
@@ -194,30 +195,25 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   statCard: {
-    backgroundColor: '#FFFFFF',
     borderRadius: Colors.radius,
     padding: 16,
-    alignItems: 'center',
+    alignItems: 'center' as const,
     flex: 1,
     borderWidth: 1,
-    borderColor: Colors.border,
     ...Colors.shadow,
   },
   statNumber: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text,
+    fontWeight: 'bold' as const,
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 11,
-    color: Colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: '500' as const,
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: Colors.text,
+    fontWeight: '700' as const,
     marginBottom: 16,
   },
   actionsContainer: {
@@ -228,33 +224,28 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   actionCard: {
-    backgroundColor: '#FFFFFF',
     borderRadius: Colors.radius,
     padding: 16,
     width: '48%',
     height: 130,
     borderWidth: 1,
-    borderColor: Colors.border,
     ...Colors.shadow,
   },
   actionIconContainer: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: Colors.light.muted,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginBottom: 10,
   },
   actionTitle: {
     fontSize: 15,
-    fontWeight: '700',
-    color: Colors.text,
+    fontWeight: '700' as const,
     marginBottom: 4,
   },
   actionDescription: {
     fontSize: 11,
-    color: Colors.textSecondary,
     lineHeight: 15,
   },
   mealPlanButton: {

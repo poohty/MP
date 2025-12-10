@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 
 import Colors from '@/constants/colors';
+import { useTheme } from '@/hooks/theme-store';
 
 interface ButtonProps extends TouchableOpacityProps {
   title: string;
@@ -35,28 +36,39 @@ export default function Button({
   icon,
   ...rest
 }: ButtonProps) {
+  const { isDark } = useTheme();
+  const themeColors = isDark ? Colors.dark : Colors.light;
   const getButtonStyle = (): ViewStyle => {
     switch (variant) {
       case 'primary':
-        return styles.primaryButton;
+        return { backgroundColor: themeColors.primary };
       case 'secondary':
-        return styles.secondaryButton;
+        return { 
+          backgroundColor: themeColors.surface,
+          borderWidth: 1,
+          borderColor: themeColors.border
+        };
       case 'outline':
-        return styles.outlineButton;
+        return { 
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          borderColor: themeColors.primary
+        };
       default:
-        return styles.primaryButton;
+        return { backgroundColor: themeColors.primary };
     }
   };
 
   const getTextStyle = (): TextStyle => {
     switch (variant) {
       case 'primary':
+        return { color: themeColors.primaryForeground, fontWeight: '600' as const, fontSize: 16 };
       case 'secondary':
-        return styles.primaryText;
+        return { color: themeColors.text, fontWeight: '600' as const, fontSize: 16 };
       case 'outline':
-        return styles.outlineText;
+        return { color: themeColors.primary, fontWeight: '600' as const, fontSize: 16 };
       default:
-        return styles.primaryText;
+        return { color: themeColors.primaryForeground, fontWeight: '600' as const, fontSize: 16 };
     }
   };
 
@@ -75,7 +87,7 @@ export default function Button({
 
   const renderContent = () => {
     if (isLoading) {
-      return <ActivityIndicator color={variant === 'outline' ? Colors.primary : Colors.text} />;
+      return <ActivityIndicator color={variant === 'outline' ? themeColors.primary : themeColors.primaryForeground} />;
     }
     
     return (
@@ -117,25 +129,11 @@ export default function Button({
 const styles = StyleSheet.create({
   buttonBase: {
     borderRadius: Colors.radius,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    flexDirection: 'row',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    overflow: 'hidden' as const,
+    flexDirection: 'row' as const,
     ...Colors.shadow,
-  },
-
-  primaryButton: {
-    backgroundColor: Colors.primary,
-  },
-  secondaryButton: {
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  outlineButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
   },
   smallButton: {
     height: 36,
@@ -148,16 +146,6 @@ const styles = StyleSheet.create({
   largeButton: {
     height: 56,
     paddingHorizontal: 32,
-  },
-  primaryText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  outlineText: {
-    color: Colors.primary,
-    fontWeight: '600',
-    fontSize: 16,
   },
   disabledButton: {
     opacity: 0.5,
