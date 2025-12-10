@@ -8,9 +8,12 @@ import GradientBackground from '@/components/GradientBackground';
 import { Recipe, RecipeCategory } from '@/types';
 import Colors from '@/constants/colors';
 import { Plus, RefreshCw, Image } from 'lucide-react-native';
+import { useTheme } from '@/hooks/theme-store';
 
 export default function RecipeBookScreen() {
   const { recipes, isLoading, debugStorage, deleteRecipe, toggleFavorite, refreshRecipes, reExtractImages, forceReExtractAllImages } = useRecipes();
+  const { isDark } = useTheme();
+  const themeColors = isDark ? Colors.dark : Colors.light;
   const [selectedCategory, setSelectedCategory] = useState<RecipeCategory>('Breakfast');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExtractingImages, setIsExtractingImages] = useState(false);
@@ -199,46 +202,46 @@ export default function RecipeBookScreen() {
   return (
     <GradientBackground>
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Cook Book</Text>
+      <View style={[styles.header, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
+        <Text style={[styles.title, { color: themeColors.text }]}>Cook Book</Text>
         <View style={styles.headerButtons}>
           {recipesWithoutImages > 0 && (
             <TouchableOpacity 
-              style={[styles.addButton, { marginRight: 8, backgroundColor: Colors.accent }]}
+              style={[styles.addButton, { marginRight: 8, backgroundColor: themeColors.accent }]}
               onPress={handleExtractImages}
               disabled={isExtractingImages}
             >
-              <Image size={16} color={isExtractingImages ? Colors.textSecondary : Colors.text} />
+              <Image size={16} color={isExtractingImages ? themeColors.textSecondary : themeColors.accentForeground} />
               {recipesWithoutImages > 0 && (
-                <View style={styles.badge}>
+                <View style={[styles.badge, { backgroundColor: themeColors.error }]}>
                   <Text style={styles.badgeText}>{recipesWithoutImages}</Text>
                 </View>
               )}
             </TouchableOpacity>
           )}
           <TouchableOpacity 
-            style={[styles.addButton, { marginRight: 8 }]}
+            style={[styles.addButton, { marginRight: 8, backgroundColor: themeColors.primary }]}
             onPress={handleRefresh}
             disabled={isRefreshing}
           >
-            <RefreshCw size={20} color={isRefreshing ? Colors.textSecondary : Colors.text} />
+            <RefreshCw size={20} color={isRefreshing ? themeColors.textSecondary : themeColors.primaryForeground} />
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[styles.addButton, { marginRight: 8 }]}
+            style={[styles.addButton, { marginRight: 8, backgroundColor: themeColors.primary }]}
             onPress={handleDebugMenu}
           >
-            <Text style={styles.debugText}>Debug</Text>
+            <Text style={[styles.debugText, { color: themeColors.primaryForeground }]}>Debug</Text>
           </TouchableOpacity>
           <TouchableOpacity 
-            style={styles.addButton}
+            style={[styles.addButton, { backgroundColor: themeColors.primary }]}
             onPress={() => router.push('../add-recipe-photo')}
           >
-            <Plus size={24} color={Colors.text} />
+            <Plus size={24} color={themeColors.primaryForeground} />
           </TouchableOpacity>
         </View>
       </View>
       
-      <View style={styles.categoryContainer}>
+      <View style={[styles.categoryContainer, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
         <CategorySelector
           selectedCategory={selectedCategory}
           onSelectCategory={setSelectedCategory}
@@ -272,14 +275,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     minHeight: 70,
-    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
   },
   categoryContainer: {
-    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
   },
   listContainer: {
     flex: 1,
@@ -287,7 +286,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: Colors.text,
     flex: 1,
   },
   headerButtons: {
@@ -298,13 +296,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     ...Colors.shadow,
   },
   debugText: {
-    color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '600',
   },
@@ -312,7 +308,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -4,
     right: -4,
-    backgroundColor: Colors.error,
     borderRadius: 8,
     minWidth: 16,
     height: 16,
