@@ -8,7 +8,7 @@ import { AuthContext } from "@/hooks/auth-store";
 import { RecipeContext } from "@/hooks/recipe-store";
 import { MealPlanContext } from "@/hooks/meal-plan-store";
 import { UserContext } from "@/hooks/user-store";
-import { ThemeContext } from "@/hooks/theme-store";
+import { ThemeContext, useTheme } from "@/hooks/theme-store";
 import Colors from "@/constants/colors";
 import { trpc, trpcClient } from "@/lib/trpc";
 
@@ -18,19 +18,22 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
+  const { themeMode } = useTheme();
+  const theme = themeMode === 'dark' ? Colors.dark : Colors.light;
+
   return (
     <Stack 
       screenOptions={{ 
         headerBackTitle: "Back",
         headerStyle: {
-          backgroundColor: Colors.light.background,
+          backgroundColor: theme.background,
         },
-        headerTintColor: Colors.light.text,
+        headerTintColor: theme.text,
         headerTitleStyle: {
           fontWeight: '600',
         },
         contentStyle: {
-          backgroundColor: Colors.light.background,
+          backgroundColor: theme.background,
         },
       }}
     >
@@ -65,7 +68,7 @@ export default function RootLayout() {
               <UserContext>
                 <RecipeContext>
                   <MealPlanContext>
-                    <StatusBar style="light" />
+                    <StatusBar style="auto" />
                     <RootLayoutNav />
                   </MealPlanContext>
                 </RecipeContext>
