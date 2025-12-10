@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { RecipeCategory } from '@/types';
 import Colors from '@/constants/colors';
+import { useTheme } from '@/hooks/theme-store';
 
 interface CategorySelectorProps {
   selectedCategory: RecipeCategory;
@@ -20,6 +21,9 @@ export default function CategorySelector({
   selectedCategory, 
   onSelectCategory 
 }: CategorySelectorProps) {
+  const { isDark } = useTheme();
+  const theme = isDark ? Colors.dark : Colors.light;
+  
   return (
     <ScrollView
       horizontal
@@ -31,14 +35,21 @@ export default function CategorySelector({
           key={category}
           style={[
             styles.categoryButton,
-            selectedCategory === category && styles.selectedCategory
+            { backgroundColor: theme.surface },
+            selectedCategory === category && {
+              backgroundColor: 'transparent',
+              borderColor: isDark ? '#FFFFFF' : theme.primary,
+            }
           ]}
           onPress={() => onSelectCategory(category)}
         >
           <Text
             style={[
               styles.categoryText,
-              selectedCategory === category && styles.selectedCategoryText
+              { color: theme.textSecondary },
+              selectedCategory === category && {
+                color: isDark ? '#FFFFFF' : theme.primary,
+              }
             ]}
           >
             {category}
@@ -61,24 +72,15 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 25,
     marginRight: 12,
-    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: 'transparent',
     minHeight: 50,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  selectedCategory: {
-    backgroundColor: 'transparent',
-    borderColor: Colors.primary,
-  },
   categoryText: {
-    color: Colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: '500' as const,
     fontSize: 14,
-    textAlign: 'center',
-  },
-  selectedCategoryText: {
-    color: Colors.primary,
+    textAlign: 'center' as const,
   },
 });
