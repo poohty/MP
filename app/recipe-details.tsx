@@ -4,13 +4,12 @@ import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import { useAuth } from '@/hooks/auth-store';
 import Colors from '@/constants/colors';
-import { ExternalLink, Trash2, CheckSquare, Square, Edit3, Camera, Link as LinkIcon, BookPlus, Mic, MicOff } from 'lucide-react-native';
+import { ExternalLink, Trash2, CheckSquare, Square, Edit3, Camera, Link as LinkIcon, BookPlus } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import GradientBackground from '@/components/GradientBackground';
 import { Recipe, RecipeCategory } from '@/types';
 import DropdownSelect from '@/components/DropdownSelect';
 import * as ImagePicker from 'expo-image-picker';
-import { startRecipeSession, stopRecipeSession } from '@/lib/voiceAssistant';
 
 export default function RecipeDetailsScreen() {
   const { id, friendUserId } = useLocalSearchParams<{ id: string; friendUserId?: string }>();
@@ -24,7 +23,6 @@ export default function RecipeDetailsScreen() {
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [, setIsImporting] = useState(false);
-  const [isVoiceSessionActive, setIsVoiceSessionActive] = useState(false);
 
   const handleExtractRecipeContent = useCallback(async (recipeToUpdate: Recipe) => {
     if (!recipeToUpdate.url) return;
@@ -72,87 +70,6 @@ export default function RecipeDetailsScreen() {
     }
   }, [id, loadRecipe]);
 
-  const handleToggleVoiceSession = useCallback(() => {
-    if (!recipe || !recipe.content) {
-      Alert.alert('No Instructions', 'This recipe does not have instructions to read.');
-      return;
-    }
-
-    if (Platform.OS !== 'web') {
-      Alert.alert(
-        'Voice-Guided Cooking Not Available',
-        'Voice-guided cooking requires native speech recognition and text-to-speech capabilities that are not available in Expo Go. This feature works in web browsers, or would require a custom development build with native modules.'
-      );
-      return;
-    }
-
-    if (isVoiceSessionActive) {
-      stopRecipeSession();
-      setIsVoiceSessionActive(false);
-    } else {
-      const parsedContent = parseRecipeContent(recipe.content);
-      
-      if (parsedContent.instructions.length === 0) {
-        Alert.alert('No Instructions', 'This recipe does not have step-by-step instructions to read.');
-        return;
-      }
-
-      const instructionSteps = parsedContent.instructions.map(
-        (instruction) => instruction.replace(/^☐\s*/, '').replace(/^\d+\.\s*/, '')
-      );
-
-      const voiceType = (user?.instructionVoice || 'female') as 'female' | 'male';
-
-      setIsVoiceSessionActive(true);
-
-      startRecipeSession(instructionSteps, voiceType, {
-        onStepStart: (index) => {
-          console.log('🎤 Step started:', index);
-        },
-        onStepComplete: (index) => {
-          console.log('✅ Step completed:', index);
-          setCheckedSteps((prev) => ({ ...prev, [index]: true }));
-          
-          if (recipe) {
-            const newSteps = { ...checkedSteps, [index]: true };
-            updateRecipeStepProgress(recipe.id, newSteps).catch((error) => {
-              console.error('Failed to save step progress:', error);
-            });
-          }
-        },
-        onFinished: () => {
-          console.log('🎉 Recipe finished!');
-          setIsVoiceSessionActive(false);
-          
-          const emptySteps: { [key: number]: boolean } = {};
-          setCheckedSteps(emptySteps);
-          
-          if (recipe) {
-            updateRecipeStepProgress(recipe.id, emptySteps).catch((error) => {
-              console.error('Failed to reset step progress:', error);
-            });
-          }
-        },
-        onError: (error) => {
-          console.error('❌ Voice session error:', error);
-          Alert.alert(
-            'Voice Assistant Error',
-            typeof error === 'string' ? error : error.message || 'Failed to start voice assistant'
-          );
-          setIsVoiceSessionActive(false);
-        },
-      });
-    }
-  }, [recipe, user, isVoiceSessionActive, checkedSteps, updateRecipeStepProgress]);
-
-  useEffect(() => {
-    return () => {
-      if (isVoiceSessionActive) {
-        stopRecipeSession();
-      }
-    };
-  }, [isVoiceSessionActive]);
-
   const handleImportToMyCookbook = async () => {
     if (!recipe || !user) return;
 
@@ -194,29 +111,11 @@ export default function RecipeDetailsScreen() {
     
     setCheckedSteps(newCheckedSteps);
     
+    // Save step progress to storage
     try {
       await updateRecipeStepProgress(recipe.id, newCheckedSteps);
     } catch (error) {
       console.error('Failed to save step progress:', error);
-    }
-    
-    const parsedContent = recipe.content ? parseRecipeContent(recipe.content) : { instructions: [] };
-    const totalSteps = parsedContent.instructions.length;
-    
-    const allChecked = Array.from({ length: totalSteps }, (_, i) => i).every(
-      (i) => i === stepIndex ? newCheckedSteps[i] : checkedSteps[i]
-    );
-    
-    if (allChecked && totalSteps > 0) {
-      setTimeout(async () => {
-        const emptySteps: { [key: number]: boolean } = {};
-        setCheckedSteps(emptySteps);
-        try {
-          await updateRecipeStepProgress(recipe.id, emptySteps);
-        } catch (error) {
-          console.error('Failed to reset step progress:', error);
-        }
-      }, 300);
     }
   };
 
@@ -800,29 +699,8 @@ export default function RecipeDetailsScreen() {
                 {/* Instructions Section */}
                 {parsedContent.instructions.length > 0 && (
                   <View style={styles.section}>
-                    <View style={styles.instructionsHeader}>
-                      <Text style={styles.sectionTitle}>👨‍🍳 Instructions</Text>
-                      {!friendUserId && (
-                        <TouchableOpacity
-                          style={[
-                            styles.micButton,
-                            isVoiceSessionActive && styles.micButtonActive
-                          ]}
-                          onPress={handleToggleVoiceSession}
-                        >
-                          {isVoiceSessionActive ? (
-                            <MicOff size={20} color={Colors.error} />
-                          ) : (
-                            <Mic size={20} color={Colors.primary} />
-                          )}
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                    <Text style={styles.instructionsSubtitle}>
-                      {isVoiceSessionActive
-                        ? '🎤 Voice guide active - say "step complete" to continue'
-                        : 'Tap each step to check it off as you cook!'}
-                    </Text>
+                    <Text style={styles.sectionTitle}>👨‍🍳 Instructions</Text>
+                    <Text style={styles.instructionsSubtitle}>Tap each step to check it off as you cook!</Text>
                     {parsedContent.instructions.map((instruction, index) => {
                       // Clean up instruction text and handle checkboxes
                       const cleanInstruction = instruction.replace(/^☐\s*/, '').replace(/^\d+\.\s*/, '');
@@ -1410,25 +1288,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
     marginBottom: 2,
-  },
-  instructionsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  micButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Colors.primary,
-  },
-  micButtonActive: {
-    backgroundColor: Colors.error + '20',
-    borderColor: Colors.error,
   },
 });

@@ -7,7 +7,6 @@ export type User = {
   bio?: string;
   shareCookbookWithFriends?: boolean;
   locationPermission?: boolean;
-  instructionVoice?: 'female' | 'male';
 };
 
 export type RecipeCategory = 'Breakfast' | 'Appetizer' | 'Salads & Soups' | 'Main Course' | 'Desserts';
