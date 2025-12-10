@@ -2,16 +2,20 @@ import React, { useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, Switch } from 'react-native';
 import { useAuth } from '@/hooks/auth-store';
 import { useUser } from '@/hooks/user-store';
+import { useTheme } from '@/hooks/theme-store';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
-import { User, Settings, Info, Heart, Users } from 'lucide-react-native';
+import { User, Settings, Info, Heart, Users, Moon } from 'lucide-react-native';
 import { router } from 'expo-router';
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const { currentUserProfile, updateShareCookbook } = useUser();
+  const { toggleTheme, isDark } = useTheme();
   const [isUpdatingShare, setIsUpdatingShare] = useState(false);
+
+  const colors = isDark ? Colors.dark : Colors.light;
 
   const handleLogout = () => {
     Alert.alert(
@@ -35,17 +39,34 @@ export default function ProfileScreen() {
     <GradientBackground>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>
+          <View style={[styles.avatarContainer, { backgroundColor: colors.primary }]}>
+            <Text style={[styles.avatarText, { color: colors.primaryForeground }]}>
               {user?.name?.charAt(0).toUpperCase() || 'U'}
             </Text>
           </View>
-          <Text style={styles.name}>{user?.name || 'User'}</Text>
-          <Text style={styles.email}>{user?.email || 'user@example.com'}</Text>
+          <Text style={[styles.name, { color: colors.text }]}>{user?.name || 'User'}</Text>
+          <Text style={[styles.email, { color: colors.textSecondary }]}>{user?.email || 'user@example.com'}</Text>
         </View>
         
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
+          
+          <View style={styles.menuItem}>
+            <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
+              <Moon size={20} color={colors.primary} />
+            </View>
+            <Text style={[styles.menuText, { color: colors.text }]}>Dark Mode</Text>
+            <Switch
+              value={isDark}
+              onValueChange={toggleTheme}
+              trackColor={{ false: colors.muted, true: colors.primary }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
+        
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Account</Text>
           
           <TouchableOpacity
             style={styles.menuItem}
@@ -53,28 +74,28 @@ export default function ProfileScreen() {
               router.push('/edit-profile');
             }}
           >
-            <View style={styles.menuIconContainer}>
-              <User size={20} color={Colors.primary} />
+            <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
+              <User size={20} color={colors.primary} />
             </View>
-            <Text style={styles.menuText}>Edit Profile</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>Edit Profile</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuIconContainer}>
-              <Settings size={20} color={Colors.primary} />
+            <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
+              <Settings size={20} color={colors.primary} />
             </View>
-            <Text style={styles.menuText}>Preferences</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>Preferences</Text>
           </TouchableOpacity>
         </View>
         
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Social</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Social</Text>
           
           <View style={styles.menuItem}>
-            <View style={styles.menuIconContainer}>
-              <Users size={20} color={Colors.primary} />
+            <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
+              <Users size={20} color={colors.primary} />
             </View>
-            <Text style={styles.menuText}>Share Cookbook with Friends</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>Share Cookbook with Friends</Text>
             <Switch
               value={currentUserProfile?.shareCookbookWithFriends || false}
               onValueChange={async (value) => {
@@ -91,27 +112,27 @@ export default function ProfileScreen() {
                 }
               }}
               disabled={isUpdatingShare}
-              trackColor={{ false: Colors.surface, true: Colors.primary }}
+              trackColor={{ false: colors.muted, true: colors.primary }}
               thumbColor="#FFFFFF"
             />
           </View>
         </View>
         
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>About</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>About</Text>
           
           <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuIconContainer}>
-              <Info size={20} color={Colors.primary} />
+            <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
+              <Info size={20} color={colors.primary} />
             </View>
-            <Text style={styles.menuText}>Help & Support</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>Help & Support</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.menuItem}>
-            <View style={styles.menuIconContainer}>
-              <Heart size={20} color={Colors.primary} />
+            <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
+              <Heart size={20} color={colors.primary} />
             </View>
-            <Text style={styles.menuText}>About Meal Planning Roulette</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>About Meal Planning Roulette</Text>
           </TouchableOpacity>
         </View>
         
@@ -122,7 +143,7 @@ export default function ProfileScreen() {
           style={styles.logoutButton}
         />
         
-        <Text style={styles.version}>Version 1.0.0</Text>
+        <Text style={[styles.version, { color: colors.textSecondary }]}>Version 1.0.0</Text>
       </ScrollView>
     </GradientBackground>
   );

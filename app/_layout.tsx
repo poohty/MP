@@ -8,6 +8,7 @@ import { AuthContext } from "@/hooks/auth-store";
 import { RecipeContext } from "@/hooks/recipe-store";
 import { MealPlanContext } from "@/hooks/meal-plan-store";
 import { UserContext } from "@/hooks/user-store";
+import { ThemeContext } from "@/hooks/theme-store";
 import Colors from "@/constants/colors";
 import { trpc, trpcClient } from "@/lib/trpc";
 
@@ -59,16 +60,18 @@ export default function RootLayout() {
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView style={{ flex: 1 }}>
-          <AuthContext>
-            <UserContext>
-              <RecipeContext>
-                <MealPlanContext>
-                  <StatusBar style="light" />
-                  <RootLayoutNav />
-                </MealPlanContext>
-              </RecipeContext>
-            </UserContext>
-          </AuthContext>
+          <ThemeContext>
+            <AuthContext>
+              <UserContext>
+                <RecipeContext>
+                  <MealPlanContext>
+                    <StatusBar style="light" />
+                    <RootLayoutNav />
+                  </MealPlanContext>
+                </RecipeContext>
+              </UserContext>
+            </AuthContext>
+          </ThemeContext>
         </GestureHandlerRootView>
       </QueryClientProvider>
     </trpc.Provider>
