@@ -191,15 +191,13 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: Colors.radius,
     overflow: 'hidden',
     marginBottom: 16,
-    elevation: 2,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    ...Colors.shadowMd,
   },
   imageContainer: {
     height: 160,
@@ -242,8 +240,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.error,
   },
   contentContainer: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   title: {
     fontSize: 16,
@@ -257,13 +255,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   categoryBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
   categoryText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
   iconContainer: {

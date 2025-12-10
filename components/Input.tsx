@@ -85,15 +85,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 8,
     color: Colors.text,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: Colors.radius,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: Colors.border,
     height: 50,
     paddingHorizontal: 16,
   },
@@ -105,14 +105,17 @@ const styles = StyleSheet.create({
   },
   focusedInput: {
     borderColor: Colors.primary,
+    borderWidth: 2,
   },
   errorInput: {
     borderColor: Colors.error,
+    borderWidth: 2,
   },
   errorText: {
     color: Colors.error,
     fontSize: 12,
-    marginTop: 4,
+    marginTop: 6,
+    fontWeight: '500',
   },
   eyeIcon: {
     padding: 4,

@@ -116,11 +116,12 @@ export default function Button({
 
 const styles = StyleSheet.create({
   buttonBase: {
-    borderRadius: 12,
+    borderRadius: Colors.radius,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     flexDirection: 'row',
+    ...Colors.shadow,
   },
 
   primaryButton: {
@@ -128,10 +129,12 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   outlineButton: {
     backgroundColor: 'transparent',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: Colors.primary,
   },
   smallButton: {
@@ -139,7 +142,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   mediumButton: {
-    height: 48,
+    height: 50,
     paddingHorizontal: 24,
   },
   largeButton: {
@@ -147,7 +150,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   primaryText: {
-    color: Colors.text,
+    color: '#FFFFFF',
     fontWeight: '600',
     fontSize: 16,
   },

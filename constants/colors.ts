@@ -1,40 +1,93 @@
-// Futuristic, minimalist color scheme
 const Colors = {
   light: {
-    text: "#FFFFFF",
-    background: "#0F1020",
-    tint: "#3A86FF",
-    tabIconDefault: "#B0B0C0",
-    tabIconSelected: "#3A86FF",
-    textSecondary: "#B0B0C0", // Light gray text
-    primary: "#3A86FF", // Bright blue
-    secondary: "#8338EC", // Purple
-    accent: "#FF006E", // Bright pink
-    surface: "#1A1B2E", // Slightly lighter background
-    success: "#06D6A0", // Teal
-    error: "#EF476F", // Red
-    warning: "#FFD166", // Yellow
-    cardBackground: "rgba(255, 255, 255, 0.05)", // Translucent white
+    background: "#FFFFFF",
+    foreground: "#0A0A0A",
+    card: "#FFFFFF",
+    cardForeground: "#0A0A0A",
+    primary: "#4ADE80",
+    primaryForeground: "#000000",
+    secondary: "#FFFFFF",
+    secondaryForeground: "#1A1A1A",
+    muted: "#F5F5F5",
+    mutedForeground: "#737373",
+    accent: "#F5F5F5",
+    accentForeground: "#0A0A0A",
+    destructive: "#DC2626",
+    destructiveForeground: "#FFFFFF",
+    border: "#E5E5E5",
+    input: "#E5E5E5",
+    ring: "#A3A3A3",
+    text: "#0A0A0A",
+    textSecondary: "#737373",
+    surface: "#FAFAFA",
+    success: "#4ADE80",
+    error: "#DC2626",
+    warning: "#F59E0B",
   },
-  // Extended color palette (direct access)
-  primary: "#3A86FF", // Bright blue
-  secondary: "#8338EC", // Purple
-  accent: "#FF006E", // Bright pink
-  background: "#0F1020", // Dark blue-black
-  surface: "#1A1B2E", // Slightly lighter background
-  surfaceVariant: "#252640", // Even lighter surface
-  text: "#FFFFFF", // White text
-  textSecondary: "#B0B0C0", // Light gray text
-  success: "#06D6A0", // Teal
-  error: "#EF476F", // Red
-  warning: "#FFD166", // Yellow
-  cardBackground: "rgba(255, 255, 255, 0.05)", // Translucent white
-  border: "rgba(255, 255, 255, 0.1)", // Subtle border
-  gradientStart: "#3A86FF",
-  gradientEnd: "#8338EC",
-  // New gradient colors for background
-  gradientTop: "#6B46C1", // Glowing dark purple
-  gradientBottom: "#000000", // Black
+  dark: {
+    background: "#0A0A0A",
+    foreground: "#FAFAFA",
+    card: "#0F0F0F",
+    cardForeground: "#FAFAFA",
+    primary: "#7C3AED",
+    primaryForeground: "#F3E8FF",
+    secondary: "#7C3AED",
+    secondaryForeground: "#F5F5F5",
+    muted: "#262626",
+    mutedForeground: "#A3A3A3",
+    accent: "#7C3AED",
+    accentForeground: "#FAFAFA",
+    destructive: "#EF4444",
+    destructiveForeground: "#FAFAFA",
+    border: "#2A2A2A",
+    input: "#333333",
+    ring: "#737373",
+    text: "#FAFAFA",
+    textSecondary: "#A3A3A3",
+    surface: "#1A1A1A",
+    success: "#4ADE80",
+    error: "#EF4444",
+    warning: "#F59E0B",
+  },
+  primary: "#4ADE80",
+  secondary: "#7C3AED",
+  accent: "#4ADE80",
+  background: "#FFFFFF",
+  surface: "#FAFAFA",
+  surfaceVariant: "#F5F5F5",
+  text: "#0A0A0A",
+  textSecondary: "#737373",
+  success: "#4ADE80",
+  error: "#DC2626",
+  warning: "#F59E0B",
+  cardBackground: "#FFFFFF",
+  border: "#E5E5E5",
+  gradientStart: "#4ADE80",
+  gradientEnd: "#7C3AED",
+  gradientTop: "#FFFFFF",
+  gradientBottom: "#F5F5F5",
+  radius: 10,
+  shadow: {
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  shadowMd: {
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  shadowLg: {
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 4,
+  },
 }
 
 export default Colors;

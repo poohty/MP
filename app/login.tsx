@@ -117,13 +117,20 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    padding: 24,
+    padding: 20,
+    paddingBottom: 40,
   },
   header: {
-    marginBottom: 40,
+    marginBottom: 32,
   },
   backButton: {
-    marginBottom: 24,
+    marginBottom: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontSize: 32,
@@ -136,26 +143,30 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   loginBlock: {
-    backgroundColor: Colors.surface,
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 24,
+    padding: 20,
     marginBottom: 24,
+    ...Colors.shadowMd,
   },
   button: {
-    marginTop: 16,
+    marginTop: 8,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 'auto',
-    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 20,
+    paddingVertical: 20,
   },
   footerText: {
     color: Colors.textSecondary,
+    fontSize: 15,
     marginRight: 4,
   },
   footerLink: {
     color: Colors.primary,
-    fontWeight: '600',
+    fontWeight: '700',
+    fontSize: 15,
   },
 });
