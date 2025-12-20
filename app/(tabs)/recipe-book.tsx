@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Alert } from 'react-native';
-import { router, type Href } from 'expo-router';
+import { router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import RecipeList from '@/components/RecipeList';
 import CategorySelector from '@/components/CategorySelector';
@@ -17,14 +17,15 @@ export default function RecipeBookScreen() {
   const [selectedCategory, setSelectedCategory] = useState<RecipeCategory>('Breakfast');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExtractingImages, setIsExtractingImages] = useState(false);
+  const [showDebugMenu, setShowDebugMenu] = useState(false);
 
   const filteredRecipes = recipes.filter(recipe => recipe.category === selectedCategory);
 
   const handleSelectRecipe = (recipe: Recipe) => {
     router.push({
       pathname: '/recipe-details',
-      params: { id: recipe.id },
-    } as Href);
+      params: { id: recipe.id }
+    });
   };
 
   const handleDeleteRecipe = async (recipe: Recipe): Promise<boolean> => {
@@ -81,6 +82,7 @@ export default function RecipeBookScreen() {
             style: 'destructive',
             onPress: async () => {
               setIsExtractingImages(true);
+              setShowDebugMenu(false);
               
               // Show progress alert
               Alert.alert(
@@ -183,14 +185,16 @@ export default function RecipeBookScreen() {
   const totalRecipes = recipes.length;
   
   const handleDebugMenu = () => {
+    setShowDebugMenu(true);
+    
     Alert.alert(
       '🛠️ Debug Menu',
       `Total Recipes: ${totalRecipes}\nWith Images: ${recipesWithImages}\nWithout Images: ${recipesWithoutImages}`,
       [
-        { text: 'Image Diagnostics', onPress: () => router.push('/image-diagnostics' as Href) },
+        { text: 'Image Diagnostics', onPress: () => router.push('/image-diagnostics') },
         { text: 'Debug Storage', onPress: debugStorage },
         { text: 'Force Re-Extract ALL', onPress: handleForceReExtractAll },
-        { text: 'Close', style: 'cancel' }
+        { text: 'Close', style: 'cancel', onPress: () => setShowDebugMenu(false) }
       ]
     );
   };

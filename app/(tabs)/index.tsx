@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image } from 'react-native';
-import { router, type Href } from 'expo-router';
+import { router } from 'expo-router';
 import { useAuth } from '@/hooks/auth-store';
 import { useRecipes } from '@/hooks/recipe-store';
 import { useTheme } from '@/hooks/theme-store';
@@ -42,7 +42,7 @@ export default function HomeScreen() {
         
         <View style={styles.heroContainer}>
           <Image
-            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/8ipizlu3zicniuigul7yx?v=2' }}
+            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/8ipizlu3zicniuigul7yx' }}
             style={styles.heroImage}
             resizeMode="cover"
           />
@@ -271,7 +271,7 @@ function WelcomeScreen() {
       <View style={welcomeStyles.content}>
         <View style={welcomeStyles.logoContainer}>
           <Image
-            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/3hcmxxxhnr8aykl1w78r1?v=2' }}
+            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/3hcmxxxhnr8aykl1w78r1' }}
             style={welcomeStyles.image}
             resizeMode="cover"
           />
@@ -287,12 +287,12 @@ function WelcomeScreen() {
         <View style={welcomeStyles.buttonContainer}>
           <Button
             title="Log In"
-            onPress={() => router.push('/login' as Href)}
+            onPress={() => router.push('/login')}
             style={welcomeStyles.button}
           />
           <Button
             title="Sign Up"
-            onPress={() => router.push('/signup' as Href)}
+            onPress={() => router.push('/signup')}
             variant="outline"
             style={welcomeStyles.button}
           />

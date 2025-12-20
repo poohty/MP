@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { router, type Href } from 'expo-router';
+import { router } from 'expo-router';
 import { useAuth } from '@/hooks/auth-store';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
@@ -100,7 +100,7 @@ export default function LoginScreen() {
         
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don&apos;t have an account?</Text>
-          <TouchableOpacity onPress={() => router.push('/signup' as Href)}>
+          <TouchableOpacity onPress={() => router.push('/signup')}>
             <Text style={styles.footerLink}>Sign Up</Text>
           </TouchableOpacity>
         </View>
