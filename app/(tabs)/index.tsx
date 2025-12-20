@@ -19,7 +19,7 @@ export default function HomeScreen() {
 
   const layout = useMemo(() => {
     const heroHeight = Math.max(118, Math.min(145, Math.round(windowHeight * 0.18)));
-    const actionCardMinHeight = Math.max(92, Math.min(118, Math.round(windowHeight * 0.145)));
+    const actionCardMinHeight = Math.max(102, Math.min(130, Math.round(windowHeight * 0.155)));
     const statPaddingV = Math.max(10, Math.min(12, Math.round(windowHeight * 0.014)));
 
     return {

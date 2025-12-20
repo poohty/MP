@@ -413,9 +413,71 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         totalTime?: string;
         calories?: string;
         nutritionalFacts?: string;
+        instructions?: string;
       }
       
       const scrapedMeta: ScrapedRecipeMeta = {};
+
+      const normalizeInstructionText = (text: string): string => {
+        return (text || '').toString().replace(/\s+/g, ' ').trim();
+      };
+
+      const buildCheckboxSteps = (steps: string[]): string => {
+        const cleaned = steps
+          .map(s => normalizeInstructionText(s))
+          .filter(s => s.length > 0);
+
+        if (!cleaned.length) return '';
+
+        return cleaned.map((s, idx) => `☐ ${idx + 1}. ${s}`).join('\n');
+      };
+
+      const extractRecipeInstructionsFromJsonLd = (recipeItem: any): string => {
+        const raw = recipeItem?.recipeInstructions;
+        if (!raw) return '';
+
+        const steps: string[] = [];
+
+        const pushStep = (value: any) => {
+          if (!value) return;
+          if (typeof value === 'string') {
+            steps.push(value);
+            return;
+          }
+          if (typeof value === 'object') {
+            const textCandidate = value.text ?? value.name ?? value.description;
+            if (typeof textCandidate === 'string') {
+              steps.push(textCandidate);
+              return;
+            }
+
+            if (Array.isArray(value.itemListElement)) {
+              for (const el of value.itemListElement) pushStep(el);
+              return;
+            }
+          }
+        };
+
+        if (typeof raw === 'string') {
+          const split = raw
+            .split(/\r?\n/)
+            .map(s => s.trim())
+            .filter(Boolean);
+          return buildCheckboxSteps(split);
+        }
+
+        if (Array.isArray(raw)) {
+          for (const entry of raw) pushStep(entry);
+          return buildCheckboxSteps(steps);
+        }
+
+        if (typeof raw === 'object') {
+          pushStep(raw);
+          return buildCheckboxSteps(steps);
+        }
+
+        return '';
+      };
       
       function convertIsoDurationToReadable(duration: string): string {
         try {
@@ -455,6 +517,14 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
             
             console.log('✅ Found Recipe schema in JSON-LD');
             
+            if (!scrapedMeta.instructions) {
+              const instructionsFromJsonLd = extractRecipeInstructionsFromJsonLd(item);
+              if (instructionsFromJsonLd) {
+                scrapedMeta.instructions = instructionsFromJsonLd;
+                console.log(`  Instructions: extracted ${instructionsFromJsonLd.split('\n').length} lines from JSON-LD`);
+              }
+            }
+
             if (typeof item.prepTime === 'string' && !scrapedMeta.prepTime) {
               scrapedMeta.prepTime = convertIsoDurationToReadable(item.prepTime);
               console.log(`  Prep Time: ${scrapedMeta.prepTime}`);
@@ -516,6 +586,8 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
 
 You are an expert recipe parser. Extract recipe data from HTML and return ONLY valid JSON.
 
+CRITICAL: For instructions, you MUST copy them word-for-word from the source HTML/JSON-LD. Do NOT summarize, do NOT paraphrase, do NOT reorder, do NOT merge steps, and do NOT omit warnings/notes/parenthetical details. Preserve punctuation and wording exactly as written on the page.
+
 🎯 REQUIRED OUTPUT FORMAT (STRICT JSON):
 {
   "ingredients": "one ingredient per line",
@@ -547,7 +619,7 @@ You are an expert recipe parser. Extract recipe data from HTML and return ONLY v
 - Return ONLY valid JSON, NO markdown, NO backticks, NO extra text
 - If a field is missing, set it to empty string ""
 - All values must be strings
-- Instructions must have checkboxes like "☐ 1. Step text"
+- Instructions must have checkboxes like "☐ 1. Step text" (but the step text itself must be copied verbatim from the page; only add the checkbox + numbering prefix)
 - Times must be human-readable (not ISO durations)
 - Category must be exactly one of the 5 options
 
@@ -812,6 +884,9 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
       extractedData.calories = scrapedMeta.calories || extractedData.calories;
       if (scrapedMeta.nutritionalFacts && !extractedData.nutritionalFacts) {
         extractedData.nutritionalFacts = scrapedMeta.nutritionalFacts;
+      }
+      if (scrapedMeta.instructions) {
+        extractedData.instructions = scrapedMeta.instructions;
       }
       
       if (!extractedData.prepTime && extractedData.times) {
