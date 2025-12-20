@@ -42,7 +42,7 @@ export default function HomeScreen() {
         
         <View style={styles.heroContainer}>
           <Image
-            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/q5avl2cpf8c3s9bxzce21' }}
+            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/8ipizlu3zicniuigul7yx' }}
             style={styles.heroImage}
             resizeMode="cover"
           />
