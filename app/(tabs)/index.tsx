@@ -18,8 +18,8 @@ export default function HomeScreen() {
   const { height: windowHeight } = useWindowDimensions();
 
   const layout = useMemo(() => {
-    const heroHeight = Math.max(118, Math.min(145, Math.round(windowHeight * 0.18)));
-    const actionCardMinHeight = Math.max(102, Math.min(130, Math.round(windowHeight * 0.155)));
+    const heroHeight = Math.max(112, Math.min(140, Math.round(windowHeight * 0.17)));
+    const actionCardMinHeight = Math.max(112, Math.min(142, Math.round(windowHeight * 0.17)));
     const statPaddingV = Math.max(10, Math.min(12, Math.round(windowHeight * 0.014)));
 
     return {
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
   heroContainer: {
     borderRadius: Colors.radius,
     overflow: 'hidden',
-    marginBottom: 12,
+    marginBottom: 10,
     ...Colors.shadowMd,
   },
   heroImage: {
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 10,
     gap: 8,
   },
   statCard: {
@@ -255,41 +255,41 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 15,
     fontWeight: '800' as const,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   actionsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 10,
     gap: 8,
   },
   actionCard: {
     borderRadius: Colors.radius,
-    padding: 10,
+    padding: 12,
     flex: 1,
     borderWidth: 1,
     ...Colors.shadow,
   },
   actionIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     marginBottom: 6,
   },
   actionTitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800' as const,
     marginBottom: 4,
   },
   actionDescription: {
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 10,
+    lineHeight: 13,
   },
   mealPlanButton: {
     marginTop: 2,
-    marginBottom: 18,
+    marginBottom: 20,
   },
 });
 
