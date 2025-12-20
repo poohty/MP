@@ -21,7 +21,11 @@ const [UserContext, useUser] = createContextHook(() => {
         .single();
 
       if (error) {
-        console.error('Failed to load user profile from Supabase:', JSON.stringify(error, null, 2));
+        if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
+          console.error('⚠️ Supabase unavailable (server error). Operating in offline mode.');
+        } else {
+          console.error('❌ Supabase error:', error.message || error.code || 'Unknown error');
+        }
         return null;
       }
 
@@ -34,8 +38,8 @@ const [UserContext, useUser] = createContextHook(() => {
         displayName: data.display_name,
         shareCookbookWithFriends: data.share_cookbook_with_friends,
       };
-    } catch (error) {
-      console.error('Unexpected error loading user profile from Supabase:', error instanceof Error ? error.message : JSON.stringify(error));
+    } catch {
+      console.error('⚠️ Network error loading user profile. Operating in offline mode.');
       return null;
     }
   }, []);
@@ -56,7 +60,11 @@ const [UserContext, useUser] = createContextHook(() => {
         .or(`user_id.eq.${profileId},friend_user_id.eq.${profileId}`);
 
       if (error) {
-        console.error('❌ Supabase load friend links error:', JSON.stringify(error, null, 2));
+        if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
+          console.warn('⚠️ Supabase unavailable. Friend features disabled.');
+        } else {
+          console.error('❌ Supabase error loading friend links:', error.message || error.code);
+        }
         return [];
       }
 
@@ -70,8 +78,8 @@ const [UserContext, useUser] = createContextHook(() => {
 
       setFriendLinks(links);
       return links;
-    } catch (error) {
-      console.error('Failed to load friend links from Supabase:', error instanceof Error ? error.message : JSON.stringify(error));
+    } catch {
+      console.warn('⚠️ Network error. Friend features unavailable.');
       return [];
     }
   }, [currentUserProfile]);
@@ -95,7 +103,11 @@ const [UserContext, useUser] = createContextHook(() => {
         .single();
 
       if (error) {
-        console.error('❌ Supabase load current user profile error:', JSON.stringify(error, null, 2));
+        if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
+          console.warn('⚠️ Supabase unavailable. Using local profile data.');
+        } else {
+          console.error('❌ Supabase error:', error.message || error.code);
+        }
         const fallbackProfile: UserProfile = {
           id: authUser.id,
           email: authUser.email,
@@ -104,7 +116,7 @@ const [UserContext, useUser] = createContextHook(() => {
           shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
         };
         setCurrentUserProfile(fallbackProfile);
-        await loadFriendLinks(authUser.id);
+        setFriendLinks([]);
       } else if (data) {
         const profile: UserProfile = {
           id: data.id,
@@ -116,8 +128,17 @@ const [UserContext, useUser] = createContextHook(() => {
         setCurrentUserProfile(profile);
         await loadFriendLinks(data.id);
       }
-    } catch (error) {
-      console.error('Failed to load current user:', error instanceof Error ? error.message : JSON.stringify(error));
+    } catch {
+      console.warn('⚠️ Network error. Using local profile data.');
+      const fallbackProfile: UserProfile = {
+        id: authUser.id,
+        email: authUser.email,
+        username: authUser.username || authUser.email.split('@')[0],
+        displayName: authUser.name,
+        shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
+      };
+      setCurrentUserProfile(fallbackProfile);
+      setFriendLinks([]);
     } finally {
       setIsLoading(false);
     }
@@ -170,7 +191,11 @@ const [UserContext, useUser] = createContextHook(() => {
         .ilike('username', `%${normalized}%`);
 
       if (error) {
-        console.error('❌ Supabase searchUsers error:', JSON.stringify(error, null, 2));
+        if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
+          console.warn('⚠️ Supabase unavailable. User search disabled.');
+        } else {
+          console.error('❌ Search error:', error.message || error.code);
+        }
         setSearchResults([]);
         return;
       }
@@ -222,7 +247,7 @@ const [UserContext, useUser] = createContextHook(() => {
         .single();
 
       if (error) {
-        console.error('❌ Supabase send friend request error:', JSON.stringify(error, null, 2));
+        console.error('❌ Friend request error:', error.message || error.code || 'Unknown error');
         return false;
       }
 
@@ -251,7 +276,7 @@ const [UserContext, useUser] = createContextHook(() => {
         .eq('id', friendLinkId);
 
       if (error) {
-        console.error('❌ Supabase accept friend request error:', JSON.stringify(error, null, 2));
+        console.error('❌ Accept request error:', error.message || error.code || 'Unknown error');
         return false;
       }
 
@@ -272,7 +297,7 @@ const [UserContext, useUser] = createContextHook(() => {
         .eq('id', friendLinkId);
 
       if (error) {
-        console.error('❌ Supabase reject friend request error:', JSON.stringify(error, null, 2));
+        console.error('❌ Reject request error:', error.message || error.code || 'Unknown error');
         return false;
       }
 
@@ -295,7 +320,7 @@ const [UserContext, useUser] = createContextHook(() => {
         .or(`and(user_id.eq.${currentUserProfile.id},friend_user_id.eq.${friendUserId}),and(user_id.eq.${friendUserId},friend_user_id.eq.${currentUserProfile.id})`);
 
       if (error) {
-        console.error('❌ Supabase remove friend error:', JSON.stringify(error, null, 2));
+        console.error('❌ Remove friend error:', error.message || error.code || 'Unknown error');
         return false;
       }
 
