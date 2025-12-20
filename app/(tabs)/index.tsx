@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image } from 'react-native';
+import React, { useEffect, useMemo } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/auth-store';
 import { useRecipes } from '@/hooks/recipe-store';
@@ -15,6 +15,19 @@ export default function HomeScreen() {
   const { recipes } = useRecipes();
   const { isDark } = useTheme();
   const themeColors = isDark ? Colors.dark : Colors.light;
+  const { height: windowHeight } = useWindowDimensions();
+
+  const layout = useMemo(() => {
+    const heroHeight = Math.max(118, Math.min(145, Math.round(windowHeight * 0.18)));
+    const actionCardMinHeight = Math.max(92, Math.min(118, Math.round(windowHeight * 0.145)));
+    const statPaddingV = Math.max(10, Math.min(12, Math.round(windowHeight * 0.014)));
+
+    return {
+      heroHeight,
+      actionCardMinHeight,
+      statPaddingV,
+    };
+  }, [windowHeight]);
 
   // Show welcome screen if not authenticated
   if (!isLoading && !isAuthenticated) {
@@ -34,13 +47,13 @@ export default function HomeScreen() {
 
   return (
     <GradientBackground>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={[styles.greeting, { color: themeColors.textSecondary }]}>{getGreeting()}</Text>
           <Text style={[styles.name, { color: themeColors.text }]}>{user?.name || 'Chef'}</Text>
         </View>
         
-        <View style={styles.heroContainer}>
+        <View style={[styles.heroContainer, { height: layout.heroHeight }]}>
           <Image
             source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/8ipizlu3zicniuigul7yx' }}
             style={styles.heroImage}
@@ -59,19 +72,34 @@ export default function HomeScreen() {
         </View>
         
         <View style={styles.statsContainer}>
-          <View style={[styles.statCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+          <View
+            style={[
+              styles.statCard,
+              { backgroundColor: themeColors.card, borderColor: themeColors.border, paddingVertical: layout.statPaddingV },
+            ]}
+          >
             <Text style={[styles.statNumber, { color: themeColors.text }]}>{recipes.length}</Text>
             <Text style={[styles.statLabel, { color: themeColors.textSecondary }]}>Recipes</Text>
           </View>
           
-          <View style={[styles.statCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+          <View
+            style={[
+              styles.statCard,
+              { backgroundColor: themeColors.card, borderColor: themeColors.border, paddingVertical: layout.statPaddingV },
+            ]}
+          >
             <Text style={[styles.statNumber, { color: themeColors.text }]}>
               {recipes.filter(r => r.category === 'Main Course').length}
             </Text>
             <Text style={[styles.statLabel, { color: themeColors.textSecondary }]}>Main Courses</Text>
           </View>
           
-          <View style={[styles.statCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+          <View
+            style={[
+              styles.statCard,
+              { backgroundColor: themeColors.card, borderColor: themeColors.border, paddingVertical: layout.statPaddingV },
+            ]}
+          >
             <Text style={[styles.statNumber, { color: themeColors.text }]}>
               {recipes.filter(r => r.category === 'Desserts').length}
             </Text>
@@ -82,9 +110,13 @@ export default function HomeScreen() {
         <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Quick Actions</Text>
         
         <View style={styles.actionsContainer}>
-          <TouchableOpacity 
-            style={[styles.actionCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
+          <TouchableOpacity
+            style={[
+              styles.actionCard,
+              { backgroundColor: themeColors.card, borderColor: themeColors.border, minHeight: layout.actionCardMinHeight },
+            ]}
             onPress={() => router.push('../add-recipe-photo')}
+            testID="home-action-upload-photo"
           >
             <View style={[styles.actionIconContainer, { backgroundColor: themeColors.muted }]}>
               <Camera size={16} color={themeColors.primary} />
@@ -95,9 +127,13 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
           
-          <TouchableOpacity 
-            style={[styles.actionCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
+          <TouchableOpacity
+            style={[
+              styles.actionCard,
+              { backgroundColor: themeColors.card, borderColor: themeColors.border, minHeight: layout.actionCardMinHeight },
+            ]}
             onPress={() => router.push('../add-recipe-url')}
+            testID="home-action-add-url"
           >
             <View style={[styles.actionIconContainer, { backgroundColor: themeColors.muted }]}>
               <Link size={16} color={themeColors.primary} />
@@ -108,9 +144,13 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
           
-          <TouchableOpacity 
-            style={[styles.actionCard, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}
+          <TouchableOpacity
+            style={[
+              styles.actionCard,
+              { backgroundColor: themeColors.card, borderColor: themeColors.border, minHeight: layout.actionCardMinHeight },
+            ]}
             onPress={() => router.push('../upload-bookmarks')}
+            testID="home-action-upload-bookmarks"
           >
             <View style={[styles.actionIconContainer, { backgroundColor: themeColors.muted }]}>
               <FolderOpen size={16} color={themeColors.primary} />
@@ -127,6 +167,7 @@ export default function HomeScreen() {
           onPress={() => router.push('../create-meal-plan')}
           style={styles.mealPlanButton}
           size="large"
+          testID="home-create-meal-plan"
         />
       </ScrollView>
     </GradientBackground>
@@ -140,10 +181,10 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: 30,
+    paddingBottom: 26,
   },
   header: {
-    marginBottom: 12,
+    marginBottom: 10,
   },
   greeting: {
     fontSize: 15,
@@ -154,10 +195,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold' as const,
   },
   heroContainer: {
-    height: 90,
     borderRadius: Colors.radius,
     overflow: 'hidden',
-    marginBottom: 10,
+    marginBottom: 12,
     ...Colors.shadowMd,
   },
   heroImage: {
@@ -176,79 +216,80 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 10,
+    padding: 12,
   },
   heroTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginBottom: 2,
   },
   heroSubtitle: {
-    fontSize: 10,
+    fontSize: 11,
+    lineHeight: 14,
     color: 'rgba(255, 255, 255, 0.9)',
   },
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10,
-    gap: 6,
+    marginBottom: 12,
+    gap: 8,
   },
   statCard: {
     borderRadius: Colors.radius,
-    padding: 8,
+    paddingHorizontal: 10,
     alignItems: 'center' as const,
     flex: 1,
     borderWidth: 1,
     ...Colors.shadow,
   },
   statNumber: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: 'bold' as const,
     marginBottom: 2,
   },
   statLabel: {
-    fontSize: 9,
-    fontWeight: '500' as const,
+    fontSize: 10,
+    fontWeight: '600' as const,
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '700' as const,
-    marginBottom: 8,
+    fontSize: 15,
+    fontWeight: '800' as const,
+    marginBottom: 10,
   },
   actionsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10,
-    gap: 6,
+    marginBottom: 12,
+    gap: 8,
   },
   actionCard: {
     borderRadius: Colors.radius,
-    padding: 6,
+    padding: 10,
     flex: 1,
     borderWidth: 1,
     ...Colors.shadow,
   },
   actionIconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   actionTitle: {
-    fontSize: 10,
-    fontWeight: '700' as const,
-    marginBottom: 2,
+    fontSize: 11,
+    fontWeight: '800' as const,
+    marginBottom: 4,
   },
   actionDescription: {
-    fontSize: 8,
-    lineHeight: 10,
+    fontSize: 9,
+    lineHeight: 12,
   },
   mealPlanButton: {
-    marginTop: 4,
-    marginBottom: 20,
+    marginTop: 2,
+    marginBottom: 18,
   },
 });
 
