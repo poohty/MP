@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { StyleSheet, View, Text, FlatList } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import { useMealPlans } from '@/hooks/meal-plan-store';
 import MealPlanCard from '@/components/MealPlanCard';
 import Button from '@/components/Button';
@@ -9,7 +9,7 @@ import Colors from '@/constants/colors';
 import { MealPlan } from '@/types';
 
 export default function MealPlansScreen() {
-  const { mealPlans, isLoading, refreshMealPlans } = useMealPlans();
+  const { mealPlans, refreshMealPlans } = useMealPlans();
 
   useFocusEffect(
     useCallback(() => {
@@ -20,8 +20,8 @@ export default function MealPlansScreen() {
   const handleSelectMealPlan = (mealPlan: MealPlan) => {
     router.push({
       pathname: '/meal-plan-details',
-      params: { id: mealPlan.id }
-    });
+      params: { id: mealPlan.id },
+    } as Href);
   };
 
   return (

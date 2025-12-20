@@ -7,7 +7,7 @@ import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
 import { User, Settings, Info, Heart, Users, Moon } from 'lucide-react-native';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -71,7 +71,7 @@ export default function ProfileScreen() {
           <TouchableOpacity
             style={styles.menuItem}
             onPress={() => {
-              router.push('/edit-profile');
+              router.push('/edit-profile' as Href);
             }}
           >
             <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>

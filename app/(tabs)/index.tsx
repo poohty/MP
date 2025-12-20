@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image } from 'react-native';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { useAuth } from '@/hooks/auth-store';
 import { useRecipes } from '@/hooks/recipe-store';
 import { useTheme } from '@/hooks/theme-store';
@@ -287,12 +287,12 @@ function WelcomeScreen() {
         <View style={welcomeStyles.buttonContainer}>
           <Button
             title="Log In"
-            onPress={() => router.push('/login')}
+            onPress={() => router.push('/login' as Href)}
             style={welcomeStyles.button}
           />
           <Button
             title="Sign Up"
-            onPress={() => router.push('/signup')}
+            onPress={() => router.push('/signup' as Href)}
             variant="outline"
             style={welcomeStyles.button}
           />

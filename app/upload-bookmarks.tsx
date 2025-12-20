@@ -8,14 +8,14 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { router, Stack } from 'expo-router';
+import { router, Stack, type Href } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import { useRecipes } from '@/hooks/recipe-store';
 import Button from '@/components/Button';
 import Colors from '@/constants/colors';
 import GradientBackground from '@/components/GradientBackground';
 import { Upload, FileText, CheckCircle } from 'lucide-react-native';
-import { Recipe, RecipeCategory } from '@/types';
+import { RecipeCategory } from '@/types';
 
 interface ParsedBookmark {
   name: string;
@@ -197,7 +197,7 @@ export default function UploadBookmarksScreen() {
         return !!isImage;
       }
       return false;
-    } catch (error) {
+    } catch {
       return false;
     }
   };
@@ -275,7 +275,7 @@ export default function UploadBookmarksScreen() {
       
       console.log(`⚠️ No specific recipe image found for "${recipeName}"`);
       return '';
-    } catch (error) {
+    } catch {
       console.log(`❌ Error searching for recipe image for "${recipeName}"`);
       return '';
     }
@@ -413,7 +413,7 @@ export default function UploadBookmarksScreen() {
         
         // If not a recipe and we have more attempts, try again
         throw new Error('Not a recipe, retrying');
-      } catch (error) {
+      } catch {
         attempts++;
         
         if (attempts >= maxAttempts) {
@@ -495,7 +495,7 @@ export default function UploadBookmarksScreen() {
       let data;
       try {
         data = await response.json();
-      } catch (jsonError) {
+      } catch {
         console.log(`⚠️ Failed to parse JSON response for "${name}"`);
         throw new Error('Invalid JSON response');
       }
@@ -558,7 +558,13 @@ export default function UploadBookmarksScreen() {
               imageUri = extractedImage;
             } else {
               console.log(`❌ Extracted image not loadable: ${extractedImage}`);
-              // Don't use fallback - if we can't get the real image, leave it undefined
+              try {
+                const fallbackImage = await searchSpecificRecipeImage(name, category, url);
+                if (fallbackImage) {
+                  imageUri = fallbackImage;
+                }
+              } catch {
+              }
             }
           } else {
             console.log(`❌ No valid image extracted from webpage HTML`);
@@ -718,7 +724,7 @@ export default function UploadBookmarksScreen() {
               onPress: () => {
                 setParsedBookmarks([]);
                 if (result.imported > 0) {
-                  router.replace('/(tabs)/recipe-book');
+                  router.replace('/(tabs)/recipe-book' as Href);
                 }
               }
             },
