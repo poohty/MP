@@ -42,7 +42,7 @@ export default function HomeScreen() {
         
         <View style={styles.heroContainer}>
           <Image
-            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/gfb0m82wngp62v8dzwiob' }}
+            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/yywds0b5fydi20gv49t0v' }}
             style={styles.heroImage}
             resizeMode="cover"
           />
@@ -87,7 +87,7 @@ export default function HomeScreen() {
             onPress={() => router.push('../add-recipe-photo')}
           >
             <View style={[styles.actionIconContainer, { backgroundColor: themeColors.muted }]}>
-              <Camera size={18} color={themeColors.primary} />
+              <Camera size={16} color={themeColors.primary} />
             </View>
             <Text style={[styles.actionTitle, { color: themeColors.text }]}>Upload Recipe</Text>
             <Text style={[styles.actionDescription, { color: themeColors.textSecondary }]}>
@@ -100,7 +100,7 @@ export default function HomeScreen() {
             onPress={() => router.push('../add-recipe-url')}
           >
             <View style={[styles.actionIconContainer, { backgroundColor: themeColors.muted }]}>
-              <Link size={18} color={themeColors.primary} />
+              <Link size={16} color={themeColors.primary} />
             </View>
             <Text style={[styles.actionTitle, { color: themeColors.text }]}>Add Recipe URL</Text>
             <Text style={[styles.actionDescription, { color: themeColors.textSecondary }]}>
@@ -113,7 +113,7 @@ export default function HomeScreen() {
             onPress={() => router.push('../upload-bookmarks')}
           >
             <View style={[styles.actionIconContainer, { backgroundColor: themeColors.muted }]}>
-              <FolderOpen size={18} color={themeColors.primary} />
+              <FolderOpen size={16} color={themeColors.primary} />
             </View>
             <Text style={[styles.actionTitle, { color: themeColors.text }]}>Upload Bookmarks</Text>
             <Text style={[styles.actionDescription, { color: themeColors.textSecondary }]}>
@@ -140,10 +140,10 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 30,
   },
   header: {
-    marginBottom: 20,
+    marginBottom: 12,
   },
   greeting: {
     fontSize: 15,
@@ -154,10 +154,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold' as const,
   },
   heroContainer: {
-    height: 120,
+    height: 90,
     borderRadius: Colors.radius,
     overflow: 'hidden',
-    marginBottom: 12,
+    marginBottom: 10,
     ...Colors.shadowMd,
   },
   heroImage: {
@@ -176,69 +176,69 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 12,
+    padding: 10,
   },
   heroTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginBottom: 2,
   },
   heroSubtitle: {
-    fontSize: 11,
+    fontSize: 10,
     color: 'rgba(255, 255, 255, 0.9)',
   },
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
-    gap: 8,
+    marginBottom: 10,
+    gap: 6,
   },
   statCard: {
     borderRadius: Colors.radius,
-    padding: 10,
+    padding: 8,
     alignItems: 'center' as const,
     flex: 1,
     borderWidth: 1,
     ...Colors.shadow,
   },
   statNumber: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold' as const,
     marginBottom: 2,
   },
   statLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '500' as const,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700' as const,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   actionsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
-    gap: 8,
+    marginBottom: 10,
+    gap: 6,
   },
   actionCard: {
     borderRadius: Colors.radius,
-    padding: 8,
+    padding: 6,
     flex: 1,
     borderWidth: 1,
     ...Colors.shadow,
   },
   actionIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    marginBottom: 5,
+    marginBottom: 4,
   },
   actionTitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700' as const,
     marginBottom: 2,
   },
@@ -247,6 +247,7 @@ const styles = StyleSheet.create({
     lineHeight: 10,
   },
   mealPlanButton: {
+    marginTop: 4,
     marginBottom: 20,
   },
 });
