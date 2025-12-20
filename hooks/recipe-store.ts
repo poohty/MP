@@ -3,7 +3,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
 import { Recipe, RecipeCategory } from '@/types';
 import { useAuth } from './auth-store';
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 
 const RECIPES_STORAGE_KEY = 'meal-planner-recipes';
 
@@ -16,6 +16,11 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
   const [isLoading, setIsLoading] = useState(true);
 
   const loadRecipesFromSupabase = useCallback(async (ownerUserId: string): Promise<Recipe[]> => {
+    if (!isSupabaseEnabled) {
+      console.log('📴 Supabase disabled, skipping remote load');
+      return [];
+    }
+
     try {
       console.log(`📥 Loading recipes from Supabase for user: ${ownerUserId}`);
       const { data, error } = await supabase
@@ -46,6 +51,10 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
   }, []);
 
   const syncRecipeToSupabase = useCallback(async (recipe: Recipe, ownerUserId: string) => {
+    if (!isSupabaseEnabled) {
+      return;
+    }
+
     try {
       if (!ownerUserId) {
         console.error('❌ syncRecipeToSupabase called without ownerUserId', { recipeId: recipe.id });
@@ -1546,6 +1555,11 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
   }, [loadRecipesFromSupabase]);
 
   const debugSupabaseRecipesForUser = useCallback(async (ownerUserId: string) => {
+    if (!isSupabaseEnabled) {
+      console.log('🐛 DEBUG: Supabase is disabled');
+      return;
+    }
+
     console.log('🐛 DEBUG: Checking Supabase recipes for', ownerUserId);
 
     const { data, error } = await supabase

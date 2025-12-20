@@ -3,9 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.warn('⚠️ Supabase env vars are missing. Social features will not work until they are set.');
-  console.warn('⚠️ Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY');
+const isSupabaseConfigured = !!(SUPABASE_URL && SUPABASE_ANON_KEY && 
+  SUPABASE_URL !== 'https://placeholder.supabase.co' &&
+  SUPABASE_ANON_KEY !== 'placeholder-key' &&
+  SUPABASE_URL.includes('supabase.co'));
+
+if (!isSupabaseConfigured) {
+  console.warn('⚠️ Supabase is not configured properly. App will work in offline mode.');
+  console.warn('⚠️ To enable social features, set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY');
 }
 
 export const supabase = createClient(
@@ -18,6 +23,9 @@ export const supabase = createClient(
   }
 );
 
-console.log('🗄️ Supabase client initialized');
-console.log('🗄️ Supabase URL:', SUPABASE_URL ? `✅ ${SUPABASE_URL}` : '❌ NOT SET');
-console.log('🗄️ Supabase Key:', SUPABASE_ANON_KEY ? '✅ SET' : '❌ NOT SET');
+export const isSupabaseEnabled = isSupabaseConfigured;
+
+console.log('🗄️ Supabase status:', isSupabaseConfigured ? '✅ ENABLED' : '❌ OFFLINE MODE');
+if (isSupabaseConfigured) {
+  console.log('🗄️ Supabase URL:', SUPABASE_URL);
+}

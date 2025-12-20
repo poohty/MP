@@ -3,7 +3,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
 import { User } from '@/types';
 import { router } from 'expo-router';
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 
 const USER_STORAGE_KEY = 'meal-planner-user';
 
@@ -12,6 +12,10 @@ const result = createContextHook(() => {
   const [isLoading, setIsLoading] = useState(true);
 
   const upsertUserProfileToSupabase = useCallback(async (userToStore: User) => {
+    if (!isSupabaseEnabled) {
+      return;
+    }
+
     if (!userToStore?.id || !userToStore?.email) {
       console.warn('⚠️ Cannot upsert user without id or email');
       return;
