@@ -273,12 +273,20 @@ export default function AddRecipePhotoScreen() {
     
     setIsLoading(true);
     try {
-      await addRecipe({
+      const saved = await addRecipe({
         name: name.trim(),
         category,
         imageUri: thumbnailUri || imageUri || undefined,
         content: extractedText,
       });
+
+      if (!saved) {
+        Alert.alert(
+          'Not Saved',
+          'Recipe was not saved. If this is a duplicate, try changing the name or URL.'
+        );
+        return;
+      }
       
       Alert.alert('Success', 'Recipe added successfully', [
         { text: 'OK', onPress: () => router.back() }

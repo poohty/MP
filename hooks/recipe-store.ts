@@ -957,6 +957,11 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
 
   const addRecipe = useCallback(async (recipe: Omit<Recipe, 'id' | 'createdAt'>, ownerUserId?: string) => {
     try {
+      if (!user?.id) {
+        console.warn('⚠️ addRecipe called without user id. Recipe will NOT be saved.');
+        return false;
+      }
+
       console.log('📝 Adding recipe:', {
         name: recipe.name,
         category: recipe.category,
@@ -965,6 +970,9 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
         hasContent: !!recipe.content
       });
       
+      const validCategories: RecipeCategory[] = ['Breakfast', 'Appetizer', 'Salads & Soups', 'Main Course', 'Desserts'];
+      const userSelectedCategory = recipe.category;
+
       let finalRecipe = { ...recipe };
       if (recipe.url) {
         console.log('🔍 FORCING complete recipe content extraction for recipe with URL...');
@@ -973,8 +981,14 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
           
           if (extractedContent) {
             if (extractedContent.category) {
-              finalRecipe.category = extractedContent.category;
-              console.log(`🎯 AI updated category to: ${extractedContent.category}`);
+              const trimmedCategory = (extractedContent.category as unknown as string).toString().trim();
+              if (validCategories.includes(trimmedCategory as RecipeCategory)) {
+                finalRecipe.category = trimmedCategory as RecipeCategory;
+                console.log(`🎯 AI updated category to: ${trimmedCategory}`);
+              } else {
+                finalRecipe.category = userSelectedCategory;
+                console.log(`⚠️ AI returned invalid/empty category "${trimmedCategory}", keeping user category: ${userSelectedCategory}`);
+              }
             }
             
             // Persist structured time/nutrition fields
@@ -1051,40 +1065,50 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
           finalRecipe.imageUri = aiFallback || await generateFallbackImage(recipe.name, recipe.category);
         }
       }
+
+      const categoryString = (finalRecipe.category as unknown as string).toString().trim();
+      if (!validCategories.includes(categoryString as RecipeCategory)) {
+        finalRecipe.category = userSelectedCategory;
+      }
       
       const newRecipe: Recipe = {
         ...finalRecipe,
+        category: ((finalRecipe.category as unknown as string).toString().trim() as RecipeCategory),
         id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         createdAt: Date.now(),
-        ownerUserId: recipe.ownerUserId || ownerUserId || user?.id,
+        ownerUserId: recipe.ownerUserId || ownerUserId || user.id,
       };
       
-      newRecipe.ownerUserId = newRecipe.ownerUserId || user?.id;
+      newRecipe.ownerUserId = newRecipe.ownerUserId || user.id;
       
-      const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
+      const storageKey = `${RECIPES_STORAGE_KEY}-${user.id}`;
       const storedRecipes = await AsyncStorage.getItem(storageKey);
-      let currentRecipes = [];
+      let currentRecipes: Recipe[] = [];
       if (storedRecipes) {
         try {
-          currentRecipes = JSON.parse(storedRecipes);
+          currentRecipes = JSON.parse(storedRecipes) as Recipe[];
         } catch (parseError) {
           console.error('❌ Failed to parse recipes in addRecipe:', parseError);
           currentRecipes = [];
         }
       }
-      
-      const existingRecipe = currentRecipes.find((r: Recipe) => r.url === newRecipe.url);
-      if (existingRecipe) {
-        console.log('⚠️ Recipe already exists, skipping duplicate');
-        return false;
+
+      const newUrl = newRecipe.url?.trim();
+      if (newUrl) {
+        const existingRecipe = currentRecipes.find((r: Recipe) => {
+          const existingUrl = r.url?.trim();
+          return !!existingUrl && existingUrl === newUrl;
+        });
+        if (existingRecipe) {
+          console.log('⚠️ Recipe already exists (duplicate URL), skipping duplicate');
+          return false;
+        }
       }
       
       const updatedRecipes = [...currentRecipes, newRecipe];
       await saveRecipes(updatedRecipes);
       
-      if (user?.id) {
-        await syncRecipeToSupabase(newRecipe, user.id);
-      }
+      await syncRecipeToSupabase(newRecipe, user.id);
       
       console.log('✅ Recipe added successfully with guaranteed image');
       return true;
