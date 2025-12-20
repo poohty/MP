@@ -87,7 +87,7 @@ export default function HomeScreen() {
             onPress={() => router.push('../add-recipe-photo')}
           >
             <View style={[styles.actionIconContainer, { backgroundColor: themeColors.muted }]}>
-              <Camera size={20} color={themeColors.primary} />
+              <Camera size={18} color={themeColors.primary} />
             </View>
             <Text style={[styles.actionTitle, { color: themeColors.text }]}>Upload Recipe</Text>
             <Text style={[styles.actionDescription, { color: themeColors.textSecondary }]}>
@@ -100,7 +100,7 @@ export default function HomeScreen() {
             onPress={() => router.push('../add-recipe-url')}
           >
             <View style={[styles.actionIconContainer, { backgroundColor: themeColors.muted }]}>
-              <Link size={20} color={themeColors.primary} />
+              <Link size={18} color={themeColors.primary} />
             </View>
             <Text style={[styles.actionTitle, { color: themeColors.text }]}>Add Recipe URL</Text>
             <Text style={[styles.actionDescription, { color: themeColors.textSecondary }]}>
@@ -113,7 +113,7 @@ export default function HomeScreen() {
             onPress={() => router.push('../upload-bookmarks')}
           >
             <View style={[styles.actionIconContainer, { backgroundColor: themeColors.muted }]}>
-              <FolderOpen size={20} color={themeColors.primary} />
+              <FolderOpen size={18} color={themeColors.primary} />
             </View>
             <Text style={[styles.actionTitle, { color: themeColors.text }]}>Upload Bookmarks</Text>
             <Text style={[styles.actionDescription, { color: themeColors.textSecondary }]}>
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: 80,
+    paddingBottom: 40,
   },
   header: {
     marginBottom: 20,
@@ -154,10 +154,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold' as const,
   },
   heroContainer: {
-    height: 140,
+    height: 120,
     borderRadius: Colors.radius,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 12,
     ...Colors.shadowMd,
   },
   heroImage: {
@@ -176,34 +176,34 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 16,
+    padding: 12,
   },
   heroTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginBottom: 2,
   },
   heroSubtitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: 'rgba(255, 255, 255, 0.9)',
   },
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 12,
     gap: 8,
   },
   statCard: {
     borderRadius: Colors.radius,
-    padding: 12,
+    padding: 10,
     alignItems: 'center' as const,
     flex: 1,
     borderWidth: 1,
     ...Colors.shadow,
   },
   statNumber: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold' as const,
     marginBottom: 2,
   },
@@ -212,39 +212,39 @@ const styles = StyleSheet.create({
     fontWeight: '500' as const,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700' as const,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   actionsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 12,
     gap: 8,
   },
   actionCard: {
     borderRadius: Colors.radius,
-    padding: 10,
+    padding: 8,
     flex: 1,
     borderWidth: 1,
     ...Colors.shadow,
   },
   actionIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    marginBottom: 6,
+    marginBottom: 5,
   },
   actionTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700' as const,
-    marginBottom: 3,
+    marginBottom: 2,
   },
   actionDescription: {
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 8,
+    lineHeight: 10,
   },
   mealPlanButton: {
     marginBottom: 20,
