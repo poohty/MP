@@ -50,6 +50,7 @@ function RootLayoutNav() {
       <Stack.Screen name="meal-plan-details" options={{ title: "Meal Plan Details" }} />
       <Stack.Screen name="grocery-list" options={{ title: "Grocery List" }} />
       <Stack.Screen name="friend-cookbook" options={{ title: "Friend's Cookbook" }} />
+      <Stack.Screen name="image-diagnostics" options={{ title: "Image Diagnostics" }} />
     </Stack>
   );
 }
