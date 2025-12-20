@@ -42,7 +42,7 @@ export default function HomeScreen() {
         
         <View style={styles.heroContainer}>
           <Image
-            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/8ipizlu3zicniuigul7yx' }}
+            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/8ipizlu3zicniuigul7yx?v=2' }}
             style={styles.heroImage}
             resizeMode="cover"
           />
@@ -271,7 +271,7 @@ function WelcomeScreen() {
       <View style={welcomeStyles.content}>
         <View style={welcomeStyles.logoContainer}>
           <Image
-            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/3hcmxxxhnr8aykl1w78r1' }}
+            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/3hcmxxxhnr8aykl1w78r1?v=2' }}
             style={welcomeStyles.image}
             resizeMode="cover"
           />
