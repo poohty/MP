@@ -57,7 +57,15 @@ const result = createContextHook(() => {
       const storedUser = await AsyncStorage.getItem(USER_STORAGE_KEY);
       console.log('Loading user from storage:', storedUser);
       if (storedUser) {
-        const parsedUser = JSON.parse(storedUser);
+        let parsedUser;
+        try {
+          parsedUser = JSON.parse(storedUser);
+        } catch (parseError) {
+          console.error('❌ Failed to parse user data, clearing corrupted data:', parseError);
+          console.error('❌ Corrupted value:', storedUser.substring(0, 200));
+          await AsyncStorage.removeItem(USER_STORAGE_KEY);
+          return;
+        }
         console.log('Parsed user:', parsedUser);
         setUser(parsedUser);
         

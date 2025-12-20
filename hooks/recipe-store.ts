@@ -101,7 +101,16 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         const storageKey = `${RECIPES_STORAGE_KEY}-${user.id}`;
         const storedRecipes = await AsyncStorage.getItem(storageKey);
         if (storedRecipes) {
-          const parsedRecipes = JSON.parse(storedRecipes);
+          let parsedRecipes;
+          try {
+            parsedRecipes = JSON.parse(storedRecipes);
+          } catch (parseError) {
+            console.error('❌ Failed to parse stored recipes, clearing corrupted data:', parseError);
+            console.error('❌ Corrupted value:', storedRecipes.substring(0, 200));
+            await AsyncStorage.removeItem(storageKey);
+            setRecipes([]);
+            return;
+          }
           console.log(`📊 Loaded ${parsedRecipes.length} recipes from local storage, syncing to Supabase...`);
           
           const recipesWithOwner = parsedRecipes.map((recipe: Recipe) => ({
@@ -1045,7 +1054,15 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
       
       const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
       const storedRecipes = await AsyncStorage.getItem(storageKey);
-      const currentRecipes = storedRecipes ? JSON.parse(storedRecipes) : [];
+      let currentRecipes = [];
+      if (storedRecipes) {
+        try {
+          currentRecipes = JSON.parse(storedRecipes);
+        } catch (parseError) {
+          console.error('❌ Failed to parse recipes in addRecipe:', parseError);
+          currentRecipes = [];
+        }
+      }
       
       const existingRecipe = currentRecipes.find((r: Recipe) => r.url === newRecipe.url);
       if (existingRecipe) {
@@ -1169,7 +1186,15 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
       
       const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
       const storedRecipes = await AsyncStorage.getItem(storageKey);
-      const currentRecipes = storedRecipes ? JSON.parse(storedRecipes) : [];
+      let currentRecipes = [];
+      if (storedRecipes) {
+        try {
+          currentRecipes = JSON.parse(storedRecipes);
+        } catch (parseError) {
+          console.error('❌ Failed to parse recipes in reExtractImages:', parseError);
+          currentRecipes = [];
+        }
+      }
       
       const recipesWithoutImages = currentRecipes.filter((recipe: Recipe) => recipe.url && !recipe.imageUri);
       console.log(`📊 Found ${recipesWithoutImages.length} recipes without images`);
@@ -1243,7 +1268,15 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
       
       const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
       const storedRecipes = await AsyncStorage.getItem(storageKey);
-      const currentRecipes = storedRecipes ? JSON.parse(storedRecipes) : [];
+      let currentRecipes = [];
+      if (storedRecipes) {
+        try {
+          currentRecipes = JSON.parse(storedRecipes);
+        } catch (parseError) {
+          console.error('❌ Failed to parse recipes in forceReExtractAllImages:', parseError);
+          currentRecipes = [];
+        }
+      }
       
       const recipesWithUrls = currentRecipes.filter((recipe: Recipe) => recipe.url);
       console.log(`📊 Found ${recipesWithUrls.length} recipes with URLs to re-extract`);
@@ -1343,7 +1376,15 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
         if (success) {
           const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
           const storedRecipes = await AsyncStorage.getItem(storageKey);
-          const currentRecipes = storedRecipes ? JSON.parse(storedRecipes) : [];
+          let currentRecipes = [];
+          if (storedRecipes) {
+            try {
+              currentRecipes = JSON.parse(storedRecipes);
+            } catch (parseError) {
+              console.error('❌ Failed to parse recipes in importBookmarksWithRetry:', parseError);
+              currentRecipes = [];
+            }
+          }
           const newRecipe = currentRecipes.find((r: Recipe) => r.url === bookmark.url);
           
           if (newRecipe) {
@@ -1376,7 +1417,15 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     if (recipesNeedingImageRetry.length > 0) {
       const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
       const storedRecipes = await AsyncStorage.getItem(storageKey);
-      let workingRecipes = storedRecipes ? JSON.parse(storedRecipes) : [];
+      let workingRecipes = [];
+      if (storedRecipes) {
+        try {
+          workingRecipes = JSON.parse(storedRecipes);
+        } catch (parseError) {
+          console.error('❌ Failed to parse recipes workingRecipes:', parseError);
+          workingRecipes = [];
+        }
+      }
       
       for (let i = 0; i < recipesNeedingImageRetry.length; i++) {
         const recipe = recipesNeedingImageRetry[i];

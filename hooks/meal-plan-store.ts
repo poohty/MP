@@ -19,7 +19,16 @@ const result = createContextHook(() => {
       setIsLoading(true);
       const storedMealPlans = await AsyncStorage.getItem(`${MEAL_PLANS_STORAGE_KEY}-${user?.id}`);
       if (storedMealPlans) {
-        const parsedMealPlans = JSON.parse(storedMealPlans);
+        let parsedMealPlans;
+        try {
+          parsedMealPlans = JSON.parse(storedMealPlans);
+        } catch (parseError) {
+          console.error('❌ Failed to parse meal plans, clearing corrupted data:', parseError);
+          console.error('❌ Corrupted value:', storedMealPlans.substring(0, 200));
+          await AsyncStorage.removeItem(`${MEAL_PLANS_STORAGE_KEY}-${user?.id}`);
+          setMealPlans([]);
+          return;
+        }
         // Migrate old meal plans to new structure
         const migratedMealPlans = parsedMealPlans.map((plan: any) => {
           // Check if this is an old format meal plan
