@@ -10,13 +10,14 @@
 -- ==================
 
 CREATE TABLE IF NOT EXISTS recipes (
-  id TEXT PRIMARY KEY,
+  id TEXT NOT NULL,
   owner_user_id TEXT NOT NULL,
   name TEXT NOT NULL,
   category TEXT NOT NULL,
   data_json JSONB NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (owner_user_id, id)
 );
 
 -- Indexes for performance
