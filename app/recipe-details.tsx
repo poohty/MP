@@ -11,6 +11,7 @@ import { Recipe, RecipeCategory } from '@/types';
 import DropdownSelect from '@/components/DropdownSelect';
 import * as ImagePicker from 'expo-image-picker';
 import * as Speech from 'expo-speech';
+import { Audio } from 'expo-av';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function RecipeDetailsScreen() {
@@ -135,6 +136,16 @@ export default function RecipeDetailsScreen() {
   };
 
   const speakStep = async (stepIndex: number) => {
+    try {
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: false,
+      });
+    } catch (error) {
+      console.error('Failed to set audio mode:', error);
+    }
+
     if (stepIndex >= voiceStepsRef.current.length) {
       Speech.speak('Enjoy your meal. See ya next time', {
         ...getVoiceConfig(),
