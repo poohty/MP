@@ -106,36 +106,32 @@ export default function RecipeDetailsScreen() {
   };
 
   const getVoiceConfig = () => {
-    const baseConfig = {
-      language: 'en-US',
-      rate: 0.9,
-      pitch: 1.0,
-    };
-
-    if (Platform.OS === 'ios') {
-      switch (voiceVariant) {
-        case 'female':
-          return { ...baseConfig, voice: 'com.apple.ttsbundle.Samantha-compact' };
-        case 'male':
-          return { ...baseConfig, voice: 'com.apple.ttsbundle.Alex-compact' };
-        case 'neutral':
-          return { ...baseConfig, voice: 'com.apple.speech.synthesis.voice.Fred' };
-        default:
-          return baseConfig;
-      }
-    } else if (Platform.OS === 'android') {
-      switch (voiceVariant) {
-        case 'female':
-          return { ...baseConfig, language: 'en-US' };
-        case 'male':
-          return { ...baseConfig, language: 'en-GB', pitch: 0.8 };
-        case 'neutral':
-          return { ...baseConfig, pitch: 0.9 };
-        default:
-          return baseConfig;
-      }
+    switch (voiceVariant) {
+      case 'female':
+        return {
+          language: 'en-US',
+          rate: 0.9,
+          pitch: 1.1,
+        };
+      case 'male':
+        return {
+          language: 'en-GB',
+          rate: 0.9,
+          pitch: 0.85,
+        };
+      case 'neutral':
+        return {
+          language: 'en-US',
+          rate: 0.9,
+          pitch: 1.0,
+        };
+      default:
+        return {
+          language: 'en-US',
+          rate: 0.9,
+          pitch: 1.0,
+        };
     }
-    return baseConfig;
   };
 
   const speakStep = async (stepIndex: number) => {
@@ -1126,7 +1122,7 @@ export default function RecipeDetailsScreen() {
                   ]}>
                     Female Voice
                   </Text>
-                  <Text style={styles.voiceVariantDescription}>Samantha (High quality)</Text>
+                  <Text style={styles.voiceVariantDescription}>Higher pitch</Text>
                 </View>
                 {voiceVariant === 'female' && (
                   <View style={styles.checkmark}>
@@ -1149,7 +1145,7 @@ export default function RecipeDetailsScreen() {
                   ]}>
                     Male Voice
                   </Text>
-                  <Text style={styles.voiceVariantDescription}>Alex (Deep tone)</Text>
+                  <Text style={styles.voiceVariantDescription}>Lower pitch</Text>
                 </View>
                 {voiceVariant === 'male' && (
                   <View style={styles.checkmark}>
