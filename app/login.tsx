@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/auth-store';
+import { useTheme } from '@/hooks/theme-store';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
 import { ArrowLeft } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function LoginScreen() {
   const { login } = useAuth();
+  const { isDark } = useTheme();
+  const themeColors = isDark ? Colors.dark : Colors.light;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
@@ -64,13 +68,31 @@ export default function LoginScreen() {
             onPress={() => router.back()}
             style={styles.backButton}
           >
-            <ArrowLeft size={24} color={Colors.text} />
+            <ArrowLeft size={24} color={themeColors.text} />
           </TouchableOpacity>
-          <Text style={styles.title}>Welcome Back</Text>
-          <Text style={styles.subtitle}>Log in to your account</Text>
+          <Text style={[styles.title, { color: themeColors.text }]}>Welcome Back</Text>
+          <Text style={[styles.subtitle, { color: themeColors.textSecondary }]}>Log in to your account</Text>
         </View>
         
-        <View style={styles.loginBlock}>
+        <View style={styles.heroContainer}>
+          <Image
+            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/go2xqufleh6nyngscogs1?v=20251220' }}
+            style={styles.heroImage}
+            resizeMode="cover"
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.8)']}
+            style={styles.heroGradient}
+          />
+          <View style={styles.heroContent}>
+            <Text style={styles.heroTitle}>Meal Planning Roulette</Text>
+            <Text style={styles.heroSubtitle}>
+              Create random meal plans from your recipe collection
+            </Text>
+          </View>
+        </View>
+        
+        <View style={[styles.loginBlock, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
           <Input
             label="Email"
             placeholder="Enter your email"
@@ -99,9 +121,9 @@ export default function LoginScreen() {
         </View>
         
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Don&apos;t have an account?</Text>
+          <Text style={[styles.footerText, { color: themeColors.textSecondary }]}>Don&apos;t have an account?</Text>
           <TouchableOpacity onPress={() => router.push('/signup')}>
-            <Text style={styles.footerLink}>Sign Up</Text>
+            <Text style={[styles.footerLink, { color: themeColors.primary }]}>Sign Up</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -121,7 +143,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   header: {
-    marginBottom: 32,
+    marginBottom: 20,
   },
   backButton: {
     marginBottom: 20,
@@ -135,16 +157,50 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: Colors.text,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: Colors.textSecondary,
+  },
+  heroContainer: {
+    height: 140,
+    borderRadius: Colors.radius,
+    overflow: 'hidden',
+    marginBottom: 20,
+    ...Colors.shadowMd,
+  },
+  heroImage: {
+    width: '100%',
+    height: '100%',
+  },
+  heroGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 100,
+  },
+  heroContent: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 12,
+  },
+  heroTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  heroSubtitle: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
   },
   loginBlock: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
+    borderWidth: 1,
     padding: 20,
     marginBottom: 24,
     ...Colors.shadowMd,
@@ -160,12 +216,10 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
   footerText: {
-    color: Colors.textSecondary,
     fontSize: 15,
     marginRight: 4,
   },
   footerLink: {
-    color: Colors.primary,
     fontWeight: '700',
     fontSize: 15,
   },
