@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, View, Text, Image, ScrollView, Alert } from 'react-native';
 import { router, Stack } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -7,11 +7,72 @@ import Button from '@/components/Button';
 import Input from '@/components/Input';
 import DropdownSelect from '@/components/DropdownSelect';
 import Colors from '@/constants/colors';
+import { useTheme } from '@/hooks/theme-store';
 
 import { RecipeCategory } from '@/types';
 
 export default function AddRecipePhotoScreen() {
   const { addRecipe } = useRecipes();
+  const { isDark } = useTheme();
+  const themeColors = isDark ? Colors.dark : Colors.light;
+
+  const themedStyles = useMemo(() => {
+    return StyleSheet.create({
+      container: {
+        backgroundColor: themeColors.background,
+      },
+      uploadContainer: {
+        backgroundColor: themeColors.surface,
+      },
+      uploadText: {
+        color: themeColors.textSecondary,
+      },
+      loadingContainer: {
+        backgroundColor: themeColors.surface,
+        borderColor: themeColors.primary,
+      },
+      loadingTitle: {
+        color: themeColors.text,
+      },
+      loadingProgress: {
+        color: themeColors.primary,
+      },
+      loadingSubtext: {
+        color: themeColors.textSecondary,
+      },
+      textLabel: {
+        color: themeColors.text,
+      },
+      extractedText: {
+        color: themeColors.text,
+        backgroundColor: themeColors.surface,
+      },
+      thumbnailLabel: {
+        color: themeColors.text,
+      },
+      thumbnailDescription: {
+        color: themeColors.textSecondary,
+      },
+      thumbnailUploadText: {
+        color: themeColors.textSecondary,
+      },
+      thumbnailContainer: {
+        backgroundColor: themeColors.surface,
+      },
+      thumbnailUploadContainer: {
+        backgroundColor: themeColors.surface,
+        borderColor: themeColors.border,
+      },
+      darkInvertButton: {
+        backgroundColor: isDark ? Colors.light.background : themeColors.surface,
+        borderWidth: 1,
+        borderColor: isDark ? themeColors.border : themeColors.border,
+      },
+      darkInvertButtonText: {
+        color: isDark ? Colors.light.foreground : themeColors.text,
+      },
+    });
+  }, [isDark, themeColors.background, themeColors.border, themeColors.primary, themeColors.surface, themeColors.text, themeColors.textSecondary]);
   const [name, setName] = useState('');
   const [category, setCategory] = useState<RecipeCategory>('Breakfast');
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -302,7 +363,7 @@ export default function AddRecipePhotoScreen() {
   return (
     <>
       <Stack.Screen options={{ title: 'Add Recipe from Photo' }} />
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <ScrollView style={[styles.container, themedStyles.container]} contentContainerStyle={styles.content}>
         <View style={styles.imageSection}>
           {imageUri ? (
             <View style={styles.imageContainer}>
@@ -316,20 +377,22 @@ export default function AddRecipePhotoScreen() {
               />
             </View>
           ) : (
-            <View style={styles.uploadContainer}>
-              <Text style={styles.uploadText}>Upload a recipe photo</Text>
+            <View style={[styles.uploadContainer, themedStyles.uploadContainer]}>
+              <Text style={[styles.uploadText, themedStyles.uploadText]}>Upload a recipe photo</Text>
               <View style={styles.buttonRow}>
                 <Button
                   title="Take Photo"
                   onPress={takePhoto}
                   variant="secondary"
-                  style={styles.uploadButton}
+                  style={[styles.uploadButton, themedStyles.darkInvertButton]}
+                  textStyle={themedStyles.darkInvertButtonText}
                 />
                 <Button
                   title="Choose Photo"
                   onPress={pickImage}
                   variant="secondary"
-                  style={styles.uploadButton}
+                  style={[styles.uploadButton, themedStyles.darkInvertButton]}
+                  textStyle={themedStyles.darkInvertButtonText}
                 />
               </View>
             </View>
@@ -351,13 +414,13 @@ export default function AddRecipePhotoScreen() {
         />
         
         <View style={styles.thumbnailSection}>
-          <Text style={styles.thumbnailLabel}>Recipe Thumbnail (Optional)</Text>
-          <Text style={styles.thumbnailDescription}>
+          <Text style={[styles.thumbnailLabel, themedStyles.thumbnailLabel]}>Recipe Thumbnail (Optional)</Text>
+          <Text style={[styles.thumbnailDescription, themedStyles.thumbnailDescription]}>
             Upload a photo of the finished dish to use as the recipe thumbnail
           </Text>
           
           {thumbnailUri ? (
-            <View style={styles.thumbnailContainer}>
+            <View style={[styles.thumbnailContainer, themedStyles.thumbnailContainer]}>
               <Image source={{ uri: thumbnailUri }} style={styles.thumbnailImage} />
               <Button
                 title="Remove Thumbnail"
@@ -368,22 +431,24 @@ export default function AddRecipePhotoScreen() {
               />
             </View>
           ) : (
-            <View style={styles.thumbnailUploadContainer}>
-              <Text style={styles.thumbnailUploadText}>Add a thumbnail image</Text>
+            <View style={[styles.thumbnailUploadContainer, themedStyles.thumbnailUploadContainer]}>
+              <Text style={[styles.thumbnailUploadText, themedStyles.thumbnailUploadText]}>Add a thumbnail image</Text>
               <View style={styles.thumbnailButtonRow}>
                 <Button
                   title="Take Photo"
                   onPress={takeThumbnailPhoto}
                   variant="secondary"
                   size="small"
-                  style={styles.thumbnailButton}
+                  style={[styles.thumbnailButton, themedStyles.darkInvertButton]}
+                  textStyle={themedStyles.darkInvertButtonText}
                 />
                 <Button
                   title="Choose Photo"
                   onPress={pickThumbnail}
                   variant="secondary"
                   size="small"
-                  style={styles.thumbnailButton}
+                  style={[styles.thumbnailButton, themedStyles.darkInvertButton]}
+                  textStyle={themedStyles.darkInvertButtonText}
                 />
               </View>
             </View>
@@ -391,17 +456,17 @@ export default function AddRecipePhotoScreen() {
         </View>
         
         {isExtracting ? (
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingTitle}>✨ Extracting Recipe</Text>
+          <View style={[styles.loadingContainer, themedStyles.loadingContainer]}>
+            <Text style={[styles.loadingTitle, themedStyles.loadingTitle]}>✨ Extracting Recipe</Text>
             {extractionProgress ? (
-              <Text style={styles.loadingProgress}>{extractionProgress}</Text>
+              <Text style={[styles.loadingProgress, themedStyles.loadingProgress]}>{extractionProgress}</Text>
             ) : null}
-            <Text style={styles.loadingSubtext}>Please wait, this may take 15-30 seconds</Text>
+            <Text style={[styles.loadingSubtext, themedStyles.loadingSubtext]}>Please wait, this may take 15-30 seconds</Text>
           </View>
         ) : extractedText ? (
           <View style={styles.textContainer}>
-            <Text style={styles.textLabel}>Extracted Recipe</Text>
-            <Text style={styles.extractedText}>{extractedText}</Text>
+            <Text style={[styles.textLabel, themedStyles.textLabel]}>Extracted Recipe</Text>
+            <Text style={[styles.extractedText, themedStyles.extractedText]}>{extractedText}</Text>
           </View>
         ) : null}
         
@@ -438,7 +503,7 @@ const styles = StyleSheet.create({
   },
   uploadText: {
     color: Colors.textSecondary,
-    marginBottom: 16,
+    marginBottom:  16,
     fontSize: 16,
   },
   buttonRow: {
