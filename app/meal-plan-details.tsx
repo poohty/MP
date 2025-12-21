@@ -144,7 +144,7 @@ export default function MealPlanDetailsScreen() {
   };
 
   const renderRecipeItem = (mealPlanRecipe: MealPlanRecipe, category: RecipeCategory, index: number) => (
-    <View key={mealPlanRecipe.recipe.id} style={styles.recipeItem}>
+    <View key={`${category}-${index}-${mealPlanRecipe.recipe.id || index}`} style={styles.recipeItem}>
       <TouchableOpacity
         style={styles.recipeContent}
         onPress={() => handleSelectRecipe(mealPlanRecipe)}
