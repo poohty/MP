@@ -129,7 +129,7 @@ export default function MealPlanDetailsScreen() {
       const groceryList = await generateGroceryList(mealPlan);
       if (groceryList) {
         router.push({
-          pathname: '/grocery-list',
+          pathname: '/(tabs)/grocery-list',
           params: { groceryListData: JSON.stringify(groceryList) }
         });
       } else {

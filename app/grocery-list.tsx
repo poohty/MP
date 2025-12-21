@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity, FlatList, Alert, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import Colors from '@/constants/colors';
@@ -27,6 +27,16 @@ export default function GroceryListScreen() {
   const [newStoreName, setNewStoreName] = useState('');
   const [newStoreAddress, setNewStoreAddress] = useState('');
   const [newStoreDistance, setNewStoreDistance] = useState('');
+
+  const scrollViewRef = useRef<ScrollView | null>(null);
+  const [groceryItemsAnchorY, setGroceryItemsAnchorY] = useState<number>(0);
+
+  const handleBackToGroceryList = useCallback(() => {
+    setShowComparisons(false);
+    requestAnimationFrame(() => {
+      scrollViewRef.current?.scrollTo({ y: groceryItemsAnchorY, animated: true });
+    });
+  }, [groceryItemsAnchorY]);
 
   const toggleItem = (itemId: string) => {
     setGroceryList(prev => ({
@@ -621,7 +631,7 @@ Use realistic grocery store pricing. Consider the store type and location for pr
           ),
         }} 
       />
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.storeSection}>
           <Button
             title={isLoadingStores ? 'Finding Stores...' : 'Find Cheapest Store Near Me'}
@@ -698,8 +708,20 @@ Use realistic grocery store pricing. Consider the store type and location for pr
                 </View>
               );
             })}
+
+            <Button
+              title="Back to Grocery List"
+              onPress={handleBackToGroceryList}
+              style={styles.backToListButton}
+              testID="back-to-grocery-list"
+            />
           </View>
         )}
+
+        <View
+          onLayout={(e) => setGroceryItemsAnchorY(e.nativeEvent.layout.y)}
+          testID="grocery-items-anchor"
+        />
 
         {Object.entries(groupedItems).map(([category, items]) => (
           <View key={category} style={styles.categorySection}>
@@ -955,6 +977,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.primary,
     fontWeight: '600',
+  },
+  backToListButton: {
+    marginTop: 8,
   },
   storeNameContainer: {
     flexDirection: 'row',
