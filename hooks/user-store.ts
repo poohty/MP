@@ -3,8 +3,6 @@ import { useEffect, useState, useCallback } from 'react';
 import { UserProfile, FriendLink } from '@/types';
 import { useAuth } from './auth-store';
 import { supabase } from '@/lib/supabase';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Speech from 'expo-speech';
 
 const [UserContext, useUser] = createContextHook(() => {
   const { user: authUser, updateProfile: updateAuthProfile } = useAuth();
@@ -13,9 +11,6 @@ const [UserContext, useUser] = createContextHook(() => {
   const [friendLinks, setFriendLinks] = useState<FriendLink[]>([]);
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [availableVoices, setAvailableVoices] = useState<Speech.Voice[]>([]);
-  const [selectedVoice, setSelectedVoice] = useState<string | null>(null);
-  const [isLoadingVoices, setIsLoadingVoices] = useState(false);
 
   const loadUserProfileFromSupabase = useCallback(async (userId: string): Promise<UserProfile | null> => {
     try {
@@ -149,54 +144,9 @@ const [UserContext, useUser] = createContextHook(() => {
     }
   }, [authUser, loadFriendLinks]);
 
-  const loadVoiceSettings = useCallback(async () => {
-    setIsLoadingVoices(true);
-    try {
-      const voices = await Speech.getAvailableVoicesAsync();
-      const enhancedVoices = voices.filter(
-        (voice) => voice.quality && voice.quality !== Speech.VoiceQuality.Default
-      );
-      
-      const voicesToUse = enhancedVoices.length > 0 ? enhancedVoices : voices;
-      setAvailableVoices(voicesToUse);
-
-      const storedVoice = await AsyncStorage.getItem('tts_selected_voice');
-      if (storedVoice) {
-        const voiceExists = voicesToUse.find((v) => v.identifier === storedVoice);
-        if (voiceExists) {
-          setSelectedVoice(storedVoice);
-        } else if (voicesToUse.length > 0) {
-          setSelectedVoice(voicesToUse[0].identifier);
-        }
-      } else if (voicesToUse.length > 0) {
-        const defaultVoice = voicesToUse.find(
-          (v) => v.language === 'en-US' && (v.name.toLowerCase().includes('samantha') || v.name.toLowerCase().includes('karen'))
-        ) || voicesToUse[0];
-        setSelectedVoice(defaultVoice.identifier);
-      }
-    } catch (error) {
-      console.error('Failed to load voice settings:', error);
-    } finally {
-      setIsLoadingVoices(false);
-    }
-  }, []);
-
   useEffect(() => {
     loadCurrentUser();
-    loadVoiceSettings();
-  }, [loadCurrentUser, loadVoiceSettings]);
-
-  const updateSelectedVoice = useCallback(async (voiceIdentifier: string) => {
-    try {
-      await AsyncStorage.setItem('tts_selected_voice', voiceIdentifier);
-      setSelectedVoice(voiceIdentifier);
-      console.log('✅ Updated TTS voice:', voiceIdentifier);
-      return true;
-    } catch (error) {
-      console.error('Failed to update voice setting:', error);
-      return false;
-    }
-  }, []);
+  }, [loadCurrentUser]);
 
   const updateShareCookbook = useCallback(async (shareCookbook: boolean) => {
     if (!currentUserProfile || !authUser) return false;
@@ -465,10 +415,6 @@ const [UserContext, useUser] = createContextHook(() => {
     getFriendProfiles,
     isFriend,
     hasPendingRequest,
-    availableVoices,
-    selectedVoice,
-    isLoadingVoices,
-    updateSelectedVoice,
   };
 });
 

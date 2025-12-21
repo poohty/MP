@@ -1,22 +1,19 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert, Platform, TextInput, Modal } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import { useAuth } from '@/hooks/auth-store';
-import { useUser } from '@/hooks/user-store';
 import Colors from '@/constants/colors';
-import { ExternalLink, Trash2, CheckSquare, Square, Edit3, Camera, Link as LinkIcon, BookPlus, Mic, MicOff } from 'lucide-react-native';
+import { ExternalLink, Trash2, CheckSquare, Square, Edit3, Camera, Link as LinkIcon, BookPlus } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import GradientBackground from '@/components/GradientBackground';
 import { Recipe, RecipeCategory } from '@/types';
 import DropdownSelect from '@/components/DropdownSelect';
 import * as ImagePicker from 'expo-image-picker';
-import * as Speech from 'expo-speech';
 
 export default function RecipeDetailsScreen() {
   const { id, friendUserId } = useLocalSearchParams<{ id: string; friendUserId?: string }>();
   const { user } = useAuth();
-  const { selectedVoice } = useUser();
   const { recipes, deleteRecipe, updateRecipeStepProgress, changeRecipeCategory, updateRecipeImage, convertImageToBase64, importRecipeFromFriend, getRecipesForUser } = useRecipes();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [checkedSteps, setCheckedSteps] = useState<{ [stepIndex: number]: boolean }>({});
@@ -26,12 +23,6 @@ export default function RecipeDetailsScreen() {
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [, setIsImporting] = useState(false);
-  const [isVoiceGuideActive, setIsVoiceGuideActive] = useState(false);
-  const [currentVoiceStep, setCurrentVoiceStep] = useState(0);
-  const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<any>(null);
-  const instructionsRef = useRef<string[]>([]);
-  const [bestQualityVoice, setBestQualityVoice] = useState<string | undefined>(undefined);
 
   const handleExtractRecipeContent = useCallback(async (recipeToUpdate: Recipe) => {
     if (!recipeToUpdate.url) return;
@@ -78,61 +69,6 @@ export default function RecipeDetailsScreen() {
       loadRecipe();
     }
   }, [id, loadRecipe]);
-
-  useEffect(() => {
-    const fetchBestVoice = async () => {
-      try {
-        const availableVoices = await Speech.getAvailableVoicesAsync();
-        
-        if (availableVoices.length === 0) {
-          console.log('No voices available');
-          return;
-        }
-
-        console.log(`Found ${availableVoices.length} available voices`);
-
-        const enhancedVoices = availableVoices.filter(
-          voice => voice.quality === 'Enhanced'
-        );
-
-        if (enhancedVoices.length > 0) {
-          const preferredVoice = enhancedVoices.find(
-            voice => 
-              (Platform.OS === 'ios' && (
-                voice.identifier.includes('Samantha') ||
-                voice.identifier.includes('premium') ||
-                voice.name.toLowerCase().includes('premium') ||
-                voice.name.toLowerCase().includes('enhanced')
-              )) ||
-              (Platform.OS === 'android' && (
-                voice.identifier.includes('en-us-x-') ||
-                voice.name.toLowerCase().includes('enhanced') ||
-                voice.quality === 'Enhanced'
-              ))
-          ) || enhancedVoices[0];
-
-          console.log('Selected enhanced voice:', preferredVoice.name, preferredVoice.quality);
-          setBestQualityVoice(preferredVoice.identifier);
-        } else {
-          const defaultVoices = availableVoices.filter(
-            voice => voice.quality === 'Default'
-          );
-          
-          if (defaultVoices.length > 0) {
-            console.log('Using default quality voice:', defaultVoices[0].name);
-            setBestQualityVoice(defaultVoices[0].identifier);
-          } else {
-            console.log('Using first available voice:', availableVoices[0].name);
-            setBestQualityVoice(availableVoices[0].identifier);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching voices:', error);
-      }
-    };
-
-    fetchBestVoice();
-  }, []);
 
   const handleImportToMyCookbook = async () => {
     if (!recipe || !user) return;
@@ -533,338 +469,6 @@ export default function RecipeDetailsScreen() {
     }
   };
 
-  const startVoiceGuide = async (instructions: string[]) => {
-    if (instructions.length === 0) {
-      Alert.alert('No Instructions', 'This recipe does not have any instructions to read.');
-      return;
-    }
-
-    const hasRecognition = Platform.OS === 'web' && 
-      typeof window !== 'undefined' && 
-      ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
-
-    if (!hasRecognition) {
-      if (Platform.OS === 'web') {
-        Alert.alert(
-          'Speech Recognition Unavailable',
-          'Speech recognition requires internet and is available only on compatible web browsers (Chrome, Edge, Safari).\n\n⚠️ Offline Recognition:\nTrue offline speech recognition on Android/iOS would require expo-speech-recognition with downloaded language models, which needs a custom development client (not available in Expo Go).\n\nSteps will be read aloud with your selected voice, but you\'ll need to manually tap each step to advance.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Continue with Manual Mode',
-              onPress: () => startVoiceGuideManual(instructions)
-            }
-          ]
-        );
-      } else {
-        Alert.alert(
-          'Voice Recognition Limited on Mobile',
-          'Hands-free voice commands ("step complete") require a web browser with internet connection.\n\nOn mobile apps:\n• TTS reads steps with your selected voice\n• Tap each step to advance manually\n\nFor offline speech recognition on Android/iOS, expo-speech-recognition would be needed, which requires a custom dev client (not available in Expo Go).\n\nWould you like to continue with TTS + manual taps?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Continue',
-              onPress: () => startVoiceGuideManual(instructions)
-            }
-          ]
-        );
-      }
-      return;
-    }
-
-    try {
-      if (Platform.OS === 'web' && navigator && navigator.mediaDevices) {
-        console.log('Requesting microphone permission...');
-        const permission = await navigator.mediaDevices.getUserMedia({ audio: true });
-        permission.getTracks().forEach(track => track.stop());
-        console.log('Microphone permission granted');
-      }
-    } catch (error: any) {
-      console.error('Microphone permission error:', error);
-      Alert.alert(
-        'Microphone Access Required',
-        'Voice commands require microphone access. Please grant microphone permission in your browser settings, then try again.\n\nAlternatively, you can use manual mode where you tap each step to advance.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Try Manual Mode',
-            onPress: () => startVoiceGuideManual(instructions)
-          }
-        ]
-      );
-      return;
-    }
-
-    instructionsRef.current = instructions;
-    setIsVoiceGuideActive(true);
-    setCurrentVoiceStep(0);
-    
-    const newCheckedSteps: { [stepIndex: number]: boolean } = {};
-    for (let i = 0; i < instructions.length; i++) {
-      newCheckedSteps[i] = false;
-    }
-    setCheckedSteps(newCheckedSteps);
-
-    readStep(0, instructions);
-  };
-
-  const startVoiceGuideManual = (instructions: string[]) => {
-    instructionsRef.current = instructions;
-    setIsVoiceGuideActive(true);
-    setCurrentVoiceStep(0);
-    
-    const newCheckedSteps: { [stepIndex: number]: boolean } = {};
-    for (let i = 0; i < instructions.length; i++) {
-      newCheckedSteps[i] = false;
-    }
-    setCheckedSteps(newCheckedSteps);
-
-    readStep(0, instructions);
-  };
-
-  const readStep = async (stepIndex: number, instructions: string[]) => {
-    if (stepIndex >= instructions.length) {
-      const voiceToUse = selectedVoice || bestQualityVoice;
-      const voiceOptions = voiceToUse ? { voice: voiceToUse } : {};
-      Speech.speak('Great job, enjoy your meal!', {
-        ...voiceOptions,
-        onDone: () => {
-          setTimeout(() => {
-            stopVoiceGuide();
-          }, 1000);
-        }
-      });
-      return;
-    }
-
-    const stepText = `Step ${stepIndex + 1}. ${instructions[stepIndex]}`;
-    const voiceToUse = selectedVoice || bestQualityVoice;
-    const voiceOptions = voiceToUse ? { voice: voiceToUse } : {};
-    
-    Speech.speak(stepText, {
-      ...voiceOptions,
-      onDone: () => {
-        setTimeout(() => {
-          startListening(stepIndex, instructions);
-        }, 500);
-      },
-      onError: (error) => {
-        console.error('TTS Error:', error);
-        Alert.alert('Error', 'Failed to read step. Please try again.');
-        setIsVoiceGuideActive(false);
-      }
-    });
-  };
-
-  const startListening = (stepIndex: number, instructions: string[]) => {
-    if (Platform.OS !== 'web') {
-      console.log('Speech recognition only available on web platform');
-      return;
-    }
-
-    try {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      
-      if (!SpeechRecognition) {
-        console.log('Speech recognition not available, manual mode required');
-        return;
-      }
-
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
-      recognition.maxAlternatives = 3;
-
-      recognition.onstart = () => {
-        console.log('🎤 Listening for "step complete"...');
-        setIsListening(true);
-      };
-
-      recognition.onresult = (event: any) => {
-        const transcript = Array.from(event.results)
-          .map((result: any) => result[0].transcript)
-          .join('')
-          .toLowerCase();
-
-        console.log('Heard:', transcript);
-
-        if (transcript.includes('step complete') || 
-            transcript.includes('step completed') ||
-            transcript.includes('step done') ||
-            transcript.includes('done') ||
-            transcript.includes('complete') ||
-            transcript.includes('next step') ||
-            transcript.includes('next')) {
-          console.log('✅ Command detected, advancing step');
-          recognition.stop();
-          markStepComplete(stepIndex, instructions);
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error, event.message);
-        
-        if (event.error === 'no-speech') {
-          console.log('No speech detected, restarting...');
-          setIsListening(false);
-          setTimeout(() => {
-            if (isVoiceGuideActive && recognitionRef.current) {
-              try {
-                recognition.start();
-              } catch {
-                console.log('Recognition already started or stopped');
-              }
-            }
-          }, 500);
-        } else if (event.error === 'aborted') {
-          console.log('Recognition aborted');
-          setIsListening(false);
-        } else if (event.error === 'not-allowed') {
-          console.error('Microphone permission denied');
-          setIsListening(false);
-          Alert.alert(
-            'Microphone Permission Denied',
-            'Voice commands require microphone access. Please grant microphone permission in your browser settings and try again.'
-          );
-          stopVoiceGuide();
-        } else if (event.error === 'network') {
-          console.error('Network error: Speech recognition requires internet connection');
-          setIsListening(false);
-          Alert.alert(
-            'Internet Connection Required',
-            'Speech recognition requires an active internet connection. Please check your connection and try again, or use manual mode by tapping each step.',
-            [
-              { text: 'Stop Voice Guide', onPress: () => stopVoiceGuide() },
-              { text: 'Continue Manually', onPress: () => {
-                if (recognitionRef.current) {
-                  try {
-                    recognitionRef.current.stop();
-                  } catch {}
-                  recognitionRef.current = null;
-                }
-                setIsListening(false);
-              }}
-            ]
-          );
-        } else if (event.error === 'service-not-allowed' || event.error === 'audio-capture') {
-          console.error('Speech service error:', event.error);
-          setIsListening(false);
-          Alert.alert(
-            'Speech Recognition Unavailable',
-            'Speech recognition service is not available. This may be due to network issues or browser compatibility. Please try again later or use manual mode.',
-            [
-              { text: 'Stop Voice Guide', onPress: () => stopVoiceGuide() }
-            ]
-          );
-        } else {
-          console.error('Unhandled recognition error:', event.error);
-          setIsListening(false);
-        }
-      };
-
-      recognition.onend = () => {
-        console.log('Recognition ended');
-        setIsListening(false);
-        
-        if (isVoiceGuideActive && stepIndex < instructions.length && !checkedSteps[stepIndex]) {
-          console.log('Restarting recognition for current step...');
-          setTimeout(() => {
-            if (isVoiceGuideActive && recognitionRef.current) {
-              try {
-                recognition.start();
-              } catch (e) {
-                console.log('Could not restart recognition:', e);
-              }
-            }
-          }, 500);
-        }
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch (error) {
-      console.error('Error starting speech recognition:', error);
-      setIsListening(false);
-      Alert.alert(
-        'Speech Recognition Error',
-        'Failed to start speech recognition. Please ensure you have an internet connection and have granted microphone permission.'
-      );
-    }
-  };
-
-  const markStepComplete = (stepIndex: number, instructions: string[]) => {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {
-        console.log('Recognition already stopped');
-      }
-    }
-    
-    setIsListening(false);
-    
-    const newCheckedSteps = {
-      ...checkedSteps,
-      [stepIndex]: true
-    };
-    setCheckedSteps(newCheckedSteps);
-
-    const nextStep = stepIndex + 1;
-    setCurrentVoiceStep(nextStep);
-
-    setTimeout(() => {
-      if (nextStep < instructions.length) {
-        readStep(nextStep, instructions);
-      } else {
-        const voiceToUse = selectedVoice || bestQualityVoice;
-        const voiceOptions = voiceToUse ? { voice: voiceToUse } : {};
-        Speech.speak('Great job, enjoy your meal!', {
-          ...voiceOptions,
-          onDone: () => {
-            setTimeout(() => stopVoiceGuide(), 1000);
-          }
-        });
-      }
-    }, 800);
-  };
-
-  const stopVoiceGuide = () => {
-    Speech.stop();
-    
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {
-        console.log('Recognition already stopped');
-      }
-      recognitionRef.current = null;
-    }
-    
-    setIsVoiceGuideActive(false);
-    setCurrentVoiceStep(0);
-    setIsListening(false);
-    
-    const resetSteps: { [stepIndex: number]: boolean } = {};
-    for (let i = 0; i < instructionsRef.current.length; i++) {
-      resetSteps[i] = false;
-    }
-    setCheckedSteps(resetSteps);
-    
-    if (recipe) {
-      updateRecipeStepProgress(recipe.id, resetSteps).catch(console.error);
-    }
-  };
-
-  const handleVoiceStepTap = (stepIndex: number) => {
-    if (!isVoiceGuideActive) {
-      toggleStepCheck(stepIndex);
-      return;
-    }
-
-    markStepComplete(stepIndex, instructionsRef.current);
-  };
-
   const handlePasteImageUrl = async () => {
     if (!recipe) return;
     
@@ -1095,40 +699,8 @@ export default function RecipeDetailsScreen() {
                 {/* Instructions Section */}
                 {parsedContent.instructions.length > 0 && (
                   <View style={styles.section}>
-                    <View style={styles.instructionHeader}>
-                      <Text style={styles.sectionTitle}>👨‍🍳 Instructions</Text>
-                      {!friendUserId && (
-                        <TouchableOpacity
-                          style={[styles.voiceButton, isVoiceGuideActive && styles.voiceButtonActive]}
-                          onPress={() => {
-                            if (isVoiceGuideActive) {
-                              stopVoiceGuide();
-                            } else {
-                              startVoiceGuide(parsedContent.instructions);
-                            }
-                          }}
-                        >
-                          {isVoiceGuideActive ? (
-                            <MicOff size={20} color={Colors.error} />
-                          ) : (
-                            <Mic size={20} color={Colors.primary} />
-                          )}
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                    {isVoiceGuideActive && (
-                      <View style={styles.voiceGuideStatus}>
-                        <Text style={styles.voiceGuideText}>
-                          {isListening ? '🎤 Listening... Say "step complete" or "next"' : '🔊 Speaking...'}
-                        </Text>
-                        <Text style={styles.voiceGuideHint}>
-                          {Platform.OS === 'web' && isListening ? 'Hands-free mode • Voice commands enabled' : 'Tap steps to advance manually'}
-                        </Text>
-                      </View>
-                    )}
-                    {!isVoiceGuideActive && !friendUserId && (
-                      <Text style={styles.instructionsSubtitle}>Tap each step to check it off as you cook!</Text>
-                    )}
+                    <Text style={styles.sectionTitle}>👨‍🍳 Instructions</Text>
+                    <Text style={styles.instructionsSubtitle}>Tap each step to check it off as you cook!</Text>
                     {parsedContent.instructions.map((instruction, index) => {
                       // Clean up instruction text and handle checkboxes
                       const cleanInstruction = instruction.replace(/^☐\s*/, '').replace(/^\d+\.\s*/, '');
@@ -1138,10 +710,9 @@ export default function RecipeDetailsScreen() {
                           key={index} 
                           style={[
                             styles.instructionItem,
-                            checkedSteps[index] && styles.checkedInstructionItem,
-                            isVoiceGuideActive && currentVoiceStep === index && styles.activeVoiceStep
+                            checkedSteps[index] && styles.checkedInstructionItem
                           ]}
-                          onPress={() => handleVoiceStepTap(index)}
+                          onPress={() => toggleStepCheck(index)}
                           activeOpacity={0.7}
                         >
                           <View style={styles.stepHeader}>
@@ -1717,51 +1288,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
     marginBottom: 2,
-  },
-  instructionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  voiceButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.cardBackground,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Colors.primary,
-  },
-  voiceButtonActive: {
-    backgroundColor: Colors.error + '20',
-    borderColor: Colors.error,
-  },
-  voiceGuideStatus: {
-    backgroundColor: Colors.primary + '20',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  voiceGuideText: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  voiceGuideHint: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
-  activeVoiceStep: {
-    borderColor: Colors.primary,
-    borderWidth: 2,
-    backgroundColor: Colors.primary + '15',
   },
 });

@@ -521,10 +521,6 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         const jsonMatch = block.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
         if (!jsonMatch) continue;
         const jsonText = jsonMatch[1].trim();
-        if (!jsonText || jsonText.length === 0) {
-          console.log('⚠️ Empty JSON-LD block found, skipping');
-          continue;
-        }
         try {
           const parsed = JSON.parse(jsonText);
           
@@ -579,9 +575,8 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
               }
             }
           }
-        } catch (jsonError: any) {
-          console.log('⚠️ Failed to parse JSON-LD block:', jsonError?.message || jsonError);
-          console.log('⚠️ Invalid JSON-LD content (first 200 chars):', jsonText.substring(0, 200));
+        } catch (jsonError) {
+          console.log('⚠️ Failed to parse JSON-LD block:', jsonError);
         }
       }
       
@@ -796,19 +791,6 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
           result = result.replace(/^```\s*/, '').replace(/\s*```$/, '');
         }
         
-        result = result.trim();
-        
-        if (!result.startsWith('{') && !result.startsWith('[')) {
-          console.log('⚠️ AI response does not start with JSON, attempting to extract JSON from response');
-          const jsonMatch = result.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            result = jsonMatch[0];
-            console.log('✅ Extracted JSON object from response');
-          } else {
-            throw new Error('No valid JSON object found in AI response');
-          }
-        }
-        
         const jsonData = JSON.parse(result);
         console.log('✅ Successfully parsed JSON response from AI');
         
@@ -846,10 +828,8 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
             extractedData.category = jsonData.category as RecipeCategory;
           }
         }
-      } catch (parseError: any) {
-        console.log('⚠️ Failed to parse JSON from AI:', parseError?.message || parseError);
-        console.log('⚠️ AI response that failed to parse (first 300 chars):', result.substring(0, 300));
-        console.log('⚠️ Falling back to text parsing');
+      } catch {
+        console.log('⚠️ Failed to parse JSON from AI, falling back to text parsing');
         
         const lines = result.split('\n');
         let currentSection: string | null = null;
