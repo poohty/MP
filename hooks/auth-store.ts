@@ -63,30 +63,6 @@ const result = createContextHook(() => {
     }
   }, []);
 
-  const doesProfileExist = useCallback(async (email: string): Promise<boolean> => {
-    try {
-      if (!isSupabaseEnabled) {
-        return false;
-      }
-
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('email', email)
-        .maybeSingle();
-
-      if (error) {
-        console.error('❌ doesProfileExist Supabase error:', error);
-        return false;
-      }
-
-      return !!data?.id;
-    } catch (e) {
-      console.error('❌ doesProfileExist unexpected error:', e);
-      return false;
-    }
-  }, []);
-
   const loadUser = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -129,17 +105,21 @@ const result = createContextHook(() => {
         return { ok: false, reason: 'SUPABASE_NOT_ENABLED' };
       }
 
-      const profileExists = await doesProfileExist(email);
-      if (!profileExists) {
-        return { ok: false, reason: 'NO_ACCOUNT' };
-      }
+      console.log('🔐 Attempting login for:', email);
 
       const authRes = await supabase.auth.signInWithPassword({ email, password });
       if (authRes.error) {
         console.error('❌ Supabase signInWithPassword error:', authRes.error);
+        console.error('❌ Error details:', { message: authRes.error.message, status: authRes.error.status });
+        
         if (authRes.error.message?.includes('Email not confirmed')) {
           return { ok: false, reason: 'EMAIL_NOT_CONFIRMED' };
         }
+        
+        if (authRes.error.message?.includes('Invalid login credentials')) {
+          return { ok: false, reason: 'NO_ACCOUNT' };
+        }
+        
         return { ok: false, reason: 'BAD_CREDENTIALS' };
       }
 
@@ -175,7 +155,7 @@ const result = createContextHook(() => {
       console.error('Login failed:', error);
       return { ok: false, reason: 'UNKNOWN' };
     }
-  }, [doesProfileExist]);
+  }, []);
 
   const signup = useCallback(async (name: string, email: string, password: string, locationPermission?: boolean): Promise<SignupResult> => {
     try {
