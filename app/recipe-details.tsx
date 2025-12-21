@@ -481,14 +481,37 @@ export default function RecipeDetailsScreen() {
       return;
     }
 
-    if (Platform.OS !== 'web') {
+    const hasRecognition = typeof window !== 'undefined' && 
+      ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+
+    if (!hasRecognition) {
       Alert.alert(
         'Voice Guide',
-        'Voice recognition works best on web browsers. On mobile, the steps will be read aloud, but you\'ll need to manually tap to advance.',
+        'Speech recognition is not available on this device. Steps will be read aloud, but you\'ll need to manually tap to advance.',
         [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Continue',
+            onPress: () => startVoiceGuideManual(instructions)
+          }
+        ]
+      );
+      return;
+    }
+
+    try {
+      if (Platform.OS !== 'web' && navigator && navigator.mediaDevices) {
+        const permission = await navigator.mediaDevices.getUserMedia({ audio: true });
+        permission.getTracks().forEach(track => track.stop());
+      }
+    } catch {
+      Alert.alert(
+        'Microphone Permission',
+        'Microphone access is required for voice commands. Please grant permission in your browser settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Continue Anyway',
             onPress: () => startVoiceGuideManual(instructions)
           }
         ]
@@ -527,7 +550,9 @@ export default function RecipeDetailsScreen() {
     if (stepIndex >= instructions.length) {
       Speech.speak('Great job, enjoy your meal!', {
         onDone: () => {
-          stopVoiceGuide();
+          setTimeout(() => {
+            stopVoiceGuide();
+          }, 1000);
         }
       });
       return;
@@ -537,25 +562,24 @@ export default function RecipeDetailsScreen() {
     
     Speech.speak(stepText, {
       onDone: () => {
-        if (Platform.OS === 'web') {
+        setTimeout(() => {
           startListening(stepIndex, instructions);
-        }
+        }, 500);
       },
       onError: (error) => {
         console.error('TTS Error:', error);
         Alert.alert('Error', 'Failed to read step. Please try again.');
+        setIsVoiceGuideActive(false);
       }
     });
   };
 
   const startListening = (stepIndex: number, instructions: string[]) => {
-    if (Platform.OS !== 'web') return;
-
     try {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       
       if (!SpeechRecognition) {
-        Alert.alert('Not Supported', 'Speech recognition is not supported in this browser.');
+        console.log('Speech recognition not available, manual mode required');
         return;
       }
 
@@ -563,6 +587,7 @@ export default function RecipeDetailsScreen() {
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'en-US';
+      recognition.maxAlternatives = 3;
 
       recognition.onstart = () => {
         console.log('🎤 Listening for "step complete"...');
@@ -579,9 +604,12 @@ export default function RecipeDetailsScreen() {
 
         if (transcript.includes('step complete') || 
             transcript.includes('step completed') ||
+            transcript.includes('step done') ||
+            transcript.includes('done') ||
             transcript.includes('complete') ||
             transcript.includes('next step') ||
             transcript.includes('next')) {
+          console.log('✅ Command detected, advancing step');
           recognition.stop();
           markStepComplete(stepIndex, instructions);
         }
@@ -589,31 +617,67 @@ export default function RecipeDetailsScreen() {
 
       recognition.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error);
-        setIsListening(false);
         
         if (event.error === 'no-speech') {
-          console.log('No speech detected, continuing to listen...');
-          try {
-            recognition.start();
-          } catch (e) {
-            console.log('Could not restart recognition');
-          }
+          console.log('No speech detected, restarting...');
+          setIsListening(false);
+          setTimeout(() => {
+            if (isVoiceGuideActive && recognitionRef.current) {
+              try {
+                recognition.start();
+              } catch {
+                console.log('Recognition already started or stopped');
+              }
+            }
+          }, 500);
+        } else if (event.error === 'aborted') {
+          console.log('Recognition aborted');
+          setIsListening(false);
+        } else if (event.error === 'not-allowed') {
+          console.error('Microphone permission denied');
+          setIsListening(false);
+          Alert.alert('Microphone Access', 'Please grant microphone permission to use voice commands.');
+          stopVoiceGuide();
+        } else {
+          setIsListening(false);
         }
       };
 
       recognition.onend = () => {
+        console.log('Recognition ended');
         setIsListening(false);
+        
+        if (isVoiceGuideActive && stepIndex < instructions.length && !checkedSteps[stepIndex]) {
+          console.log('Restarting recognition for current step...');
+          setTimeout(() => {
+            if (isVoiceGuideActive && recognitionRef.current) {
+              try {
+                recognition.start();
+              } catch (e) {
+                console.log('Could not restart recognition:', e);
+              }
+            }
+          }, 500);
+        }
       };
 
       recognitionRef.current = recognition;
       recognition.start();
     } catch (error) {
       console.error('Error starting speech recognition:', error);
-      Alert.alert('Error', 'Could not start speech recognition. Please ensure microphone permissions are granted.');
+      setIsListening(false);
     }
   };
 
   const markStepComplete = (stepIndex: number, instructions: string[]) => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        console.log('Recognition already stopped');
+      }
+    }
+    
     setIsListening(false);
     
     const newCheckedSteps = {
@@ -635,7 +699,7 @@ export default function RecipeDetailsScreen() {
           }
         });
       }
-    }, 500);
+    }, 800);
   };
 
   const stopVoiceGuide = () => {
@@ -644,7 +708,7 @@ export default function RecipeDetailsScreen() {
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
-      } catch (e) {
+      } catch {
         console.log('Recognition already stopped');
       }
       recognitionRef.current = null;
@@ -930,14 +994,14 @@ export default function RecipeDetailsScreen() {
                     {isVoiceGuideActive && (
                       <View style={styles.voiceGuideStatus}>
                         <Text style={styles.voiceGuideText}>
-                          {isListening ? '🎤 Listening... Say "step complete" to continue' : '🔊 Speaking...'}
+                          {isListening ? '🎤 Listening... Say "step complete" or "next"' : '🔊 Speaking...'}
                         </Text>
-                        {Platform.OS !== 'web' && (
-                          <Text style={styles.voiceGuideHint}>Tap the step to mark complete</Text>
-                        )}
+                        <Text style={styles.voiceGuideHint}>
+                          Hands-free mode • Voice commands enabled
+                        </Text>
                       </View>
                     )}
-                    {!isVoiceGuideActive && (
+                    {!isVoiceGuideActive && !friendUserId && (
                       <Text style={styles.instructionsSubtitle}>Tap each step to check it off as you cook!</Text>
                     )}
                     {parsedContent.instructions.map((instruction, index) => {
