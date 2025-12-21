@@ -1,16 +1,15 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert, Platform, TextInput, Modal } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import { useAuth } from '@/hooks/auth-store';
 import Colors from '@/constants/colors';
-import { ExternalLink, Trash2, CheckSquare, Square, Edit3, Camera, Link as LinkIcon, BookPlus, Mic, MicOff } from 'lucide-react-native';
+import { ExternalLink, Trash2, CheckSquare, Square, Edit3, Camera, Link as LinkIcon, BookPlus } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import GradientBackground from '@/components/GradientBackground';
 import { Recipe, RecipeCategory } from '@/types';
 import DropdownSelect from '@/components/DropdownSelect';
 import * as ImagePicker from 'expo-image-picker';
-import * as Speech from 'expo-speech';
 
 export default function RecipeDetailsScreen() {
   const { id, friendUserId } = useLocalSearchParams<{ id: string; friendUserId?: string }>();
@@ -24,11 +23,6 @@ export default function RecipeDetailsScreen() {
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [, setIsImporting] = useState(false);
-  const [isVoiceGuideActive, setIsVoiceGuideActive] = useState(false);
-  const [currentVoiceStep, setCurrentVoiceStep] = useState(0);
-  const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<any>(null);
-  const allInstructions = useRef<string[]>([]);
 
   const handleExtractRecipeContent = useCallback(async (recipeToUpdate: Recipe) => {
     if (!recipeToUpdate.url) return;
@@ -475,196 +469,6 @@ export default function RecipeDetailsScreen() {
     }
   };
 
-  const startVoiceGuide = async (instructions: string[]) => {
-    if (friendUserId) {
-      Alert.alert('Not Available', 'Voice guide is not available for friend recipes');
-      return;
-    }
-
-    if (instructions.length === 0) {
-      Alert.alert('No Instructions', 'This recipe has no instructions to read');
-      return;
-    }
-
-    allInstructions.current = instructions;
-    setIsVoiceGuideActive(true);
-    setCurrentVoiceStep(0);
-    setCheckedSteps({});
-
-    console.log('🎤 Starting voice guide with', instructions.length, 'steps');
-    readStep(0, instructions);
-  };
-
-  const readStep = (stepIndex: number, instructions: string[]) => {
-    if (stepIndex >= instructions.length) {
-      Speech.speak('Great job, enjoy your meal!', {
-        onDone: () => {
-          console.log('🎉 Voice guide completed');
-          setIsVoiceGuideActive(false);
-          setCurrentVoiceStep(0);
-          setCheckedSteps({});
-          stopListening();
-        },
-      });
-      return;
-    }
-
-    const stepText = instructions[stepIndex];
-    const announcement = `Step ${stepIndex + 1}. ${stepText}`;
-    
-    console.log('📢 Reading step', stepIndex + 1);
-    
-    Speech.speak(announcement, {
-      onDone: () => {
-        console.log('✅ Finished reading step', stepIndex + 1);
-        startListening(stepIndex, instructions);
-      },
-      onError: (error) => {
-        console.error('❌ TTS error:', error);
-        Alert.alert('Speech Error', 'Failed to read step. Try again.');
-      },
-    });
-  };
-
-  const startListening = (stepIndex: number, instructions: string[]) => {
-    setIsListening(true);
-    setCurrentVoiceStep(stepIndex);
-
-    if (Platform.OS === 'web') {
-      try {
-        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        
-        if (!SpeechRecognition) {
-          console.warn('⚠️ Speech recognition not supported on this browser');
-          Alert.alert(
-            'Speech Recognition Not Available',
-            'Your browser does not support speech recognition. Tap "Step Complete" button to continue.',
-            [{ text: 'OK' }]
-          );
-          return;
-        }
-
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
-
-        recognition.onresult = (event: any) => {
-          const transcript = Array.from(event.results)
-            .map((result: any) => result[0])
-            .map((result: any) => result.transcript)
-            .join('')
-            .toLowerCase();
-
-          console.log('🎤 Heard:', transcript);
-
-          if (
-            transcript.includes('step complete') ||
-            transcript.includes('step completed') ||
-            transcript.includes('complete') ||
-            transcript.includes('next step') ||
-            transcript.includes('next') ||
-            transcript.includes('done')
-          ) {
-            console.log('✅ Step completion detected');
-            markStepCompleteAndContinue(stepIndex, instructions);
-          }
-        };
-
-        recognition.onerror = (event: any) => {
-          console.error('❌ Speech recognition error:', event.error);
-          if (event.error === 'no-speech') {
-            console.log('⚠️ No speech detected, continuing to listen...');
-          } else {
-            setIsListening(false);
-          }
-        };
-
-        recognition.onend = () => {
-          if (isVoiceGuideActive && stepIndex === currentVoiceStep) {
-            console.log('🔄 Restarting recognition...');
-            try {
-              recognition.start();
-            } catch (e) {
-              console.log('⚠️ Could not restart recognition');
-            }
-          }
-        };
-
-        recognitionRef.current = recognition;
-        recognition.start();
-        console.log('🎤 Listening for "step complete"...');
-      } catch (error) {
-        console.error('❌ Error starting speech recognition:', error);
-        Alert.alert(
-          'Speech Recognition Error',
-          'Could not start speech recognition. Use the "Step Complete" button instead.',
-          [{ text: 'OK' }]
-        );
-      }
-    } else {
-      console.log('📱 Native platform: Speech recognition not available, use manual button');
-    }
-  };
-
-  const stopListening = () => {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-        recognitionRef.current = null;
-      } catch (e) {
-        console.log('⚠️ Error stopping recognition:', e);
-      }
-    }
-    setIsListening(false);
-  };
-
-  const markStepCompleteAndContinue = async (stepIndex: number, instructions: string[]) => {
-    stopListening();
-
-    const newCheckedSteps = {
-      ...checkedSteps,
-      [stepIndex]: true,
-    };
-    setCheckedSteps(newCheckedSteps);
-
-    if (recipe) {
-      try {
-        await updateRecipeStepProgress(recipe.id, newCheckedSteps);
-      } catch (error) {
-        console.error('Failed to save step progress:', error);
-      }
-    }
-
-    const nextStepIndex = stepIndex + 1;
-    if (nextStepIndex < instructions.length) {
-      setTimeout(() => {
-        readStep(nextStepIndex, instructions);
-      }, 500);
-    } else {
-      Speech.speak('Great job, enjoy your meal!', {
-        onDone: () => {
-          console.log('🎉 Voice guide completed');
-          setIsVoiceGuideActive(false);
-          setCurrentVoiceStep(0);
-          setCheckedSteps({});
-          if (recipe) {
-            updateRecipeStepProgress(recipe.id, {}).catch(console.error);
-          }
-        },
-      });
-    }
-  };
-
-  const stopVoiceGuide = () => {
-    Speech.stop();
-    stopListening();
-    setIsVoiceGuideActive(false);
-    setCurrentVoiceStep(0);
-    setIsListening(false);
-    console.log('🛑 Voice guide stopped');
-  };
-
   const handlePasteImageUrl = async () => {
     if (!recipe) return;
     
@@ -895,53 +699,8 @@ export default function RecipeDetailsScreen() {
                 {/* Instructions Section */}
                 {parsedContent.instructions.length > 0 && (
                   <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                      <Text style={styles.sectionTitle}>👨‍🍳 Instructions</Text>
-                      {!friendUserId && (
-                        <TouchableOpacity
-                          onPress={() => {
-                            if (isVoiceGuideActive) {
-                              stopVoiceGuide();
-                            } else {
-                              startVoiceGuide(parsedContent.instructions);
-                            }
-                          }}
-                          style={[
-                            styles.voiceButton,
-                            isVoiceGuideActive && styles.voiceButtonActive,
-                          ]}
-                        >
-                          {isVoiceGuideActive ? (
-                            <MicOff size={20} color="#FFFFFF" />
-                          ) : (
-                            <Mic size={20} color={Colors.primary} />
-                          )}
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                    {isVoiceGuideActive && (
-                      <View style={styles.voiceGuideStatus}>
-                        <Text style={styles.voiceGuideText}>
-                          🎤 Voice Guide Active - Step {currentVoiceStep + 1} of {parsedContent.instructions.length}
-                        </Text>
-                        {isListening && (
-                          <Text style={styles.listeningText}>
-                            Listening... Say "step complete" or "next"
-                          </Text>
-                        )}
-                        {!isListening && Platform.OS !== 'web' && (
-                          <TouchableOpacity
-                            style={styles.manualCompleteButton}
-                            onPress={() => markStepCompleteAndContinue(currentVoiceStep, parsedContent.instructions)}
-                          >
-                            <Text style={styles.manualCompleteButtonText}>Step Complete ✓</Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    )}
-                    {!isVoiceGuideActive && (
-                      <Text style={styles.instructionsSubtitle}>Tap each step to check it off as you cook!</Text>
-                    )}
+                    <Text style={styles.sectionTitle}>👨‍🍳 Instructions</Text>
+                    <Text style={styles.instructionsSubtitle}>Tap each step to check it off as you cook!</Text>
                     {parsedContent.instructions.map((instruction, index) => {
                       // Clean up instruction text and handle checkboxes
                       const cleanInstruction = instruction.replace(/^☐\s*/, '').replace(/^\d+\.\s*/, '');
@@ -951,11 +710,10 @@ export default function RecipeDetailsScreen() {
                           key={index} 
                           style={[
                             styles.instructionItem,
-                            checkedSteps[index] && styles.checkedInstructionItem,
-                            isVoiceGuideActive && currentVoiceStep === index && styles.activeVoiceStep
+                            checkedSteps[index] && styles.checkedInstructionItem
                           ]}
-                          onPress={() => !isVoiceGuideActive && toggleStepCheck(index)}
-                          activeOpacity={isVoiceGuideActive ? 1 : 0.7}
+                          onPress={() => toggleStepCheck(index)}
+                          activeOpacity={0.7}
                         >
                           <View style={styles.stepHeader}>
                             {checkedSteps[index] ? (
@@ -1530,63 +1288,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
     marginBottom: 2,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  voiceButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.cardBackground,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Colors.primary,
-  },
-  voiceButtonActive: {
-    backgroundColor: Colors.error,
-    borderColor: Colors.error,
-  },
-  voiceGuideStatus: {
-    backgroundColor: Colors.primary + '20',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.primary + '40',
-  },
-  voiceGuideText: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  listeningText: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  manualCompleteButton: {
-    backgroundColor: Colors.success,
-    borderRadius: 8,
-    padding: 10,
-    marginTop: 8,
-    alignItems: 'center',
-  },
-  manualCompleteButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  activeVoiceStep: {
-    borderWidth: 2,
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '15',
   },
 });
