@@ -1,21 +1,46 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, Switch } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, Switch, Modal, ActivityIndicator } from 'react-native';
 import { useAuth } from '@/hooks/auth-store';
 import { useUser } from '@/hooks/user-store';
 import { useTheme } from '@/hooks/theme-store';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
-import { User, Settings, Info, Heart, Users, Moon } from 'lucide-react-native';
+import { User, Settings, Info, Heart, Users, Moon, Volume2, X } from 'lucide-react-native';
 import { router } from 'expo-router';
+import * as Speech from 'expo-speech';
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
-  const { currentUserProfile, updateShareCookbook } = useUser();
+  const { currentUserProfile, updateShareCookbook, availableVoices, selectedVoice, isLoadingVoices, updateSelectedVoice } = useUser();
   const { toggleTheme, isDark } = useTheme();
   const [isUpdatingShare, setIsUpdatingShare] = useState(false);
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
+  const [isUpdatingVoice, setIsUpdatingVoice] = useState(false);
 
   const colors = isDark ? Colors.dark : Colors.light;
+
+  const handleVoiceSelect = async (voiceIdentifier: string) => {
+    setIsUpdatingVoice(true);
+    try {
+      const success = await updateSelectedVoice(voiceIdentifier);
+      if (success) {
+        const voice = availableVoices.find((v) => v.identifier === voiceIdentifier);
+        if (voice) {
+          Speech.speak('This is how I sound.', { voice: voiceIdentifier });
+        }
+        setShowVoiceModal(false);
+      } else {
+        Alert.alert('Error', 'Failed to update voice setting');
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to update voice setting');
+    } finally {
+      setIsUpdatingVoice(false);
+    }
+  };
+
+  const selectedVoiceName = availableVoices.find((v) => v.identifier === selectedVoice)?.name || 'Default';
 
   const handleLogout = () => {
     Alert.alert(
@@ -63,6 +88,21 @@ export default function ProfileScreen() {
               thumbColor="#FFFFFF"
             />
           </View>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => setShowVoiceModal(true)}
+            disabled={isLoadingVoices}
+          >
+            <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
+              <Volume2 size={20} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.menuText, { color: colors.text }]}>Recipe Voice</Text>
+              <Text style={[styles.menuSubtext, { color: colors.textSecondary }]}>{selectedVoiceName}</Text>
+            </View>
+            {isLoadingVoices && <ActivityIndicator size="small" color={colors.primary} />}
+          </TouchableOpacity>
         </View>
         
         <View style={styles.section}>
@@ -145,6 +185,66 @@ export default function ProfileScreen() {
         
         <Text style={[styles.version, { color: colors.textSecondary }]}>Version 1.0.0</Text>
       </ScrollView>
+
+      <Modal
+        visible={showVoiceModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowVoiceModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Select Voice</Text>
+              <TouchableOpacity onPress={() => setShowVoiceModal(false)}>
+                <X size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>
+              Choose a voice for recipe instructions
+            </Text>
+            <ScrollView style={styles.voiceList}>
+              {availableVoices.map((voice) => {
+                const isSelected = voice.identifier === selectedVoice;
+                const genderIndicator = voice.name.toLowerCase().includes('male') 
+                  ? voice.name.toLowerCase().includes('female') ? '♀' : '♂' 
+                  : '';
+                return (
+                  <TouchableOpacity
+                    key={voice.identifier}
+                    style={[
+                      styles.voiceItem,
+                      { borderColor: colors.muted },
+                      isSelected && { backgroundColor: colors.primary + '20', borderColor: colors.primary }
+                    ]}
+                    onPress={() => handleVoiceSelect(voice.identifier)}
+                    disabled={isUpdatingVoice}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.voiceName, { color: colors.text }]}>
+                        {genderIndicator && `${genderIndicator} `}{voice.name}
+                      </Text>
+                      <Text style={[styles.voiceDetails, { color: colors.textSecondary }]}>
+                        {voice.language} • {voice.quality || 'Standard'}
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <View style={[styles.selectedBadge, { backgroundColor: colors.primary }]}>
+                        <Text style={[styles.selectedBadgeText, { color: colors.primaryForeground }]}>✓</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            {isUpdatingVoice && (
+              <View style={styles.loadingOverlay}>
+                <ActivityIndicator size="large" color={colors.primary} />
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </GradientBackground>
   );
 }
@@ -222,5 +322,76 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: Colors.textSecondary,
     fontSize: 14,
+  },
+  menuSubtext: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+  },
+  modalDescription: {
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  voiceList: {
+    maxHeight: 400,
+  },
+  voiceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 2,
+  },
+  voiceName: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  voiceDetails: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  selectedBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedBadgeText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
 });

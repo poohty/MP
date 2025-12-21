@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, A
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import { useAuth } from '@/hooks/auth-store';
+import { useUser } from '@/hooks/user-store';
 import Colors from '@/constants/colors';
 import { ExternalLink, Trash2, CheckSquare, Square, Edit3, Camera, Link as LinkIcon, BookPlus, Mic, MicOff } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,6 +16,7 @@ import * as Speech from 'expo-speech';
 export default function RecipeDetailsScreen() {
   const { id, friendUserId } = useLocalSearchParams<{ id: string; friendUserId?: string }>();
   const { user } = useAuth();
+  const { selectedVoice } = useUser();
   const { recipes, deleteRecipe, updateRecipeStepProgress, changeRecipeCategory, updateRecipeImage, convertImageToBase64, importRecipeFromFriend, getRecipesForUser } = useRecipes();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [checkedSteps, setCheckedSteps] = useState<{ [stepIndex: number]: boolean }>({});
@@ -489,7 +491,7 @@ export default function RecipeDetailsScreen() {
       if (Platform.OS === 'web') {
         Alert.alert(
           'Speech Recognition Unavailable',
-          'Speech recognition requires internet and is not available offline on this device. The voice-guided mode needs a working internet connection and a compatible browser (Chrome, Edge, or Safari).\n\nSteps will be read aloud, but you\'ll need to manually tap each step to advance.',
+          'Speech recognition requires internet and is available only on compatible web browsers (Chrome, Edge, Safari).\n\n⚠️ Offline Recognition:\nTrue offline speech recognition on Android/iOS would require expo-speech-recognition with downloaded language models, which needs a custom development client (not available in Expo Go).\n\nSteps will be read aloud with your selected voice, but you\'ll need to manually tap each step to advance.',
           [
             { text: 'Cancel', style: 'cancel' },
             {
@@ -500,8 +502,8 @@ export default function RecipeDetailsScreen() {
         );
       } else {
         Alert.alert(
-          'Feature Not Available',
-          'Voice-guided hands-free mode with speech recognition is only available on web browsers with internet connection. On mobile devices, you can use TTS to hear instructions, but you\'ll need to tap each step manually.\n\nWould you like to continue with manual mode?',
+          'Voice Recognition Limited on Mobile',
+          'Hands-free voice commands ("step complete") require a web browser with internet connection.\n\nOn mobile apps:\n• TTS reads steps with your selected voice\n• Tap each step to advance manually\n\nFor offline speech recognition on Android/iOS, expo-speech-recognition would be needed, which requires a custom dev client (not available in Expo Go).\n\nWould you like to continue with TTS + manual taps?',
           [
             { text: 'Cancel', style: 'cancel' },
             {
@@ -566,7 +568,9 @@ export default function RecipeDetailsScreen() {
 
   const readStep = async (stepIndex: number, instructions: string[]) => {
     if (stepIndex >= instructions.length) {
+      const voiceOptions = selectedVoice ? { voice: selectedVoice } : {};
       Speech.speak('Great job, enjoy your meal!', {
+        ...voiceOptions,
         onDone: () => {
           setTimeout(() => {
             stopVoiceGuide();
@@ -577,8 +581,10 @@ export default function RecipeDetailsScreen() {
     }
 
     const stepText = `Step ${stepIndex + 1}. ${instructions[stepIndex]}`;
+    const voiceOptions = selectedVoice ? { voice: selectedVoice } : {};
     
     Speech.speak(stepText, {
+      ...voiceOptions,
       onDone: () => {
         setTimeout(() => {
           startListening(stepIndex, instructions);
@@ -753,7 +759,9 @@ export default function RecipeDetailsScreen() {
       if (nextStep < instructions.length) {
         readStep(nextStep, instructions);
       } else {
+        const voiceOptions = selectedVoice ? { voice: selectedVoice } : {};
         Speech.speak('Great job, enjoy your meal!', {
+          ...voiceOptions,
           onDone: () => {
             setTimeout(() => stopVoiceGuide(), 1000);
           }
