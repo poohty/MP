@@ -7,14 +7,6 @@ import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 
 const USER_STORAGE_KEY = 'meal-planner-user';
 
-type LoginResult =
-  | { ok: true }
-  | { ok: false; reason: 'NO_ACCOUNT' | 'BAD_CREDENTIALS' | 'SUPABASE_NOT_ENABLED' | 'UNKNOWN' };
-
-type SignupResult =
-  | { ok: true }
-  | { ok: false; reason: 'SIGNUP_FAILED' | 'SUPABASE_NOT_ENABLED' | 'UNKNOWN' };
-
 const result = createContextHook(() => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,30 +55,6 @@ const result = createContextHook(() => {
     }
   }, []);
 
-  const doesProfileExist = useCallback(async (email: string): Promise<boolean> => {
-    try {
-      if (!isSupabaseEnabled) {
-        return false;
-      }
-
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('email', email)
-        .maybeSingle();
-
-      if (error) {
-        console.error('❌ doesProfileExist Supabase error:', error);
-        return false;
-      }
-
-      return !!data?.id;
-    } catch (e) {
-      console.error('❌ doesProfileExist unexpected error:', e);
-      return false;
-    }
-  }, []);
-
   const loadUser = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -122,73 +90,37 @@ const result = createContextHook(() => {
 
 
 
-  const login = useCallback(async (email: string, password: string): Promise<LoginResult> => {
+  const login = useCallback(async (email: string, password: string) => {
     try {
-      if (!isSupabaseEnabled) {
-        console.log('Supabase not enabled');
-        return { ok: false, reason: 'SUPABASE_NOT_ENABLED' };
-      }
-
-      const profileExists = await doesProfileExist(email);
-      if (!profileExists) {
-        return { ok: false, reason: 'NO_ACCOUNT' };
-      }
-
-      const authRes = await supabase.auth.signInWithPassword({ email, password });
-      if (authRes.error) {
-        console.error('❌ Supabase signInWithPassword error:', authRes.error);
-        return { ok: false, reason: 'BAD_CREDENTIALS' };
-      }
-
-      const { data: profileRow, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('id,email,username,display_name,share_cookbook_with_friends')
-        .eq('email', email)
-        .maybeSingle();
-
-      if (profileError) {
-        console.error('❌ Supabase load profile after login error:', profileError);
-      }
-
-      const userId = (profileRow?.id ?? email.toLowerCase().replace(/[^a-z0-9]/g, '')).toString();
-      const username = (profileRow?.username ?? email.split('@')[0] ?? '').toLowerCase();
-      const name = (profileRow?.display_name ?? email.split('@')[0] ?? '').toString();
-
+      const userId = email.toLowerCase().replace(/[^a-z0-9]/g, '');
+      
+      const username = email.split('@')[0].toLowerCase();
       const newUser: User = {
         id: userId,
-        email: profileRow?.email ?? email,
-        name,
+        email,
+        name: email.split('@')[0],
         username,
-        shareCookbookWithFriends: !!profileRow?.share_cookbook_with_friends,
+        shareCookbookWithFriends: false,
       };
-
-      console.log('✅ Logging in existing user profile:', newUser);
+      
+      console.log('Logging in user:', newUser);
       await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
       setUser(newUser);
-
+      
+      await upsertUserProfileToSupabase(newUser);
+      
       router.replace('/(tabs)');
-      return { ok: true };
+      return true;
     } catch (error) {
       console.error('Login failed:', error);
-      return { ok: false, reason: 'UNKNOWN' };
+      return false;
     }
-  }, [doesProfileExist]);
+  }, [upsertUserProfileToSupabase]);
 
-  const signup = useCallback(async (name: string, email: string, password: string, locationPermission?: boolean): Promise<SignupResult> => {
+  const signup = useCallback(async (name: string, email: string, password: string, locationPermission?: boolean) => {
     try {
-      if (!isSupabaseEnabled) {
-        return { ok: false, reason: 'SUPABASE_NOT_ENABLED' };
-      }
-
-      const signUpRes = await supabase.auth.signUp({ email, password });
-      if (signUpRes.error) {
-        console.error('❌ Supabase signUp error:', signUpRes.error);
-        return { ok: false, reason: 'SIGNUP_FAILED' };
-      }
-
       const userId = email.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const username = (email.split('@')[0] ?? '').toLowerCase();
-
+      const username = email.split('@')[0].toLowerCase();
       const newUser: User = {
         id: userId,
         email,
@@ -197,20 +129,18 @@ const result = createContextHook(() => {
         locationPermission,
         shareCookbookWithFriends: false,
       };
-
-      console.log('✅ Signing up user:', newUser);
-
-      await upsertUserProfileToSupabase(newUser);
-
+      
+      console.log('Signing up user:', newUser);
       await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
-      await AsyncStorage.setItem('mealplanner_tutorial_pending', '1');
       setUser(newUser);
-
+      
+      await upsertUserProfileToSupabase(newUser);
+      
       router.replace('/(tabs)');
-      return { ok: true };
+      return true;
     } catch (error) {
       console.error('Signup failed:', error);
-      return { ok: false, reason: 'UNKNOWN' };
+      return false;
     }
   }, [upsertUserProfileToSupabase]);
 

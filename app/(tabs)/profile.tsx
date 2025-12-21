@@ -8,17 +8,8 @@ import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
 import { User, Settings, Info, Heart, Users, Moon } from 'lucide-react-native';
 import { router } from 'expo-router';
-import TutorialCoachmarkModal from '@/components/TutorialCoachmarkModal';
-import { useTutorial } from '@/hooks/tutorial-store';
 
 export default function ProfileScreen() {
-  const t = useTutorial('profile', [
-    { title: 'Your Profile', body: 'Manage your account and app preferences here.' },
-    { title: 'Edit Profile', body: 'Update your display name and details anytime.' },
-    { title: 'Sharing', body: 'Toggle cookbook sharing to let friends view your recipes.' },
-    { title: 'Logout', body: 'Use logout if you want to switch accounts.' },
-  ]);
-
   const { user, logout } = useAuth();
   const { currentUserProfile, updateShareCookbook } = useUser();
   const { toggleTheme, isDark } = useTheme();
@@ -154,13 +145,6 @@ export default function ProfileScreen() {
         
         <Text style={[styles.version, { color: colors.textSecondary }]}>Version 1.0.0</Text>
       </ScrollView>
-      <TutorialCoachmarkModal
-        visible={t.visible}
-        title={t.title}
-        body={t.body}
-        onOk={t.onOk}
-        onClose={t.onClose}
-      />
     </GradientBackground>
   );
 }

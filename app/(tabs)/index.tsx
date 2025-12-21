@@ -9,16 +9,8 @@ import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
 import { Camera, Link, FolderOpen } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import TutorialCoachmarkModal from '@/components/TutorialCoachmarkModal';
-import { useTutorial } from '@/hooks/tutorial-store';
 
 export default function HomeScreen() {
-  const t = useTutorial('home', [
-    { title: 'Welcome', body: 'Start by adding a few recipes so meal planning is effortless.' },
-    { title: 'Quick Actions', body: 'Upload a recipe photo or save a recipe URL from the web.' },
-    { title: 'Meal Plans', body: 'When you’re ready, create a meal plan from your cookbook.' },
-  ]);
-
   const { user, isAuthenticated, isLoading } = useAuth();
   const { recipes } = useRecipes();
   const { isDark } = useTheme();
@@ -179,13 +171,6 @@ export default function HomeScreen() {
           testID="home-create-meal-plan"
         />
       </ScrollView>
-      <TutorialCoachmarkModal
-        visible={t.visible}
-        title={t.title}
-        body={t.body}
-        onOk={t.onOk}
-        onClose={t.onClose}
-      />
     </GradientBackground>
   );
 }

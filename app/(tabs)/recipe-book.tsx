@@ -9,16 +9,8 @@ import { Recipe, RecipeCategory } from '@/types';
 import Colors from '@/constants/colors';
 import { Plus, RefreshCw, Image } from 'lucide-react-native';
 import { useTheme } from '@/hooks/theme-store';
-import { useTutorial } from '@/hooks/tutorial-store';
-import TutorialCoachmarkModal from '@/components/TutorialCoachmarkModal';
 
 export default function RecipeBookScreen() {
-  const t = useTutorial('recipe-book', [
-    { title: 'Cook Book', body: 'Your saved recipes live here. Add new recipes anytime.' },
-    { title: 'Add Recipe', body: 'Tap + to upload a recipe photo (or add a URL from Home).' },
-    { title: 'Filter & Search', body: 'Use categories to browse, or search to find anything fast.' },
-  ]);
-
   const { recipes, isLoading, debugStorage, deleteRecipe, toggleFavorite, refreshRecipes, reExtractImages, forceReExtractAllImages } = useRecipes();
   const { isDark } = useTheme();
   const themeColors = isDark ? Colors.dark : Colors.light;
@@ -296,13 +288,6 @@ export default function RecipeBookScreen() {
         />
       </View>
     </View>
-    <TutorialCoachmarkModal
-      visible={t.visible}
-      title={t.title}
-      body={t.body}
-      onOk={t.onOk}
-      onClose={t.onClose}
-    />
     </GradientBackground>
   );
 }
