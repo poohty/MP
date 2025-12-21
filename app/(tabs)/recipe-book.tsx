@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Alert } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, Alert, TextInput } from 'react-native';
 import { router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import RecipeList from '@/components/RecipeList';
@@ -15,11 +15,25 @@ export default function RecipeBookScreen() {
   const { isDark } = useTheme();
   const themeColors = isDark ? Colors.dark : Colors.light;
   const [selectedCategory, setSelectedCategory] = useState<RecipeCategory>('Breakfast');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExtractingImages, setIsExtractingImages] = useState(false);
-  const [showDebugMenu, setShowDebugMenu] = useState(false);
 
-  const filteredRecipes = recipes.filter(recipe => recipe.category === selectedCategory);
+  const trimmedSearch = useMemo(() => searchQuery.trim(), [searchQuery]);
+  const isSearching = trimmedSearch.length > 0;
+
+  const filteredRecipes = useMemo(() => {
+    if (!isSearching) {
+      return recipes.filter((recipe) => recipe.category === selectedCategory);
+    }
+
+    const q = trimmedSearch.toLowerCase();
+    return recipes.filter((recipe) => (recipe.name ?? '').toLowerCase().includes(q));
+  }, [isSearching, recipes, selectedCategory, trimmedSearch]);
+
+  const emptyMessage = isSearching
+    ? 'No matching recipes found'
+    : `No ${selectedCategory.toLowerCase()} recipes found`;
 
   const handleSelectRecipe = (recipe: Recipe) => {
     router.push({
@@ -82,7 +96,6 @@ export default function RecipeBookScreen() {
             style: 'destructive',
             onPress: async () => {
               setIsExtractingImages(true);
-              setShowDebugMenu(false);
               
               // Show progress alert
               Alert.alert(
@@ -185,8 +198,6 @@ export default function RecipeBookScreen() {
   const totalRecipes = recipes.length;
   
   const handleDebugMenu = () => {
-    setShowDebugMenu(true);
-    
     Alert.alert(
       '🛠️ Debug Menu',
       `Total Recipes: ${totalRecipes}\nWith Images: ${recipesWithImages}\nWithout Images: ${recipesWithoutImages}`,
@@ -194,7 +205,7 @@ export default function RecipeBookScreen() {
         { text: 'Image Diagnostics', onPress: () => router.push('/image-diagnostics') },
         { text: 'Debug Storage', onPress: debugStorage },
         { text: 'Force Re-Extract ALL', onPress: handleForceReExtractAll },
-        { text: 'Close', style: 'cancel', onPress: () => setShowDebugMenu(false) }
+        { text: 'Close', style: 'cancel' }
       ]
     );
   };
@@ -241,6 +252,24 @@ export default function RecipeBookScreen() {
         </View>
       </View>
       
+      <View style={[styles.searchContainer, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
+        <View style={[styles.searchInputWrap, { backgroundColor: themeColors.background, borderColor: themeColors.border }]}
+          testID="cookbookSearchContainer"
+        >
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search recipes…"
+            placeholderTextColor={themeColors.textSecondary}
+            style={[styles.searchInput, { color: themeColors.text }]}
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+            testID="cookbookSearchInput"
+          />
+        </View>
+      </View>
+
       <View style={[styles.categoryContainer, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
         <CategorySelector
           selectedCategory={selectedCategory}
@@ -255,7 +284,7 @@ export default function RecipeBookScreen() {
           onDeleteRecipe={handleDeleteRecipe}
           onToggleFavorite={handleToggleFavorite}
           isLoading={isLoading}
-          emptyMessage={`No ${selectedCategory.toLowerCase()} recipes found`}
+          emptyMessage={emptyMessage}
         />
       </View>
     </View>
@@ -276,6 +305,23 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     minHeight: 70,
     borderBottomWidth: 1,
+  },
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+  },
+  searchInputWrap: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    height: 44,
+    justifyContent: 'center',
+  },
+  searchInput: {
+    fontSize: 16,
+    height: '100%',
   },
   categoryContainer: {
     borderBottomWidth: 1,
