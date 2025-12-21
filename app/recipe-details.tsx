@@ -31,6 +31,7 @@ export default function RecipeDetailsScreen() {
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
   const instructionsRef = useRef<string[]>([]);
+  const [bestQualityVoice, setBestQualityVoice] = useState<string | undefined>(undefined);
 
   const handleExtractRecipeContent = useCallback(async (recipeToUpdate: Recipe) => {
     if (!recipeToUpdate.url) return;
@@ -77,6 +78,61 @@ export default function RecipeDetailsScreen() {
       loadRecipe();
     }
   }, [id, loadRecipe]);
+
+  useEffect(() => {
+    const fetchBestVoice = async () => {
+      try {
+        const availableVoices = await Speech.getAvailableVoicesAsync();
+        
+        if (availableVoices.length === 0) {
+          console.log('No voices available');
+          return;
+        }
+
+        console.log(`Found ${availableVoices.length} available voices`);
+
+        const enhancedVoices = availableVoices.filter(
+          voice => voice.quality === 'Enhanced'
+        );
+
+        if (enhancedVoices.length > 0) {
+          const preferredVoice = enhancedVoices.find(
+            voice => 
+              (Platform.OS === 'ios' && (
+                voice.identifier.includes('Samantha') ||
+                voice.identifier.includes('premium') ||
+                voice.name.toLowerCase().includes('premium') ||
+                voice.name.toLowerCase().includes('enhanced')
+              )) ||
+              (Platform.OS === 'android' && (
+                voice.identifier.includes('en-us-x-') ||
+                voice.name.toLowerCase().includes('enhanced') ||
+                voice.quality === 'Enhanced'
+              ))
+          ) || enhancedVoices[0];
+
+          console.log('Selected enhanced voice:', preferredVoice.name, preferredVoice.quality);
+          setBestQualityVoice(preferredVoice.identifier);
+        } else {
+          const defaultVoices = availableVoices.filter(
+            voice => voice.quality === 'Default'
+          );
+          
+          if (defaultVoices.length > 0) {
+            console.log('Using default quality voice:', defaultVoices[0].name);
+            setBestQualityVoice(defaultVoices[0].identifier);
+          } else {
+            console.log('Using first available voice:', availableVoices[0].name);
+            setBestQualityVoice(availableVoices[0].identifier);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching voices:', error);
+      }
+    };
+
+    fetchBestVoice();
+  }, []);
 
   const handleImportToMyCookbook = async () => {
     if (!recipe || !user) return;
@@ -568,7 +624,8 @@ export default function RecipeDetailsScreen() {
 
   const readStep = async (stepIndex: number, instructions: string[]) => {
     if (stepIndex >= instructions.length) {
-      const voiceOptions = selectedVoice ? { voice: selectedVoice } : {};
+      const voiceToUse = selectedVoice || bestQualityVoice;
+      const voiceOptions = voiceToUse ? { voice: voiceToUse } : {};
       Speech.speak('Great job, enjoy your meal!', {
         ...voiceOptions,
         onDone: () => {
@@ -581,7 +638,8 @@ export default function RecipeDetailsScreen() {
     }
 
     const stepText = `Step ${stepIndex + 1}. ${instructions[stepIndex]}`;
-    const voiceOptions = selectedVoice ? { voice: selectedVoice } : {};
+    const voiceToUse = selectedVoice || bestQualityVoice;
+    const voiceOptions = voiceToUse ? { voice: voiceToUse } : {};
     
     Speech.speak(stepText, {
       ...voiceOptions,
@@ -759,7 +817,8 @@ export default function RecipeDetailsScreen() {
       if (nextStep < instructions.length) {
         readStep(nextStep, instructions);
       } else {
-        const voiceOptions = selectedVoice ? { voice: selectedVoice } : {};
+        const voiceToUse = selectedVoice || bestQualityVoice;
+        const voiceOptions = voiceToUse ? { voice: voiceToUse } : {};
         Speech.speak('Great job, enjoy your meal!', {
           ...voiceOptions,
           onDone: () => {
