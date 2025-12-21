@@ -9,7 +9,7 @@ const USER_STORAGE_KEY = 'meal-planner-user';
 
 type LoginResult =
   | { ok: true }
-  | { ok: false; reason: 'NO_ACCOUNT' | 'BAD_CREDENTIALS' | 'SUPABASE_NOT_ENABLED' | 'UNKNOWN' };
+  | { ok: false; reason: 'NO_ACCOUNT' | 'BAD_CREDENTIALS' | 'EMAIL_NOT_CONFIRMED' | 'SUPABASE_NOT_ENABLED' | 'UNKNOWN' };
 
 type SignupResult =
   | { ok: true }
@@ -137,6 +137,9 @@ const result = createContextHook(() => {
       const authRes = await supabase.auth.signInWithPassword({ email, password });
       if (authRes.error) {
         console.error('❌ Supabase signInWithPassword error:', authRes.error);
+        if (authRes.error.message?.includes('Email not confirmed')) {
+          return { ok: false, reason: 'EMAIL_NOT_CONFIRMED' };
+        }
         return { ok: false, reason: 'BAD_CREDENTIALS' };
       }
 

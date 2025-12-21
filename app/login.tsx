@@ -53,6 +53,15 @@ export default function LoginScreen() {
           return;
         }
 
+        if (res.reason === 'EMAIL_NOT_CONFIRMED') {
+          Alert.alert(
+            'Email Not Confirmed',
+            'Please check your email and click the confirmation link to activate your account.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+
         if (res.reason === 'BAD_CREDENTIALS') {
           setErrors({ email: 'Invalid email or password' });
           return;
