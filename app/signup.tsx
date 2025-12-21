@@ -92,8 +92,8 @@ export default function SignupScreen() {
         locationGranted = locationPermission;
       }
       
-      const success = await signup(name, email, password, locationGranted);
-      if (!success) {
+      const res = await signup(name, email, password, locationGranted);
+      if (!res.ok) {
         setErrors({ email: 'Failed to create account' });
       }
     } catch (error) {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/auth-store';
 import Input from '@/components/Input';
@@ -39,8 +39,25 @@ export default function LoginScreen() {
     
     setIsLoading(true);
     try {
-      const success = await login(email, password);
-      if (!success) {
+      const res = await login(email, password);
+      if (!res.ok) {
+        if (res.reason === 'NO_ACCOUNT') {
+          Alert.alert(
+            'Account not found',
+            'You need to sign up first before you can log in.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Sign Up', onPress: () => router.push('/signup') },
+            ]
+          );
+          return;
+        }
+
+        if (res.reason === 'BAD_CREDENTIALS') {
+          setErrors({ email: 'Invalid email or password' });
+          return;
+        }
+
         setErrors({ email: 'Invalid email or password' });
       }
     } catch (error) {

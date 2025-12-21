@@ -6,10 +6,18 @@ import { supabase } from '@/lib/supabase';
 import { UserProfile, FriendLink } from '@/types';
 import Colors from '@/constants/colors';
 import GradientBackground from '@/components/GradientBackground';
+import TutorialCoachmarkModal from '@/components/TutorialCoachmarkModal';
+import { useTutorial } from '@/hooks/tutorial-store';
 
 import { Search, UserPlus, Check, X, RefreshCw, Bug } from 'lucide-react-native';
 
 export default function FriendsScreen() {
+  const t = useTutorial('friends', [
+    { title: 'Find Friends', body: 'Search by username to find other cooks.' },
+    { title: 'Send Requests', body: 'Tap the + button to send a friend request.' },
+    { title: 'Friend Cookbooks', body: 'Open a friend to view their shared cookbook (if enabled).' },
+  ]);
+
   const { 
     searchUsersByUsername,
     searchResults,
@@ -315,6 +323,13 @@ export default function FriendsScreen() {
           )}
         </View>
       </ScrollView>
+      <TutorialCoachmarkModal
+        visible={t.visible}
+        title={t.title}
+        body={t.body}
+        onOk={t.onOk}
+        onClose={t.onClose}
+      />
     </GradientBackground>
   );
 }

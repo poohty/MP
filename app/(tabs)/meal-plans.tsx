@@ -1,15 +1,25 @@
 import React, { useCallback } from 'react';
-import { StyleSheet, View, Text, FlatList } from 'react-native';
+import { StyleSheet, View, Text, FlatList, Alert } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useMealPlans } from '@/hooks/meal-plan-store';
+import { useRecipes } from '@/hooks/recipe-store';
 import MealPlanCard from '@/components/MealPlanCard';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
 import { MealPlan } from '@/types';
+import TutorialCoachmarkModal from '@/components/TutorialCoachmarkModal';
+import { useTutorial } from '@/hooks/tutorial-store';
 
 export default function MealPlansScreen() {
-  const { mealPlans, isLoading, refreshMealPlans } = useMealPlans();
+  const t = useTutorial('meal-plans', [
+    { title: 'Meal Plans', body: 'Create weekly meal plans from your recipes.' },
+    { title: 'Create a Plan', body: 'Tap “Create New Meal Plan” to generate a plan.' },
+    { title: 'Grocery List', body: 'Open a plan to see ingredients and your grocery list.' },
+  ]);
+
+  const { mealPlans, refreshMealPlans } = useMealPlans();
+  const { recipes } = useRecipes();
 
   useFocusEffect(
     useCallback(() => {
@@ -33,7 +43,18 @@ export default function MealPlansScreen() {
       
       <Button
         title="Create New Meal Plan"
-        onPress={() => router.push('../create-meal-plan')}
+        onPress={() => {
+          if (recipes.length === 0) {
+            Alert.alert(
+              'No recipes yet',
+              'You need to upload recipes before you can create a meal plan.',
+              [{ text: 'OK' }]
+            );
+            return;
+          }
+
+          router.push('../create-meal-plan');
+        }}
         style={styles.createButton}
       />
       
@@ -57,6 +78,13 @@ export default function MealPlansScreen() {
         />
       )}
       </View>
+      <TutorialCoachmarkModal
+        visible={t.visible}
+        title={t.title}
+        body={t.body}
+        onOk={t.onOk}
+        onClose={t.onClose}
+      />
     </GradientBackground>
   );
 }
