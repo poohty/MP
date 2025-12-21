@@ -481,37 +481,55 @@ export default function RecipeDetailsScreen() {
       return;
     }
 
-    const hasRecognition = typeof window !== 'undefined' && 
+    const hasRecognition = Platform.OS === 'web' && 
+      typeof window !== 'undefined' && 
       ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
     if (!hasRecognition) {
-      Alert.alert(
-        'Voice Guide',
-        'Speech recognition is not available on this device. Steps will be read aloud, but you\'ll need to manually tap to advance.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Continue',
-            onPress: () => startVoiceGuideManual(instructions)
-          }
-        ]
-      );
+      if (Platform.OS === 'web') {
+        Alert.alert(
+          'Speech Recognition Unavailable',
+          'Speech recognition requires internet and is not available offline on this device. The voice-guided mode needs a working internet connection and a compatible browser (Chrome, Edge, or Safari).\n\nSteps will be read aloud, but you\'ll need to manually tap each step to advance.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Continue with Manual Mode',
+              onPress: () => startVoiceGuideManual(instructions)
+            }
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Feature Not Available',
+          'Voice-guided hands-free mode with speech recognition is only available on web browsers with internet connection. On mobile devices, you can use TTS to hear instructions, but you\'ll need to tap each step manually.\n\nWould you like to continue with manual mode?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Continue',
+              onPress: () => startVoiceGuideManual(instructions)
+            }
+          ]
+        );
+      }
       return;
     }
 
     try {
-      if (Platform.OS !== 'web' && navigator && navigator.mediaDevices) {
+      if (Platform.OS === 'web' && navigator && navigator.mediaDevices) {
+        console.log('Requesting microphone permission...');
         const permission = await navigator.mediaDevices.getUserMedia({ audio: true });
         permission.getTracks().forEach(track => track.stop());
+        console.log('Microphone permission granted');
       }
-    } catch {
+    } catch (error: any) {
+      console.error('Microphone permission error:', error);
       Alert.alert(
-        'Microphone Permission',
-        'Microphone access is required for voice commands. Please grant permission in your browser settings.',
+        'Microphone Access Required',
+        'Voice commands require microphone access. Please grant microphone permission in your browser settings, then try again.\n\nAlternatively, you can use manual mode where you tap each step to advance.',
         [
           { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Continue Anyway',
+            text: 'Try Manual Mode',
             onPress: () => startVoiceGuideManual(instructions)
           }
         ]
@@ -575,6 +593,11 @@ export default function RecipeDetailsScreen() {
   };
 
   const startListening = (stepIndex: number, instructions: string[]) => {
+    if (Platform.OS !== 'web') {
+      console.log('Speech recognition only available on web platform');
+      return;
+    }
+
     try {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       
@@ -616,7 +639,7 @@ export default function RecipeDetailsScreen() {
       };
 
       recognition.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
+        console.error('Speech recognition error:', event.error, event.message);
         
         if (event.error === 'no-speech') {
           console.log('No speech detected, restarting...');
@@ -636,9 +659,42 @@ export default function RecipeDetailsScreen() {
         } else if (event.error === 'not-allowed') {
           console.error('Microphone permission denied');
           setIsListening(false);
-          Alert.alert('Microphone Access', 'Please grant microphone permission to use voice commands.');
+          Alert.alert(
+            'Microphone Permission Denied',
+            'Voice commands require microphone access. Please grant microphone permission in your browser settings and try again.'
+          );
           stopVoiceGuide();
+        } else if (event.error === 'network') {
+          console.error('Network error: Speech recognition requires internet connection');
+          setIsListening(false);
+          Alert.alert(
+            'Internet Connection Required',
+            'Speech recognition requires an active internet connection. Please check your connection and try again, or use manual mode by tapping each step.',
+            [
+              { text: 'Stop Voice Guide', onPress: () => stopVoiceGuide() },
+              { text: 'Continue Manually', onPress: () => {
+                if (recognitionRef.current) {
+                  try {
+                    recognitionRef.current.stop();
+                  } catch {}
+                  recognitionRef.current = null;
+                }
+                setIsListening(false);
+              }}
+            ]
+          );
+        } else if (event.error === 'service-not-allowed' || event.error === 'audio-capture') {
+          console.error('Speech service error:', event.error);
+          setIsListening(false);
+          Alert.alert(
+            'Speech Recognition Unavailable',
+            'Speech recognition service is not available. This may be due to network issues or browser compatibility. Please try again later or use manual mode.',
+            [
+              { text: 'Stop Voice Guide', onPress: () => stopVoiceGuide() }
+            ]
+          );
         } else {
+          console.error('Unhandled recognition error:', event.error);
           setIsListening(false);
         }
       };
@@ -666,6 +722,10 @@ export default function RecipeDetailsScreen() {
     } catch (error) {
       console.error('Error starting speech recognition:', error);
       setIsListening(false);
+      Alert.alert(
+        'Speech Recognition Error',
+        'Failed to start speech recognition. Please ensure you have an internet connection and have granted microphone permission.'
+      );
     }
   };
 
@@ -735,9 +795,7 @@ export default function RecipeDetailsScreen() {
       return;
     }
 
-    if (Platform.OS !== 'web') {
-      markStepComplete(stepIndex, instructionsRef.current);
-    }
+    markStepComplete(stepIndex, instructionsRef.current);
   };
 
   const handlePasteImageUrl = async () => {
@@ -997,7 +1055,7 @@ export default function RecipeDetailsScreen() {
                           {isListening ? '🎤 Listening... Say "step complete" or "next"' : '🔊 Speaking...'}
                         </Text>
                         <Text style={styles.voiceGuideHint}>
-                          Hands-free mode • Voice commands enabled
+                          {Platform.OS === 'web' && isListening ? 'Hands-free mode • Voice commands enabled' : 'Tap steps to advance manually'}
                         </Text>
                       </View>
                     )}
