@@ -41,7 +41,7 @@ export default function GroceryListScreen() {
   const toggleItem = (itemId: string) => {
     setGroceryList(prev => ({
       ...prev,
-      items: prev.items.map(item => 
+      items: (prev.items || []).map(item => 
         item.id === itemId ? { ...item, checked: !item.checked } : item
       )
     }));
@@ -141,7 +141,7 @@ export default function GroceryListScreen() {
         );
       }
 
-      const itemNames = groceryList.items.map(item => item.name);
+      const itemNames = groceryList.items?.map(item => item.name) || [];
       
       // Get location details for better search context
       let locationContext = '';
@@ -462,7 +462,7 @@ FORMAT: JSON array only, no explanations or markdown.`
     setIsLoadingStores(true);
     try {
       // Generate pricing for the manual store using AI
-      const itemNames = groceryList.items.map(item => item.name);
+      const itemNames = groceryList.items?.map(item => item.name) || [];
       
       const response = await fetch('https://toolkit.rork.com/text/llm/', {
         method: 'POST',
@@ -696,13 +696,13 @@ Use realistic grocery store pricing. Consider the store type and location for pr
                     <Text style={styles.storePhone}>{store.phone}</Text>
                   )}
                   <View style={styles.storeItems}>
-                    {store.items.slice(0, 3).map((item, itemIndex) => (
+                    {store.items?.slice(0, 3).map((item, itemIndex) => (
                       <Text key={itemIndex} style={styles.storeItemPrice}>
                         {item.name}: ${item.price.toFixed(2)}
                       </Text>
                     ))}
-                    {store.items.length > 3 && (
-                      <Text style={styles.moreItems}>+{store.items.length - 3} more items</Text>
+                    {(store.items?.length || 0) > 3 && (
+                      <Text style={styles.moreItems}>+{(store.items?.length || 0) - 3} more items</Text>
                     )}
                   </View>
                 </View>
