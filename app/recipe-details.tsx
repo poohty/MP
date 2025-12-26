@@ -10,9 +10,9 @@ import GradientBackground from '@/components/GradientBackground';
 import { Recipe, RecipeCategory } from '@/types';
 import DropdownSelect from '@/components/DropdownSelect';
 import * as ImagePicker from 'expo-image-picker';
-import * as Speech from 'expo-speech';
 import { Audio } from 'expo-av';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fetchTtsAudioFile } from '@/lib/voiceTts';
 
 export default function RecipeDetailsScreen() {
   const { id, friendUserId } = useLocalSearchParams<{ id: string; friendUserId?: string }>();
@@ -32,6 +32,7 @@ export default function RecipeDetailsScreen() {
   const [voiceVariant, setVoiceVariant] = useState<'female' | 'male' | 'neutral'>('female');
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
   const voiceStepsRef = useRef<string[]>([]);
+  const soundRef = useRef<Audio.Sound | null>(null);
 
   const handleExtractRecipeContent = useCallback(async (recipeToUpdate: Recipe) => {
     if (!recipeToUpdate.url) return;
@@ -80,9 +81,21 @@ export default function RecipeDetailsScreen() {
     }
   }, [id, loadRecipe]);
 
+  const stopCurrentVoice = async () => {
+    if (soundRef.current) {
+      try {
+        await soundRef.current.stopAsync();
+      } catch {}
+      try {
+        await soundRef.current.unloadAsync();
+      } catch {}
+      soundRef.current = null;
+    }
+  };
+
   useEffect(() => {
     return () => {
-      Speech.stop();
+      stopCurrentVoice();
     };
   }, []);
 
@@ -106,68 +119,57 @@ export default function RecipeDetailsScreen() {
     }
   };
 
-  const getVoiceConfig = () => {
-    switch (voiceVariant) {
-      case 'female':
-        return {
-          language: 'en-US',
-          rate: 0.9,
-          pitch: 1.1,
-        };
-      case 'male':
-        return {
-          language: 'en-GB',
-          rate: 0.9,
-          pitch: 0.85,
-        };
-      case 'neutral':
-        return {
-          language: 'en-US',
-          rate: 0.9,
-          pitch: 1.0,
-        };
-      default:
-        return {
-          language: 'en-US',
-          rate: 0.9,
-          pitch: 1.0,
-        };
-    }
-  };
-
   const speakStep = async (stepIndex: number) => {
+    await stopCurrentVoice();
+
     try {
       await Audio.setAudioModeAsync({
         playsInSilentModeIOS: true,
+        allowsRecordingIOS: false,
         staysActiveInBackground: false,
         shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false,
       });
     } catch (error) {
       console.error('Failed to set audio mode:', error);
     }
 
-    if (stepIndex >= voiceStepsRef.current.length) {
-      Speech.speak('Enjoy your meal. See ya next time', {
-        ...getVoiceConfig(),
-        onDone: () => {
-          setIsSpeaking(false);
-          setIsVoiceMode(false);
-          setCurrentVoiceStep(0);
-        },
-      });
-      return;
-    }
+    const isDoneMessage = stepIndex >= voiceStepsRef.current.length;
 
-    const stepText = voiceStepsRef.current[stepIndex];
-    const speakText = `Step ${stepIndex + 1}. ${stepText}`;
+    const stepText = isDoneMessage ? '' : voiceStepsRef.current[stepIndex];
+    const speakText = isDoneMessage
+      ? 'Enjoy your meal. See ya next time'
+      : `Step ${stepIndex + 1}. ${stepText}`;
 
     setIsSpeaking(true);
-    Speech.speak(speakText, {
-      ...getVoiceConfig(),
-      onDone: () => {
-        setIsSpeaking(false);
-      },
-    });
+
+    try {
+      const uri = await fetchTtsAudioFile(speakText, voiceVariant);
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri },
+        { shouldPlay: true, volume: 1.0 }
+      );
+
+      soundRef.current = sound;
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (!status.isLoaded) return;
+        if (status.didJustFinish) {
+          stopCurrentVoice();
+          setIsSpeaking(false);
+
+          if (isDoneMessage) {
+            setIsVoiceMode(false);
+            setCurrentVoiceStep(0);
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Voice TTS failed:', error);
+      Alert.alert('Voice error', 'Could not generate voice audio. Try again.');
+      setIsSpeaking(false);
+    }
   };
 
   const handleStartVoiceMode = (steps: string[]) => {
@@ -178,19 +180,19 @@ export default function RecipeDetailsScreen() {
   };
 
   const handleStopVoiceMode = () => {
-    Speech.stop();
+    stopCurrentVoice();
     setIsSpeaking(false);
     setIsVoiceMode(false);
     setCurrentVoiceStep(0);
   };
 
   const handleRepeatStep = () => {
-    Speech.stop();
+    stopCurrentVoice();
     speakStep(currentVoiceStep);
   };
 
   const handleNextStep = async () => {
-    Speech.stop();
+    stopCurrentVoice();
     
     if (!recipe) return;
     
@@ -199,18 +201,7 @@ export default function RecipeDetailsScreen() {
     const nextStep = currentVoiceStep + 1;
     setCurrentVoiceStep(nextStep);
     
-    if (nextStep >= voiceStepsRef.current.length) {
-      Speech.speak('Enjoy your meal. See ya next time', {
-        ...getVoiceConfig(),
-        onDone: () => {
-          setIsSpeaking(false);
-          setIsVoiceMode(false);
-          setCurrentVoiceStep(0);
-        },
-      });
-    } else {
-      speakStep(nextStep);
-    }
+    speakStep(nextStep);
   };
 
   const handleImportToMyCookbook = async () => {

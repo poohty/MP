@@ -17,6 +17,78 @@ const app = new Hono();
 
 app.use("*", cors());
 
+app.post("/voice/tts", async (c) => {
+  // Requires OPENAI_API_KEY env var in Rork environment variables.
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return c.json({ error: "Missing OPENAI_API_KEY" }, 500);
+  }
+
+  try {
+    const body = (await c.req.json()) as {
+      text?: unknown;
+      variant?: unknown;
+    };
+
+    const text = typeof body.text === "string" ? body.text : "";
+    const variant = body.variant;
+
+    if (!text.trim()) {
+      return c.json({ error: "Missing text" }, 400);
+    }
+
+    const variantStr =
+      variant === "female" || variant === "male" || variant === "neutral"
+        ? variant
+        : "neutral";
+
+    const voice =
+      variantStr === "female"
+        ? "shimmer"
+        : variantStr === "male"
+          ? "onyx"
+          : "alloy";
+
+    console.log("🔊 /voice/tts request", {
+      textLength: text.length,
+      variant: variantStr,
+      voice,
+    });
+
+    const openAiRes = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini-tts",
+        voice,
+        format: "mp3",
+        input: text,
+      }),
+    });
+
+    if (!openAiRes.ok) {
+      const errText = await openAiRes.text().catch(() => "");
+      console.error("🔊 /voice/tts OpenAI error", {
+        status: openAiRes.status,
+        statusText: openAiRes.statusText,
+        bodyPreview: errText.slice(0, 300),
+      });
+      return c.json({ error: "OpenAI TTS failed" }, 502);
+    }
+
+    const arrayBuffer = await openAiRes.arrayBuffer();
+    const audioBase64 = Buffer.from(arrayBuffer).toString("base64");
+
+    return c.json({ audioBase64, mime: "audio/mpeg" });
+  } catch (error) {
+    console.error("🔊 /voice/tts route error", error);
+    return c.json({ error: "Failed to generate audio" }, 500);
+  }
+});
+
 app.get("/api/trpc/health", (c) => {
   return c.json({ 
     status: "ok", 
