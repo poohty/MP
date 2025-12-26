@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Image, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/auth-store';
 import { useTheme } from '@/hooks/theme-store';
+import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
@@ -38,13 +39,25 @@ export default function LoginScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const canResend = useMemo(() => /\S+@\S+\.\S+/.test(email.trim()), [email]);
+
   const handleLogin = async () => {
     if (!validate()) return;
-    
+
     setIsLoading(true);
     try {
-      const success = await login(email, password);
-      if (!success) {
+      const result = await login(email.trim(), password);
+
+      if (!result.ok) {
+        if (result.reason === 'EMAIL_NOT_VERIFIED') {
+          Alert.alert(
+            'Email not verified',
+            'Please verify your email using the link we sent, then log in.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+
         setErrors({ email: 'Invalid email or password' });
       }
     } catch (error) {
@@ -52,6 +65,38 @@ export default function LoginScreen() {
       setErrors({ email: 'An error occurred during login' });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    const trimmed = email.trim();
+    if (!canResend) {
+      Alert.alert('Enter your email', 'Please enter a valid email address first.', [{ text: 'OK' }]);
+      return;
+    }
+
+    if (!isSupabaseEnabled) {
+      Alert.alert('Unavailable', 'Email verification is unavailable in offline mode.', [{ text: 'OK' }]);
+      return;
+    }
+
+    try {
+      console.log('📨 Resend verification email:', { email: trimmed });
+      const { error } = await supabase.auth.resend({ type: 'signup', email: trimmed });
+      if (error) {
+        console.error('📨 Resend verification error:', error);
+        Alert.alert('Could not resend', error.message || 'Please try again.', [{ text: 'OK' }]);
+        return;
+      }
+
+      Alert.alert(
+        'Verification email sent',
+        'Check your inbox for a new verification link, then come back and log in.',
+        [{ text: 'OK' }]
+      );
+    } catch (e) {
+      console.error('📨 Resend verification unexpected error:', e);
+      Alert.alert('Could not resend', 'Please try again.', [{ text: 'OK' }]);
     }
   };
 
@@ -124,6 +169,17 @@ export default function LoginScreen() {
           <Text style={[styles.footerText, { color: themeColors.textSecondary }]}>Don&apos;t have an account?</Text>
           <TouchableOpacity onPress={() => router.push('/signup')}>
             <Text style={[styles.footerLink, { color: themeColors.primary }]}>Sign Up</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.resendRow}>
+          <TouchableOpacity
+            onPress={handleResendVerification}
+            disabled={!canResend}
+            testID="resendVerificationButton"
+            style={[styles.resendButton, { opacity: canResend ? 1 : 0.5 }]}
+          >
+            <Text style={[styles.resendText, { color: themeColors.textSecondary }]}>Resend verification email</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -213,7 +269,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 20,
-    paddingVertical: 20,
+    paddingVertical: 14,
+  },
+  resendRow: {
+    alignItems: 'center',
+    paddingBottom: 12,
+  },
+  resendButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  resendText: {
+    fontSize: 13,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   footerText: {
     fontSize: 15,

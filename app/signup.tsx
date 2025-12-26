@@ -92,8 +92,23 @@ export default function SignupScreen() {
         locationGranted = locationPermission;
       }
       
-      const success = await signup(name, email, password, locationGranted);
-      if (!success) {
+      const result = await signup(name, email.trim(), password, locationGranted);
+
+      if (result.ok && result.reason === 'VERIFY_EMAIL_REQUIRED') {
+        Alert.alert(
+          'Verify your email',
+          'We sent you a verification link. Please verify your email, then come back and log in.',
+          [
+            {
+              text: 'Go to Login',
+              onPress: () => router.replace('/login'),
+            },
+          ]
+        );
+        return;
+      }
+
+      if (!result.ok) {
         setErrors({ email: 'Failed to create account' });
       }
     } catch (error) {
