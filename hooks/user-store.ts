@@ -100,14 +100,17 @@ const [UserContext, useUser] = createContextHook(() => {
         .from('user_profiles')
         .select('*')
         .eq('id', authUser.id)
-        .single();
+        .maybeSingle();
 
-      if (error) {
+      if (error && error.code === 'PGRST116') {
+        console.warn('⚠️ Supabase profile missing for new user. Creating fallback profile.');
+      } else if (error) {
         if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
           console.warn('⚠️ Supabase unavailable. Using local profile data.');
         } else {
           console.error('❌ Supabase error:', error.message || error.code);
         }
+
         const fallbackProfile: UserProfile = {
           id: authUser.id,
           email: authUser.email,
@@ -117,17 +120,54 @@ const [UserContext, useUser] = createContextHook(() => {
         };
         setCurrentUserProfile(fallbackProfile);
         setFriendLinks([]);
-      } else if (data) {
-        const profile: UserProfile = {
-          id: data.id,
-          email: data.email,
-          username: data.username,
-          displayName: data.display_name,
-          shareCookbookWithFriends: data.share_cookbook_with_friends,
-        };
-        setCurrentUserProfile(profile);
-        await loadFriendLinks(data.id);
+        return;
       }
+
+      if (!data) {
+        const fallbackEmail = authUser.email;
+        const fallbackUsername = (authUser.username || fallbackEmail.split('@')[0]).toLowerCase();
+        const fallbackDisplayName = authUser.name || authUser.username || fallbackEmail;
+        const fallbackShareCookbook = !!authUser.shareCookbookWithFriends;
+
+        const fallbackProfileRow = {
+          id: authUser.id,
+          email: fallbackEmail,
+          username: fallbackUsername,
+          display_name: fallbackDisplayName,
+          share_cookbook_with_friends: fallbackShareCookbook,
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error: upsertError } = await supabase
+          .from('user_profiles')
+          .upsert(fallbackProfileRow, { onConflict: 'id' });
+
+        if (upsertError) {
+          console.error('❌ Supabase upsert fallback profile error:', upsertError.message || upsertError.code);
+        }
+
+        const fallbackProfile: UserProfile = {
+          id: authUser.id,
+          email: fallbackEmail,
+          username: fallbackUsername,
+          displayName: fallbackDisplayName,
+          shareCookbookWithFriends: fallbackShareCookbook,
+        };
+
+        setCurrentUserProfile(fallbackProfile);
+        setFriendLinks([]);
+        return;
+      }
+
+      const profile: UserProfile = {
+        id: data.id,
+        email: data.email,
+        username: data.username,
+        displayName: data.display_name,
+        shareCookbookWithFriends: data.share_cookbook_with_friends,
+      };
+      setCurrentUserProfile(profile);
+      await loadFriendLinks(data.id);
     } catch {
       console.warn('⚠️ Network error. Using local profile data.');
       const fallbackProfile: UserProfile = {
