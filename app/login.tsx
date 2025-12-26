@@ -3,7 +3,6 @@ import { StyleSheet, View, Text, TouchableOpacity, KeyboardAvoidingView, Platfor
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/auth-store';
 import { useTheme } from '@/hooks/theme-store';
-import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
@@ -12,7 +11,7 @@ import { ArrowLeft } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function LoginScreen() {
-  const { login } = useAuth();
+  const { login, requestPasswordReset, resendVerification } = useAuth();
   const { isDark } = useTheme();
   const themeColors = isDark ? Colors.dark : Colors.light;
   const [email, setEmail] = useState('');
@@ -49,15 +48,6 @@ export default function LoginScreen() {
       const result = await login(email.trim(), password);
 
       if (!result.ok) {
-        if (result.reason === 'EMAIL_NOT_VERIFIED') {
-          Alert.alert(
-            'Email not verified',
-            'Please verify your email using the link we sent, then log in.',
-            [{ text: 'OK' }]
-          );
-          return;
-        }
-
         setErrors({ email: 'Invalid email or password' });
       }
     } catch (error) {
@@ -75,29 +65,17 @@ export default function LoginScreen() {
       return;
     }
 
-    if (!isSupabaseEnabled) {
-      Alert.alert('Unavailable', 'Email verification is unavailable in offline mode.', [{ text: 'OK' }]);
+    const result = await resendVerification(trimmed);
+    if (!result.ok) {
+      Alert.alert('Could not resend', result.error || 'Please try again.', [{ text: 'OK' }]);
       return;
     }
 
-    try {
-      console.log('📨 Resend verification email:', { email: trimmed });
-      const { error } = await supabase.auth.resend({ type: 'signup', email: trimmed });
-      if (error) {
-        console.error('📨 Resend verification error:', error);
-        Alert.alert('Could not resend', error.message || 'Please try again.', [{ text: 'OK' }]);
-        return;
-      }
-
-      Alert.alert(
-        'Verification email sent',
-        'Check your inbox for a new verification link, then come back and log in.',
-        [{ text: 'OK' }]
-      );
-    } catch (e) {
-      console.error('📨 Resend verification unexpected error:', e);
-      Alert.alert('Could not resend', 'Please try again.', [{ text: 'OK' }]);
-    }
+    Alert.alert(
+      'Verification email sent',
+      'Check your inbox for a new verification link.',
+      [{ text: 'OK' }]
+    );
   };
 
   return (
@@ -163,6 +141,32 @@ export default function LoginScreen() {
             isLoading={isLoading}
             style={styles.button}
           />
+
+          <TouchableOpacity
+            onPress={async () => {
+              const trimmed = email.trim();
+              if (!trimmed) {
+                Alert.alert('Enter your email first', 'Please enter your email address, then tap Forgot password.', [{ text: 'OK' }]);
+                return;
+              }
+              if (!/\S+@\S+\.\S+/.test(trimmed)) {
+                Alert.alert('Invalid email', 'Please enter a valid email address.', [{ text: 'OK' }]);
+                return;
+              }
+
+              const result = await requestPasswordReset(trimmed);
+              if (!result.ok) {
+                Alert.alert('Could not send reset email', result.error || 'Please try again.', [{ text: 'OK' }]);
+                return;
+              }
+
+              Alert.alert('Check your email', 'We sent you a password reset link.', [{ text: 'OK' }]);
+            }}
+            style={styles.forgotButton}
+            testID="forgotPasswordButton"
+          >
+            <Text style={[styles.forgotText, { color: themeColors.textSecondary }]}>Forgot password?</Text>
+          </TouchableOpacity>
         </View>
         
         <View style={styles.footer}>
@@ -299,5 +303,15 @@ const styles = StyleSheet.create({
   footerLink: {
     fontWeight: '700',
     fontSize: 15,
+  },
+  forgotButton: {
+    marginTop: 10,
+    paddingVertical: 10,
+    alignSelf: 'flex-start',
+  },
+  forgotText: {
+    fontSize: 13,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
 });

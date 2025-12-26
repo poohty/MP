@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
+import { Platform } from 'react-native';
 import { User } from '@/types';
 import { router } from 'expo-router';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
@@ -10,11 +11,13 @@ const USER_STORAGE_KEY = 'meal-planner-user';
 
 type LoginResult =
   | { ok: true }
-  | { ok: false; reason: 'BAD_CREDENTIALS' | 'EMAIL_NOT_VERIFIED' | 'LOGIN_FAILED' };
+  | { ok: false; reason: 'BAD_CREDENTIALS' | 'LOGIN_FAILED' };
 
 type SignupResult =
   | { ok: true; reason?: 'VERIFY_EMAIL_REQUIRED' }
   | { ok: false; reason: 'SIGNUP_FAILED' };
+
+type SimpleResult = { ok: boolean; error?: string };
 
 function getEmailRedirectTo(): string {
   try {
@@ -23,13 +26,115 @@ function getEmailRedirectTo(): string {
     return url;
   } catch (e) {
     console.warn('⚠️ Failed to create email redirect URL. Falling back to scheme.', e);
-    return 'myapp://auth-callback';
+    return 'mealplannerroulette://auth-callback';
+  }
+}
+
+function getResetPasswordRedirectTo(): string {
+  try {
+    const url = Linking.createURL('/reset-password');
+    console.log('🔗 Reset password redirect URL:', url);
+    return url;
+  } catch (e) {
+    console.warn('⚠️ Failed to create reset password redirect URL. Falling back to scheme.', e);
+    return 'mealplannerroulette://reset-password';
   }
 }
 
 const result = createContextHook(() => {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isEmailVerified, setIsEmailVerified] = useState<boolean>(true);
+
+  const getAuthEmailVerified = useCallback(async (): Promise<boolean> => {
+    if (!isSupabaseEnabled) {
+      return true;
+    }
+
+    try {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) {
+        console.warn('⚠️ getAuthEmailVerified error:', error.message);
+        return false;
+      }
+      const confirmedAt = data.user?.email_confirmed_at ?? null;
+      return !!confirmedAt;
+    } catch (e) {
+      console.warn('⚠️ getAuthEmailVerified unexpected error:', e);
+      return false;
+    }
+  }, []);
+
+  const refreshEmailVerified = useCallback(async (): Promise<boolean> => {
+    const verified = await getAuthEmailVerified();
+    console.log('📬 Email verified state refreshed:', { verified });
+    setIsEmailVerified(verified);
+    return verified;
+  }, [getAuthEmailVerified]);
+
+  const resendVerification = useCallback(async (email: string): Promise<SimpleResult> => {
+    const trimmed = email.trim();
+    if (!trimmed) return { ok: false, error: 'Missing email' };
+
+    if (!isSupabaseEnabled) {
+      return { ok: false, error: 'Email verification is unavailable in offline mode.' };
+    }
+
+    try {
+      console.log('📨 Resend verification email:', { email: trimmed });
+      const { error } = await supabase.auth.resend({ type: 'signup', email: trimmed });
+      if (error) {
+        return { ok: false, error: error.message || 'Could not resend' };
+      }
+      return { ok: true };
+    } catch (e) {
+      console.error('📨 Resend verification unexpected error:', e);
+      return { ok: false, error: 'Could not resend. Please try again.' };
+    }
+  }, []);
+
+  const requestPasswordReset = useCallback(async (email: string): Promise<SimpleResult> => {
+    const trimmed = email.trim();
+    if (!trimmed) return { ok: false, error: 'Missing email' };
+
+    if (!isSupabaseEnabled) {
+      return { ok: false, error: 'Password reset is unavailable in offline mode.' };
+    }
+
+    try {
+      const redirectTo = getResetPasswordRedirectTo();
+      console.log('🔐 Request password reset:', { email: trimmed, redirectTo, platform: Platform.OS });
+      // NOTE: In Supabase Auth settings, add redirect URLs:
+      // - mealplannerroulette://auth-callback
+      // - mealplannerroulette://reset-password
+      const { error } = await supabase.auth.resetPasswordForEmail(trimmed, { redirectTo });
+      if (error) {
+        return { ok: false, error: error.message || 'Could not send reset email' };
+      }
+      return { ok: true };
+    } catch (e) {
+      console.error('🔐 requestPasswordReset unexpected error:', e);
+      return { ok: false, error: 'Could not send reset email. Please try again.' };
+    }
+  }, []);
+
+  const updatePassword = useCallback(async (newPassword: string): Promise<SimpleResult> => {
+    if (!isSupabaseEnabled) {
+      return { ok: false, error: 'Password reset is unavailable in offline mode.' };
+    }
+
+    try {
+      console.log('🔐 Updating password');
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) {
+        return { ok: false, error: error.message || 'Could not update password' };
+      }
+      return { ok: true };
+    } catch (e) {
+      console.error('🔐 updatePassword unexpected error:', e);
+      return { ok: false, error: 'Could not update password. Please try again.' };
+    }
+  }, []);
 
   const upsertUserProfileToSupabase = useCallback(async (userToStore: User) => {
     if (!isSupabaseEnabled) {
@@ -97,15 +202,17 @@ const result = createContextHook(() => {
         setUser(parsedUser);
 
         await upsertUserProfileToSupabase(parsedUser);
+        await refreshEmailVerified();
       } else {
         console.log('No user found in storage');
+        setIsEmailVerified(true);
       }
     } catch (error) {
       console.error('Failed to load user:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [upsertUserProfileToSupabase]);
+  }, [refreshEmailVerified, upsertUserProfileToSupabase]);
 
   useEffect(() => {
     loadUser();
@@ -129,6 +236,7 @@ const result = createContextHook(() => {
           console.log('Logging in user (offline mode):', newUser);
           await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
           setUser(newUser);
+          setIsEmailVerified(true);
 
           router.replace('/(tabs)');
           return { ok: true };
@@ -154,12 +262,6 @@ const result = createContextHook(() => {
           email_confirmed_at: confirmedAt,
         });
 
-        if (!confirmedAt) {
-          console.warn('🔐 Email not verified. Signing out.');
-          await supabase.auth.signOut();
-          return { ok: false, reason: 'EMAIL_NOT_VERIFIED' };
-        }
-
         const safeEmail = data.user.email ?? email;
         const username = safeEmail.split('@')[0].toLowerCase();
         const newUser: User = {
@@ -174,6 +276,7 @@ const result = createContextHook(() => {
         setUser(newUser);
 
         await upsertUserProfileToSupabase(newUser);
+        await refreshEmailVerified();
 
         router.replace('/(tabs)');
         return { ok: true };
@@ -182,7 +285,7 @@ const result = createContextHook(() => {
         return { ok: false, reason: 'LOGIN_FAILED' };
       }
     },
-    [upsertUserProfileToSupabase]
+    [refreshEmailVerified, upsertUserProfileToSupabase]
   );
 
   const signup = useCallback(
@@ -203,6 +306,7 @@ const result = createContextHook(() => {
           console.log('Signing up user (offline mode):', newUser);
           await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
           setUser(newUser);
+          setIsEmailVerified(true);
 
           router.replace('/(tabs)');
           return { ok: true };
@@ -261,6 +365,7 @@ const result = createContextHook(() => {
         setUser(newUser);
 
         await upsertUserProfileToSupabase(newUser);
+        await refreshEmailVerified();
 
         router.replace('/(tabs)');
         return { ok: true };
@@ -269,27 +374,30 @@ const result = createContextHook(() => {
         return { ok: false, reason: 'SIGNUP_FAILED' };
       }
     },
-    [upsertUserProfileToSupabase]
+    [refreshEmailVerified, upsertUserProfileToSupabase]
   );
 
-  const updateProfile = useCallback(async (updates: Partial<User>) => {
-    try {
-      if (!user) return;
+  const updateProfile = useCallback(
+    async (updates: Partial<User>) => {
+      try {
+        if (!user) return;
 
-      const updatedUser: User = {
-        ...user,
-        ...updates,
-      };
+        const updatedUser: User = {
+          ...user,
+          ...updates,
+        };
 
-      console.log('Updating user profile:', updatedUser);
-      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
-      setUser(updatedUser);
-      
-      await upsertUserProfileToSupabase(updatedUser);
-    } catch (error) {
-      console.error('Failed to update profile:', error);
-    }
-  }, [user, upsertUserProfileToSupabase]);
+        console.log('Updating user profile:', updatedUser);
+        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
+        setUser(updatedUser);
+
+        await upsertUserProfileToSupabase(updatedUser);
+      } catch (error) {
+        console.error('Failed to update profile:', error);
+      }
+    },
+    [user, upsertUserProfileToSupabase]
+  );
 
   const logout = useCallback(async () => {
     try {
@@ -298,6 +406,7 @@ const result = createContextHook(() => {
       }
       await AsyncStorage.removeItem(USER_STORAGE_KEY);
       setUser(null);
+      setIsEmailVerified(true);
       router.replace('../login');
     } catch (error) {
       console.error('Logout failed:', error);
@@ -307,6 +416,11 @@ const result = createContextHook(() => {
   return {
     user,
     isLoading,
+    isEmailVerified,
+    refreshEmailVerified,
+    resendVerification,
+    requestPasswordReset,
+    updatePassword,
     login,
     signup,
     logout,

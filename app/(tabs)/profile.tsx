@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, Switch } from 'react-native';
 import { useAuth } from '@/hooks/auth-store';
 import { useUser } from '@/hooks/user-store';
@@ -10,10 +10,15 @@ import { User, Settings, Info, Heart, Users, Moon } from 'lucide-react-native';
 import { router } from 'expo-router';
 
 export default function ProfileScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, isEmailVerified, resendVerification, refreshEmailVerified } = useAuth();
   const { currentUserProfile, updateShareCookbook } = useUser();
   const { toggleTheme, isDark } = useTheme();
   const [isUpdatingShare, setIsUpdatingShare] = useState(false);
+  const [isVerifyBannerDismissed, setIsVerifyBannerDismissed] = useState<boolean>(false);
+
+  const shouldShowVerifyBanner = useMemo(() => {
+    return !isEmailVerified && !isVerifyBannerDismissed;
+  }, [isEmailVerified, isVerifyBannerDismissed]);
 
   const colors = isDark ? Colors.dark : Colors.light;
 
@@ -38,6 +43,56 @@ export default function ProfileScreen() {
   return (
     <GradientBackground>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        {shouldShowVerifyBanner ? (
+          <View style={styles.verifyBanner} testID="verifyBanner">
+            <View style={styles.verifyBannerTopRow}>
+              <Text style={styles.verifyBannerTitle}>Verify your email</Text>
+              <TouchableOpacity
+                onPress={() => setIsVerifyBannerDismissed(true)}
+                style={styles.verifyBannerClose}
+                testID="dismissVerifyBannerButton"
+              >
+                <Text style={styles.verifyBannerCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.verifyBannerBody}>
+              Verify to enable friends and sharing, and to secure your account.
+            </Text>
+            <View style={styles.verifyBannerActions}>
+              <TouchableOpacity
+                style={styles.verifyBannerAction}
+                onPress={async () => {
+                  const email = user?.email ?? '';
+                  const result = await resendVerification(email);
+                  if (!result.ok) {
+                    Alert.alert('Could not resend', result.error || 'Please try again.', [{ text: 'OK' }]);
+                    return;
+                  }
+                  Alert.alert('Sent', 'Check your email for a verification link.', [{ text: 'OK' }]);
+                }}
+                testID="verifyBannerResendButton"
+              >
+                <Text style={styles.verifyBannerActionText}>Resend email</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.verifyBannerActionSecondary}
+                onPress={async () => {
+                  const verifiedNow = await refreshEmailVerified();
+                  if (verifiedNow) {
+                    Alert.alert('Verified', 'Thanks — your email is verified.', [{ text: 'OK' }]);
+                    return;
+                  }
+                  Alert.alert('Not verified yet', 'If you just verified, try again in a moment.', [{ text: 'OK' }]);
+                }}
+                testID="verifyBannerIVerifiedButton"
+              >
+                <Text style={styles.verifyBannerActionSecondaryText}>I verified</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.header}>
           <View style={[styles.avatarContainer, { backgroundColor: colors.primary }]}>
             <Text style={[styles.avatarText, { color: colors.primaryForeground }]}>
@@ -91,7 +146,16 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Social</Text>
           
-          <View style={styles.menuItem}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.85}
+            onPress={() => {
+              if (!isEmailVerified) {
+                Alert.alert('Verify your email', 'Verify your email to share your cookbook.', [{ text: 'OK' }]);
+              }
+            }}
+            testID="shareCookbookRow"
+          >
             <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
               <Users size={20} color={colors.primary} />
             </View>
@@ -99,6 +163,11 @@ export default function ProfileScreen() {
             <Switch
               value={currentUserProfile?.shareCookbookWithFriends || false}
               onValueChange={async (value) => {
+                if (!isEmailVerified) {
+                  Alert.alert('Verify your email', 'Verify your email to share your cookbook.', [{ text: 'OK' }]);
+                  return;
+                }
+
                 setIsUpdatingShare(true);
                 try {
                   const success = await updateShareCookbook(value);
@@ -111,11 +180,11 @@ export default function ProfileScreen() {
                   setIsUpdatingShare(false);
                 }
               }}
-              disabled={isUpdatingShare}
+              disabled={isUpdatingShare || !isEmailVerified}
               trackColor={{ false: colors.muted, true: colors.primary }}
               thumbColor="#FFFFFF"
             />
-          </View>
+          </TouchableOpacity>
         </View>
         
         <View style={styles.section}>
@@ -157,9 +226,76 @@ const styles = StyleSheet.create({
   content: {
     padding: 24,
   },
+  verifyBanner: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 18,
+    ...Colors.shadowMd,
+  },
+  verifyBannerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  verifyBannerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  verifyBannerClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  verifyBannerCloseText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  verifyBannerBody: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.textSecondary,
+    marginBottom: 10,
+  },
+  verifyBannerActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  verifyBannerAction: {
+    flex: 1,
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verifyBannerActionText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  verifyBannerActionSecondary: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verifyBannerActionSecondaryText: {
+    color: Colors.text,
+    fontWeight: '800',
+    fontSize: 13,
+  },
   header: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   avatarContainer: {
     width: 80,
