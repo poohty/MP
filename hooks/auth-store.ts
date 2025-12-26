@@ -18,12 +18,12 @@ type SignupResult =
 
 function getEmailRedirectTo(): string {
   try {
-    const url = Linking.createURL('/verify-email');
+    const url = Linking.createURL('/auth-callback');
     console.log('🔗 Email redirect URL:', url);
     return url;
   } catch (e) {
     console.warn('⚠️ Failed to create email redirect URL. Falling back to scheme.', e);
-    return 'myapp://verify-email';
+    return 'myapp://auth-callback';
   }
 }
 

@@ -78,6 +78,7 @@ export default function VerifyEmailScreen() {
             <Text style={styles.subtitle} testID="verifyEmailBody">
               We sent a verification link to: {email || 'your email'}.
               {'\n'}Open your email, tap the link, then return here and log in.
+              {'\n\n'}If the link opens a browser and fails, return to the app and log in again.
             </Text>
 
             <View style={styles.actions}>
@@ -88,6 +89,13 @@ export default function VerifyEmailScreen() {
                 disabled={isResending}
                 variant="secondary"
                 testID="resendVerificationEmailButton"
+              />
+
+              <Button
+                title="I already verified"
+                onPress={() => router.replace('/login')}
+                variant="secondary"
+                testID="alreadyVerifiedButton"
               />
 
               <Button
