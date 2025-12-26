@@ -1,50 +1,105 @@
-import React, { useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Linking } from 'react-native';
-import { router } from 'expo-router';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
-import { MailCheck, ArrowRight } from 'lucide-react-native';
+import Button from '@/components/Button';
+import { supabase, isSupabaseEnabled } from '@/lib/supabase';
+import { MailCheck } from 'lucide-react-native';
+
+type VerifyEmailParams = {
+  email?: string | string[];
+};
+
+function normalizeEmailParam(emailParam: string | string[] | undefined): string {
+  if (Array.isArray(emailParam)) {
+    return (emailParam[0] ?? '').trim();
+  }
+  return (emailParam ?? '').trim();
+}
 
 export default function VerifyEmailScreen() {
-  const openMail = useCallback(async () => {
-    try {
-      const supported = await Linking.canOpenURL('mailto:');
-      if (supported) {
-        await Linking.openURL('mailto:');
-      }
-    } catch (e) {
-      console.warn('⚠️ Failed to open mail app:', e);
+  const params = useLocalSearchParams<VerifyEmailParams>();
+  const email = useMemo(() => normalizeEmailParam(params.email), [params.email]);
+  const [isResending, setIsResending] = useState<boolean>(false);
+
+  const handleResend = useCallback(async () => {
+    const trimmed = email.trim();
+
+    if (!trimmed) {
+      Alert.alert('Missing email', 'Please go back and enter your email address first.', [{ text: 'OK' }]);
+      return;
     }
-  }, []);
+
+    if (!/\S+@\S+\.\S+/.test(trimmed)) {
+      Alert.alert('Invalid email', 'Please enter a valid email address.', [{ text: 'OK' }]);
+      return;
+    }
+
+    if (!isSupabaseEnabled) {
+      Alert.alert('Unavailable', 'Email verification is unavailable in offline mode.', [{ text: 'OK' }]);
+      return;
+    }
+
+    try {
+      setIsResending(true);
+      console.log('📨 VerifyEmail: resend verification email:', { email: trimmed });
+      const { error } = await supabase.auth.resend({ type: 'signup', email: trimmed });
+      if (error) {
+        console.error('📨 VerifyEmail: resend error:', error);
+        Alert.alert('Could not resend', error.message || 'Please try again.', [{ text: 'OK' }]);
+        return;
+      }
+
+      Alert.alert('Sent', 'Check your email for a new verification link.', [{ text: 'OK' }]);
+    } catch (e) {
+      console.error('📨 VerifyEmail: resend unexpected error:', e);
+      Alert.alert('Could not resend', 'Please try again.', [{ text: 'OK' }]);
+    } finally {
+      setIsResending(false);
+    }
+  }, [email]);
 
   return (
     <GradientBackground>
-      <View style={styles.container} testID="verifyEmailScreen">
-        <View style={styles.card}>
-          <View style={styles.iconWrap}>
-            <MailCheck size={28} color={Colors.primary} />
-          </View>
-          <Text style={styles.title}>Verify your email</Text>
-          <Text style={styles.subtitle}>
-            We sent you a verification link. Open your email, tap the link, then come back and log in.
-          </Text>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 50 : 0}
+        testID="verifyEmailScreen"
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          <View style={styles.card}>
+            <View style={styles.iconWrap}>
+              <MailCheck size={28} color={Colors.primary} />
+            </View>
 
-          <View style={styles.actions}>
-            <TouchableOpacity onPress={openMail} style={styles.secondaryBtn} testID="openEmailAppButton">
-              <Text style={styles.secondaryText}>Open email app</Text>
-            </TouchableOpacity>
+            <Text style={styles.title}>Verify your email</Text>
+            <Text style={styles.subtitle} testID="verifyEmailBody">
+              We sent a verification link to: {email || 'your email'}.
+              {'\n'}Open your email, tap the link, then return here and log in.
+            </Text>
 
-            <TouchableOpacity
-              onPress={() => router.replace('/login')}
-              style={styles.primaryBtn}
-              testID="goToLoginButton"
-            >
-              <Text style={styles.primaryText}>Go to Login</Text>
-              <ArrowRight size={18} color="#fff" />
-            </TouchableOpacity>
+            <View style={styles.actions}>
+              <Button
+                title={isResending ? 'Sending…' : 'Resend verification email'}
+                onPress={handleResend}
+                isLoading={isResending}
+                disabled={isResending}
+                variant="secondary"
+                testID="resendVerificationEmailButton"
+              />
+
+              <Button
+                title="Back to Login"
+                onPress={() => router.replace('/login')}
+                variant="primary"
+                testID="backToLoginButton"
+              />
+            </View>
           </View>
-        </View>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </GradientBackground>
   );
 }
@@ -52,6 +107,10 @@ export default function VerifyEmailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: 'transparent',
+  },
+  scrollContent: {
+    flexGrow: 1,
     padding: 20,
     justifyContent: 'center',
   },
@@ -84,33 +143,5 @@ const styles = StyleSheet.create({
   actions: {
     marginTop: 16,
     gap: 10,
-  },
-  primaryBtn: {
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  primaryText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  secondaryBtn: {
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: Colors.light.muted,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryText: {
-    color: Colors.text,
-    fontWeight: '700',
-    fontSize: 15,
   },
 });

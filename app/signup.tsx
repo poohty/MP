@@ -95,16 +95,7 @@ export default function SignupScreen() {
       const result = await signup(name, email.trim(), password, locationGranted);
 
       if (result.ok && result.reason === 'VERIFY_EMAIL_REQUIRED') {
-        Alert.alert(
-          'Verify your email',
-          'We sent you a verification link. Please verify your email, then come back and log in.',
-          [
-            {
-              text: 'Go to Login',
-              onPress: () => router.replace('/login'),
-            },
-          ]
-        );
+        router.push({ pathname: '/verify-email', params: { email: email.trim() } });
         return;
       }
 

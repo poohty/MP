@@ -174,6 +174,14 @@ export default function LoginScreen() {
 
         <View style={styles.resendRow}>
           <TouchableOpacity
+            onPress={() => router.push({ pathname: '/verify-email', params: { email: email.trim() } })}
+            testID="didntGetEmailLink"
+            style={styles.resendButton}
+          >
+            <Text style={[styles.resendText, { color: themeColors.textSecondary }]}>Didn’t get the email?</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             onPress={handleResendVerification}
             disabled={!canResend}
             testID="resendVerificationButton"
