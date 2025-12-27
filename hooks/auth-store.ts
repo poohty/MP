@@ -279,6 +279,27 @@ const result = createContextHook(() => {
 
   useEffect(() => {
     loadUser();
+
+    if (!isSupabaseEnabled) return;
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('🔐 Auth state changed:', event, session ? 'has session' : 'no session');
+      
+      if (event === 'TOKEN_REFRESHED') {
+        console.log('✅ JWT token refreshed successfully');
+      }
+      
+      if (event === 'SIGNED_OUT') {
+        console.log('🚪 User signed out via auth state change');
+        await AsyncStorage.removeItem(USER_STORAGE_KEY);
+        setUser(null);
+        setIsEmailVerified(true);
+      }
+    });
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
   }, [loadUser]);
 
   const login = useCallback(

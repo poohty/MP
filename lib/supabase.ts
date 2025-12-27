@@ -18,7 +18,23 @@ export const supabase = createClient(
   SUPABASE_ANON_KEY || 'placeholder-key',
   {
     auth: {
-      persistSession: false,
+      persistSession: true,
+      storage: {
+        getItem: async (key: string) => {
+          const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+          return await AsyncStorage.getItem(key);
+        },
+        setItem: async (key: string, value: string) => {
+          const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+          await AsyncStorage.setItem(key, value);
+        },
+        removeItem: async (key: string) => {
+          const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+          await AsyncStorage.removeItem(key);
+        },
+      },
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
     },
   }
 );
