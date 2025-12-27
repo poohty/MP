@@ -44,13 +44,12 @@ export async function fetchTtsAudioFile(
 
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
-    const errorDetails = {
+    console.error("❌ fetchTtsAudioFile backend error", {
       status: res.status,
       statusText: res.statusText,
       bodyPreview: errText.slice(0, 400),
       url: `${baseUrl}/voice/tts`,
-    };
-    console.error("❌ fetchTtsAudioFile backend error:", JSON.stringify(errorDetails, null, 2));
+    });
     throw new Error(`TTS_REQUEST_FAILED: ${res.status} ${res.statusText}`);
   }
 
@@ -63,12 +62,11 @@ export async function fetchTtsAudioFile(
     typeof json.audioBase64 === "string" ? json.audioBase64 : "";
 
   if (!audioBase64) {
-    const errorDetails = {
+    console.error("❌ fetchTtsAudioFile invalid response", {
       hasAudioBase64: !!json.audioBase64,
       mime: json.mime,
       responseKeys: Object.keys(json),
-    };
-    console.error("❌ fetchTtsAudioFile invalid response:", JSON.stringify(errorDetails, null, 2));
+    });
     throw new Error("TTS_INVALID_RESPONSE");
   }
 

@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Platform } from 'react-native';
 import { User } from '@/types';
 import { router } from 'expo-router';
-import { supabase, isSupabaseEnabled } from '@/lib/supabase';
+import { supabase, isSupabaseEnabled, withRetry } from '@/lib/supabase';
 
 const USER_STORAGE_KEY = 'meal-planner-user';
 
@@ -145,18 +145,20 @@ const result = createContextHook(() => {
 
     try {
       console.log('🔎 Checking legacy profile exists by email:', { email: trimmed });
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .ilike('email', trimmed)
-        .maybeSingle();
+      return await withRetry(async () => {
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .ilike('email', trimmed)
+          .maybeSingle();
 
-      if (error) {
-        console.warn('🔎 checkProfileExistsByEmail error:', error.message || error.code);
-        return false;
-      }
+        if (error) {
+          console.warn('🔎 checkProfileExistsByEmail error:', error.message || error.code);
+          throw error;
+        }
 
-      return !!data?.id;
+        return !!data?.id;
+      }, 'checkProfileExistsByEmail');
     } catch (e) {
       console.warn('🔎 checkProfileExistsByEmail unexpected error:', e);
       return false;
@@ -221,26 +223,29 @@ const result = createContextHook(() => {
         shareCookbookWithFriends: !!userToStore.shareCookbookWithFriends,
       });
 
-      const { error } = await supabase
-        .from('user_profiles')
-        .upsert(
-          {
-            id: userToStore.id,
-            email: userToStore.email,
-            username,
-            display_name: displayName,
-            share_cookbook_with_friends: !!userToStore.shareCookbookWithFriends,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'id' }
-        );
+      await withRetry(async () => {
+        const { error } = await supabase
+          .from('user_profiles')
+          .upsert(
+            {
+              id: userToStore.id,
+              email: userToStore.email,
+              username,
+              display_name: displayName,
+              share_cookbook_with_friends: !!userToStore.shareCookbookWithFriends,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'id' }
+          );
 
-      if (error) {
-        console.error('❌ Supabase upsertUserProfile error:', error);
-        console.error('❌ Full error details:', JSON.stringify(error, null, 2));
-      } else {
-        console.log('✅ Supabase user_profiles upserted:', { id: userToStore.id, username });
-      }
+        if (error) {
+          console.error('❌ Supabase upsertUserProfile error:', error);
+          console.error('❌ Full error details:', JSON.stringify(error, null, 2));
+          throw error;
+        } else {
+          console.log('✅ Supabase user_profiles upserted:', { id: userToStore.id, username });
+        }
+      }, 'upsertUserProfile');
     } catch (error) {
       console.error('❌ Failed to upsert user to Supabase:', error);
     }

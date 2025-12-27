@@ -3,7 +3,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
 import { Recipe, RecipeCategory } from '@/types';
 import { useAuth } from './auth-store';
-import { supabase, isSupabaseEnabled } from '@/lib/supabase';
+import { supabase, isSupabaseEnabled, withRetry } from '@/lib/supabase';
 
 const RECIPES_STORAGE_KEY = 'meal-planner-recipes';
 
@@ -23,27 +23,29 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
 
     try {
       console.log(`📥 Loading recipes from Supabase for user: ${ownerUserId}`);
-      const { data, error } = await supabase
-        .from('recipes')
-        .select('*')
-        .eq('owner_user_id', ownerUserId)
-        .order('created_at', { ascending: false });
+      return await withRetry(async () => {
+        const { data, error } = await supabase
+          .from('recipes')
+          .select('*')
+          .eq('owner_user_id', ownerUserId)
+          .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('❌ Supabase loadRecipes error:', JSON.stringify(error, null, 2));
-        console.error('❌ Error message:', error.message);
-        console.error('❌ Error details:', error.details);
-        console.error('❌ Error hint:', error.hint);
-        return [];
-      }
+        if (error) {
+          console.error('❌ Supabase loadRecipes error:', JSON.stringify(error, null, 2));
+          console.error('❌ Error message:', error.message);
+          console.error('❌ Error details:', error.details);
+          console.error('❌ Error hint:', error.hint);
+          throw error;
+        }
 
-      const recipes = (data || []).map((row: any) => ({
-        ...row.data_json,
-        id: row.id,
-      })) as Recipe[];
+        const recipes = (data || []).map((row: any) => ({
+          ...row.data_json,
+          id: row.id,
+        })) as Recipe[];
 
-      console.log(`✅ Loaded ${recipes.length} recipes from Supabase`);
-      return recipes;
+        console.log(`✅ Loaded ${recipes.length} recipes from Supabase`);
+        return recipes;
+      }, 'loadRecipesFromSupabase');
     } catch (error) {
       console.error('❌ Failed to load recipes from Supabase:', error);
       return [];
@@ -61,27 +63,30 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         return;
       }
 
-      const { error } = await supabase
-        .from('recipes')
-        .upsert(
-          {
-            id: recipe.id,
-            owner_user_id: ownerUserId,
-            name: recipe.name,
-            category: recipe.category,
-            data_json: recipe,
-            updated_at: new Date().toISOString(),
-          }
-        );
+      await withRetry(async () => {
+        const { error } = await supabase
+          .from('recipes')
+          .upsert(
+            {
+              id: recipe.id,
+              owner_user_id: ownerUserId,
+              name: recipe.name,
+              category: recipe.category,
+              data_json: recipe,
+              updated_at: new Date().toISOString(),
+            }
+          );
 
-      if (error) {
-        console.error('❌ Supabase syncRecipe error:', JSON.stringify(error, null, 2));
-        console.error('❌ Error message:', error.message);
-        console.error('❌ Error details:', error.details);
-        console.error('❌ Error hint:', error.hint);
-      } else {
-        console.log('✅ Synced recipe to Supabase', recipe.id, ownerUserId);
-      }
+        if (error) {
+          console.error('❌ Supabase syncRecipe error:', JSON.stringify(error, null, 2));
+          console.error('❌ Error message:', error.message);
+          console.error('❌ Error details:', error.details);
+          console.error('❌ Error hint:', error.hint);
+          throw error;
+        } else {
+          console.log('✅ Synced recipe to Supabase', recipe.id, ownerUserId);
+        }
+      }, 'syncRecipeToSupabase');
     } catch (error) {
       console.error('❌ Failed to sync recipe to Supabase:', error);
     }
@@ -1585,11 +1590,13 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
 
     console.log('🐛 DEBUG: Checking Supabase recipes for', ownerUserId);
 
-    const { data, error } = await supabase
-      .from('recipes')
-      .select('id, owner_user_id, name, category, created_at')
-      .eq('owner_user_id', ownerUserId)
-      .order('created_at', { ascending: false });
+    const { data, error } = await withRetry(async () => {
+      return await supabase
+        .from('recipes')
+        .select('id, owner_user_id, name, category, created_at')
+        .eq('owner_user_id', ownerUserId)
+        .order('created_at', { ascending: false });
+    }, 'debugSupabaseRecipes').catch((err) => ({ data: null, error: err }));
 
     if (error) {
       console.error('🐛 DEBUG Supabase error:', error);

@@ -39,6 +39,91 @@ export const supabase = createClient(
   }
 );
 
+export async function ensureValidSession() {
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    
+    if (error) {
+      console.warn('⚠️ Session check error:', error.message);
+      return false;
+    }
+    
+    if (!session) {
+      console.log('📭 No active session');
+      return false;
+    }
+    
+    const expiresAt = session.expires_at;
+    const now = Math.floor(Date.now() / 1000);
+    const timeUntilExpiry = expiresAt ? expiresAt - now : 0;
+    
+    if (timeUntilExpiry < 300) {
+      console.log('🔄 Token expiring soon, refreshing...');
+      const { data: { session: newSession }, error: refreshError } = await supabase.auth.refreshSession();
+      
+      if (refreshError) {
+        console.error('❌ Failed to refresh session:', refreshError.message);
+        return false;
+      }
+      
+      if (newSession) {
+        console.log('✅ Session refreshed successfully');
+        return true;
+      }
+      
+      return false;
+    }
+    
+    return true;
+  } catch (e) {
+    console.warn('⚠️ ensureValidSession error:', e);
+    return false;
+  }
+}
+
+export async function withRetry<T>(
+  operation: () => Promise<T>,
+  operationName: string = 'operation'
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error: any) {
+    const errorMsg = error?.message || '';
+    const errorDetails = error?.details || '';
+    const errorCode = error?.code || '';
+    
+    const isJwtError = 
+      errorMsg.includes('JWT') || 
+      errorMsg.includes('expired') || 
+      errorMsg.includes('token') ||
+      errorMsg.includes('SyntaxError') ||
+      errorDetails.includes('JWT') ||
+      errorCode === 'PGRST301';
+    
+    if (isJwtError) {
+      console.log(`🔄 JWT/Auth error detected in ${operationName}, refreshing session and retrying...`);
+      console.log(`   Error: ${errorMsg}`);
+      
+      try {
+        const { error: refreshError } = await supabase.auth.refreshSession();
+        
+        if (refreshError) {
+          console.error(`❌ Session refresh failed for ${operationName}:`, refreshError.message);
+          throw error;
+        }
+        
+        console.log(`✅ Session refreshed, retrying ${operationName}...`);
+        return await operation();
+      } catch (refreshErr) {
+        console.error(`❌ Error during refresh/retry for ${operationName}:`, refreshErr);
+        throw error;
+      }
+    }
+    
+    throw error;
+  }
+}
+
 export const isSupabaseEnabled = isSupabaseConfigured;
 
 console.log('🗄️ Supabase status:', isSupabaseConfigured ? '✅ ENABLED' : '❌ OFFLINE MODE');

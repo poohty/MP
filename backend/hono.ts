@@ -62,9 +62,9 @@ app.post("/voice/tts", async (c) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini-tts",
+        model: "tts-1",
         voice,
-        format: "mp3",
+        response_format: "mp3",
         input: text,
       }),
     });
