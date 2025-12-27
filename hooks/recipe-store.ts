@@ -71,8 +71,7 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
             category: recipe.category,
             data_json: recipe,
             updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'owner_user_id,id' }
+          }
         );
 
       if (error) {
