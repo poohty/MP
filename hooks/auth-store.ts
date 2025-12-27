@@ -5,7 +5,6 @@ import { Platform } from 'react-native';
 import { User } from '@/types';
 import { router } from 'expo-router';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
-import * as Linking from 'expo-linking';
 
 const USER_STORAGE_KEY = 'meal-planner-user';
 
@@ -28,25 +27,11 @@ function normalizeProfileIdFromEmail(email: string): string {
 }
 
 function getEmailRedirectTo(): string {
-  try {
-    const url = Linking.createURL('/auth-callback');
-    console.log('🔗 Email redirect URL:', url);
-    return url;
-  } catch (e) {
-    console.warn('⚠️ Failed to create email redirect URL. Falling back to scheme.', e);
-    return 'mealplannerroulette://auth-callback';
-  }
+  return 'mealplannerroulette://auth-callback';
 }
 
 function getResetPasswordRedirectTo(): string {
-  try {
-    const url = Linking.createURL('/reset-password');
-    console.log('🔗 Reset password redirect URL:', url);
-    return url;
-  } catch (e) {
-    console.warn('⚠️ Failed to create reset password redirect URL. Falling back to scheme.', e);
-    return 'mealplannerroulette://reset-password';
-  }
+  return 'mealplannerroulette://reset-password';
 }
 
 const result = createContextHook(() => {
@@ -90,7 +75,13 @@ const result = createContextHook(() => {
 
     try {
       console.log('📨 Resend verification email:', { email: trimmed });
-      const { error } = await supabase.auth.resend({ type: 'signup', email: trimmed });
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: trimmed,
+        options: {
+          emailRedirectTo: getEmailRedirectTo(),
+        },
+      });
       if (error) {
         return { ok: false, error: error.message || 'Could not resend' };
       }

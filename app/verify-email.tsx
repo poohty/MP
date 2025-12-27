@@ -44,7 +44,13 @@ export default function VerifyEmailScreen() {
     try {
       setIsResending(true);
       console.log('📨 VerifyEmail: resend verification email:', { email: trimmed });
-      const { error } = await supabase.auth.resend({ type: 'signup', email: trimmed });
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: trimmed,
+        options: {
+          emailRedirectTo: 'mealplannerroulette://auth-callback',
+        },
+      });
       if (error) {
         console.error('📨 VerifyEmail: resend error:', error);
         Alert.alert('Could not resend', error.message || 'Please try again.', [{ text: 'OK' }]);
