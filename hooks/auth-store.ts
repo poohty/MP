@@ -13,11 +13,19 @@ type LoginResult =
   | { ok: true }
   | { ok: false; reason: 'BAD_CREDENTIALS' | 'LOGIN_FAILED' };
 
+type LegacyRecoveryResult =
+  | { ok: true }
+  | { ok: false; reason: 'ALREADY_AUTH_USER' | 'RECOVERY_FAILED'; error?: string };
+
 type SignupResult =
   | { ok: true; reason?: 'VERIFY_EMAIL_REQUIRED' }
   | { ok: false; reason: 'SIGNUP_FAILED' };
 
 type SimpleResult = { ok: boolean; error?: string };
+
+function normalizeProfileIdFromEmail(email: string): string {
+  return email.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
 
 function getEmailRedirectTo(): string {
   try {
@@ -136,6 +144,70 @@ const result = createContextHook(() => {
     }
   }, []);
 
+  const checkProfileExistsByEmail = useCallback(async (email: string): Promise<boolean> => {
+    const trimmed = email.trim();
+    if (!trimmed) return false;
+
+    if (!isSupabaseEnabled) {
+      return false;
+    }
+
+    try {
+      console.log('🔎 Checking legacy profile exists by email:', { email: trimmed });
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .ilike('email', trimmed)
+        .maybeSingle();
+
+      if (error) {
+        console.warn('🔎 checkProfileExistsByEmail error:', error.message || error.code);
+        return false;
+      }
+
+      return !!data?.id;
+    } catch (e) {
+      console.warn('🔎 checkProfileExistsByEmail unexpected error:', e);
+      return false;
+    }
+  }, []);
+
+  const recoverLegacyAccount = useCallback(async (email: string, password: string): Promise<LegacyRecoveryResult> => {
+    const trimmed = email.trim();
+    if (!trimmed) return { ok: false, reason: 'RECOVERY_FAILED', error: 'Missing email' };
+
+    if (!isSupabaseEnabled) {
+      return { ok: false, reason: 'RECOVERY_FAILED', error: 'Legacy activation is unavailable in offline mode.' };
+    }
+
+    try {
+      const emailRedirectTo = getEmailRedirectTo();
+      console.log('🧩 Recovering legacy account via signUp:', { email: trimmed, emailRedirectTo });
+
+      const { error } = await supabase.auth.signUp({
+        email: trimmed,
+        password,
+        options: {
+          emailRedirectTo,
+        },
+      });
+
+      if (error) {
+        const msg = (error.message || '').toLowerCase();
+        if (msg.includes('already registered') || msg.includes('user already registered') || msg.includes('already exists')) {
+          return { ok: false, reason: 'ALREADY_AUTH_USER' };
+        }
+        console.warn('🧩 recoverLegacyAccount error:', error.message || error.code);
+        return { ok: false, reason: 'RECOVERY_FAILED', error: error.message || 'Could not activate account' };
+      }
+
+      return { ok: true };
+    } catch (e) {
+      console.error('🧩 recoverLegacyAccount unexpected error:', e);
+      return { ok: false, reason: 'RECOVERY_FAILED', error: 'Could not activate account. Please try again.' };
+    }
+  }, []);
+
   const upsertUserProfileToSupabase = useCallback(async (userToStore: User) => {
     if (!isSupabaseEnabled) {
       return;
@@ -222,7 +294,7 @@ const result = createContextHook(() => {
     async (email: string, password: string): Promise<LoginResult> => {
       if (!isSupabaseEnabled) {
         try {
-          const userId = email.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const userId = normalizeProfileIdFromEmail(email);
 
           const username = email.split('@')[0].toLowerCase();
           const newUser: User = {
@@ -264,8 +336,9 @@ const result = createContextHook(() => {
 
         const safeEmail = data.user.email ?? email;
         const username = safeEmail.split('@')[0].toLowerCase();
+        const profileId = normalizeProfileIdFromEmail(safeEmail);
         const newUser: User = {
-          id: data.user.id,
+          id: profileId,
           email: safeEmail,
           name: safeEmail.split('@')[0],
           username,
@@ -292,7 +365,7 @@ const result = createContextHook(() => {
     async (name: string, email: string, password: string, locationPermission?: boolean): Promise<SignupResult> => {
       if (!isSupabaseEnabled) {
         try {
-          const userId = email.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const userId = normalizeProfileIdFromEmail(email);
           const username = email.split('@')[0].toLowerCase();
           const newUser: User = {
             id: userId,
@@ -351,8 +424,9 @@ const result = createContextHook(() => {
 
         const safeEmail = supaUser.email ?? email;
         const username = safeEmail.split('@')[0].toLowerCase();
+        const profileId = normalizeProfileIdFromEmail(safeEmail);
         const newUser: User = {
-          id: supaUser.id,
+          id: profileId,
           email: safeEmail,
           name,
           username,
@@ -421,6 +495,8 @@ const result = createContextHook(() => {
     resendVerification,
     requestPasswordReset,
     updatePassword,
+    checkProfileExistsByEmail,
+    recoverLegacyAccount,
     login,
     signup,
     logout,

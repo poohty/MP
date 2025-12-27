@@ -11,7 +11,7 @@ import { ArrowLeft } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function LoginScreen() {
-  const { login, requestPasswordReset, resendVerification } = useAuth();
+  const { login, requestPasswordReset, resendVerification, checkProfileExistsByEmail, recoverLegacyAccount } = useAuth();
   const { isDark } = useTheme();
   const themeColors = isDark ? Colors.dark : Colors.light;
   const [email, setEmail] = useState('');
@@ -43,12 +43,64 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     if (!validate()) return;
 
+    const trimmedEmail = email.trim();
+
     setIsLoading(true);
     try {
-      const result = await login(email.trim(), password);
+      const result = await login(trimmedEmail, password);
 
       if (!result.ok) {
-        setErrors({ email: 'Invalid email or password' });
+        if (result.reason === 'BAD_CREDENTIALS') {
+          setErrors({ email: 'Invalid email or password' });
+
+          const exists = await checkProfileExistsByEmail(trimmedEmail);
+          if (exists) {
+            Alert.alert(
+              'Activate your account',
+              'Your account was created before we upgraded login. Tap Activate to enable login for this email. Your cookbook will remain intact.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Activate',
+                  onPress: async () => {
+                    setIsLoading(true);
+                    try {
+                      const recovery = await recoverLegacyAccount(trimmedEmail, password);
+
+                      if (!recovery.ok) {
+                        if (recovery.reason === 'ALREADY_AUTH_USER') {
+                          Alert.alert(
+                            'Already activated',
+                            'This email already has login enabled. Please try logging in again.',
+                            [{ text: 'OK' }]
+                          );
+                          return;
+                        }
+
+                        Alert.alert('Activation failed', recovery.error || 'Could not activate account. Please try again.', [{ text: 'OK' }]);
+                        return;
+                      }
+
+                      const retry = await login(trimmedEmail, password);
+                      if (!retry.ok) {
+                        Alert.alert('Login failed', 'Activation worked, but login still failed. Please try again.', [{ text: 'OK' }]);
+                      }
+                    } catch (e) {
+                      console.error('Legacy activation error:', e);
+                      Alert.alert('Activation failed', 'Could not activate account. Please try again.', [{ text: 'OK' }]);
+                    } finally {
+                      setIsLoading(false);
+                    }
+                  },
+                },
+              ]
+            );
+          }
+
+          return;
+        }
+
+        setErrors({ email: 'An error occurred during login' });
       }
     } catch (error) {
       console.error('Login error:', error);
