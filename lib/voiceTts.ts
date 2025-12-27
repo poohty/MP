@@ -43,14 +43,26 @@ export async function fetchTtsAudioFile(
   });
 
   if (!res.ok) {
-    const errText = await res.text().catch(() => "");
+    let errText = "";
+    let errJson: any = null;
+    
+    try {
+      errText = await res.text();
+      try {
+        errJson = JSON.parse(errText);
+      } catch {}
+    } catch {}
+    
+    const errorMsg = errJson?.error || errText || res.statusText;
+    
     console.error("❌ fetchTtsAudioFile backend error", {
       status: res.status,
       statusText: res.statusText,
-      bodyPreview: errText.slice(0, 400),
+      errorMsg,
       url: `${baseUrl}/voice/tts`,
     });
-    throw new Error(`TTS_REQUEST_FAILED: ${res.status} ${res.statusText}`);
+    
+    throw new Error(`TTS request failed (${res.status}): ${errorMsg}`);
   }
 
   const json = (await res.json()) as {

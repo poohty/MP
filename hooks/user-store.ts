@@ -370,11 +370,22 @@ const [UserContext, useUser] = createContextHook(() => {
     if (!currentUserProfile) return false;
 
     try {
+      const link = friendLinks.find(
+        (l) =>
+          (l.userId === currentUserProfile.id && l.friendUserId === friendUserId) ||
+          (l.userId === friendUserId && l.friendUserId === currentUserProfile.id)
+      );
+
+      if (!link) {
+        console.warn('⚠️ Friend link not found');
+        return false;
+      }
+
       const { error } = await withRetry(async () => {
         return await supabase
           .from('friend_links')
           .delete()
-          .or(`and(user_id.eq.${currentUserProfile.id},friend_user_id.eq.${friendUserId}),and(user_id.eq.${friendUserId},friend_user_id.eq.${currentUserProfile.id})`);
+          .eq('id', link.id);
       }, 'removeFriend');
 
       if (error) {
@@ -389,7 +400,7 @@ const [UserContext, useUser] = createContextHook(() => {
       console.error('Failed to remove friend:', error instanceof Error ? error.message : JSON.stringify(error));
       return false;
     }
-  }, [currentUserProfile, loadFriendLinks]);
+  }, [currentUserProfile, friendLinks, loadFriendLinks]);
 
   const getUserProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
     return await loadUserProfileFromSupabase(userId);

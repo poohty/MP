@@ -89,15 +89,12 @@ export async function withRetry<T>(
     return await operation();
   } catch (error: any) {
     const errorMsg = error?.message || '';
-    const errorDetails = error?.details || '';
     const errorCode = error?.code || '';
     
     const isJwtError = 
-      errorMsg.includes('JWT') || 
-      errorMsg.includes('expired') || 
-      errorMsg.includes('token') ||
-      errorMsg.includes('SyntaxError') ||
-      errorDetails.includes('JWT') ||
+      errorMsg.includes('JWT expired') || 
+      errorMsg.includes('jwt expired') || 
+      errorMsg.includes('token expired') ||
       errorCode === 'PGRST301';
     
     if (isJwtError) {
