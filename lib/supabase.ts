@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -34,7 +35,7 @@ export const supabase = createClient(
         },
       },
       autoRefreshToken: true,
-      detectSessionInUrl: true,
+      detectSessionInUrl: Platform.OS === 'web',
     },
   }
 );
