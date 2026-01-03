@@ -141,3 +141,36 @@ export async function withRetry<T>(
 }
 
 export const isSupabaseEnabled = isSupabaseConfigured;
+
+export function isSupabaseParseError(err: any): boolean {
+  if (!err) return false;
+  
+  if (err instanceof SyntaxError) return true;
+  
+  const errMsg = err?.message || '';
+  if (typeof errMsg === 'string') {
+    if (errMsg.includes('SyntaxError')) return true;
+    if (errMsg.includes('1:4')) return true;
+    if (errMsg.includes("';' expected")) return true;
+    if (errMsg.includes('Unexpected character')) return true;
+  }
+  
+  try {
+    const errStr = JSON.stringify(err);
+    if (errStr.includes('SyntaxError') || errStr.includes('1:4')) return true;
+  } catch {
+    return false;
+  }
+  
+  return false;
+}
+
+let supabaseBackoffUntil = 0;
+export function shouldBackoffSupabase(): boolean {
+  return Date.now() < supabaseBackoffUntil;
+}
+
+export function triggerSupabaseBackoff(ms = 60000) {
+  supabaseBackoffUntil = Date.now() + ms;
+  console.warn(`🚫 Supabase backoff triggered for ${ms / 1000} seconds`);
+}

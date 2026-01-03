@@ -2,7 +2,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
 import { UserProfile, FriendLink } from '@/types';
 import { useAuth } from './auth-store';
-import { supabase, withRetry } from '@/lib/supabase';
+import { supabase, withRetry, shouldBackoffSupabase, triggerSupabaseBackoff, isSupabaseParseError } from '@/lib/supabase';
 
 const [UserContext, useUser] = createContextHook(() => {
   const { user: authUser, updateProfile: updateAuthProfile } = useAuth();
@@ -11,8 +11,14 @@ const [UserContext, useUser] = createContextHook(() => {
   const [friendLinks, setFriendLinks] = useState<FriendLink[]>([]);
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [supabaseTemporarilyUnavailable, setSupabaseTemporarilyUnavailable] = useState(false);
 
   const loadUserProfileFromSupabase = useCallback(async (userId: string): Promise<UserProfile | null> => {
+    if (shouldBackoffSupabase()) {
+      console.log('⏸️ Supabase in backoff, skipping loadUserProfile');
+      return null;
+    }
+
     try {
       return await withRetry(async () => {
         const { data, error } = await supabase
@@ -40,7 +46,13 @@ const [UserContext, useUser] = createContextHook(() => {
           shareCookbookWithFriends: data.share_cookbook_with_friends,
         };
       }, 'loadUserProfile');
-    } catch {
+    } catch (error) {
+      if (isSupabaseParseError(error)) {
+        console.warn('⚠️ Supabase parse error in loadUserProfile');
+        triggerSupabaseBackoff(60000);
+        setSupabaseTemporarilyUnavailable(true);
+        return null;
+      }
       console.error('⚠️ Network error loading user profile. Operating in offline mode.');
       return null;
     }
@@ -52,6 +64,11 @@ const [UserContext, useUser] = createContextHook(() => {
     const profileId = userId || currentUserProfile?.id;
     if (!profileId) {
       setFriendLinks([]);
+      return [];
+    }
+
+    if (shouldBackoffSupabase()) {
+      console.log('⏸️ Supabase in backoff, skipping loadFriendLinks');
       return [];
     }
 
@@ -82,7 +99,13 @@ const [UserContext, useUser] = createContextHook(() => {
 
       setFriendLinks(links);
       return links;
-    } catch {
+    } catch (error) {
+      if (isSupabaseParseError(error)) {
+        console.warn('⚠️ Supabase parse error in loadFriendLinks');
+        triggerSupabaseBackoff(60000);
+        setSupabaseTemporarilyUnavailable(true);
+        return [];
+      }
       console.warn('⚠️ Network error. Friend features unavailable.');
       return [];
     }
@@ -93,6 +116,21 @@ const [UserContext, useUser] = createContextHook(() => {
   const loadCurrentUser = useCallback(async () => {
     if (!authUser) {
       setCurrentUserProfile(null);
+      setFriendLinks([]);
+      setIsLoading(false);
+      return;
+    }
+
+    if (shouldBackoffSupabase()) {
+      console.log('⏸️ Supabase in backoff, using fallback profile');
+      const fallbackProfile: UserProfile = {
+        id: authUser.id,
+        email: authUser.email,
+        username: authUser.username || authUser.email.split('@')[0],
+        displayName: authUser.name,
+        shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
+      };
+      setCurrentUserProfile(fallbackProfile);
       setFriendLinks([]);
       setIsLoading(false);
       return;
@@ -176,8 +214,14 @@ const [UserContext, useUser] = createContextHook(() => {
       };
       setCurrentUserProfile(profile);
       await loadFriendLinks(data.id);
-    } catch {
-      console.warn('⚠️ Network error. Using local profile data.');
+    } catch (error) {
+      if (isSupabaseParseError(error)) {
+        console.warn('⚠️ Supabase parse error in loadCurrentUser');
+        triggerSupabaseBackoff(60000);
+        setSupabaseTemporarilyUnavailable(true);
+      } else {
+        console.warn('⚠️ Network error. Using local profile data.');
+      }
       const fallbackProfile: UserProfile = {
         id: authUser.id,
         email: authUser.email,
@@ -232,6 +276,12 @@ const [UserContext, useUser] = createContextHook(() => {
       return;
     }
 
+    if (shouldBackoffSupabase()) {
+      console.log('⏸️ Supabase in backoff, skipping search');
+      setSearchResults([]);
+      return;
+    }
+
     try {
       const { data, error } = await withRetry(async () => {
         return await supabase
@@ -264,6 +314,13 @@ const [UserContext, useUser] = createContextHook(() => {
 
       setSearchResults(results);
     } catch (e) {
+      if (isSupabaseParseError(e)) {
+        console.warn('⚠️ Supabase parse error in searchUsers');
+        triggerSupabaseBackoff(60000);
+        setSupabaseTemporarilyUnavailable(true);
+        setSearchResults([]);
+        return;
+      }
       console.error('❌ searchUsersByUsername unexpected error:', e instanceof Error ? e.message : JSON.stringify(e));
       setSearchResults([]);
     }
@@ -484,6 +541,7 @@ const [UserContext, useUser] = createContextHook(() => {
     getFriendProfiles,
     isFriend,
     hasPendingRequest,
+    supabaseTemporarilyUnavailable,
   };
 });
 

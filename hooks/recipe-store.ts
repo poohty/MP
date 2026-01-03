@@ -3,7 +3,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
 import { Recipe, RecipeCategory } from '@/types';
 import { useAuth } from './auth-store';
-import { supabase, isSupabaseEnabled, withRetry } from '@/lib/supabase';
+import { supabase, isSupabaseEnabled, withRetry, shouldBackoffSupabase, triggerSupabaseBackoff, isSupabaseParseError } from '@/lib/supabase';
 
 const RECIPES_STORAGE_KEY = 'meal-planner-recipes';
 
@@ -14,10 +14,16 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
   const { user } = useAuth();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [supabaseTemporarilyUnavailable, setSupabaseTemporarilyUnavailable] = useState(false);
 
   const loadRecipesFromSupabase = useCallback(async (ownerUserId: string): Promise<Recipe[]> => {
     if (!isSupabaseEnabled) {
       console.log('📴 Supabase disabled, skipping remote load');
+      return [];
+    }
+
+    if (shouldBackoffSupabase()) {
+      console.log('⏸️ Supabase in backoff, skipping loadRecipes');
       return [];
     }
 
@@ -47,6 +53,12 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         return recipes;
       }, 'loadRecipesFromSupabase');
     } catch (error) {
+      if (isSupabaseParseError(error)) {
+        console.warn('⚠️ Supabase parse error detected in loadRecipes');
+        triggerSupabaseBackoff(60000);
+        setSupabaseTemporarilyUnavailable(true);
+        return [];
+      }
       console.error('❌ Failed to load recipes from Supabase:', error);
       return [];
     }
@@ -54,6 +66,11 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
 
   const syncRecipeToSupabase = useCallback(async (recipe: Recipe, ownerUserId: string) => {
     if (!isSupabaseEnabled) {
+      return;
+    }
+
+    if (shouldBackoffSupabase()) {
+      console.log('⏸️ Supabase in backoff, skipping syncRecipe');
       return;
     }
 
@@ -90,6 +107,12 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         }
       }, 'syncRecipeToSupabase');
     } catch (error) {
+      if (isSupabaseParseError(error)) {
+        console.warn('⚠️ Supabase parse error detected in syncRecipe');
+        triggerSupabaseBackoff(60000);
+        setSupabaseTemporarilyUnavailable(true);
+        return;
+      }
       console.error('❌ Failed to sync recipe to Supabase:', error);
     }
   }, []);
@@ -1590,24 +1613,39 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
       return;
     }
 
-    console.log('🐛 DEBUG: Checking Supabase recipes for', ownerUserId);
-
-    if (!isSupabaseEnabled) return;
-    const { data, error } = await withRetry(async () => {
-      return await supabase
-        .from('recipes')
-        .select('id, owner_user_id, name, category, created_at')
-        .eq('owner_user_id', ownerUserId)
-        .order('created_at', { ascending: false });
-    }, 'debugSupabaseRecipes').catch((err) => ({ data: null, error: err }));
-
-    if (error) {
-      console.error('🐛 DEBUG Supabase error:', error);
+    if (shouldBackoffSupabase()) {
+      console.log('⏸️ Supabase in backoff, skipping debug');
       return;
     }
 
-    console.log('🐛 DEBUG Supabase recipe count:', data?.length || 0);
-    console.log('🐛 DEBUG Supabase rows:', data);
+    console.log('🐛 DEBUG: Checking Supabase recipes for', ownerUserId);
+
+    if (!isSupabaseEnabled) return;
+    try {
+      const { data, error } = await withRetry(async () => {
+        return await supabase
+          .from('recipes')
+          .select('id, owner_user_id, name, category, created_at')
+          .eq('owner_user_id', ownerUserId)
+          .order('created_at', { ascending: false });
+      }, 'debugSupabaseRecipes');
+
+      if (error) {
+        console.error('🐛 DEBUG Supabase error:', error);
+        return;
+      }
+
+      console.log('🐛 DEBUG Supabase recipe count:', data?.length || 0);
+      console.log('🐛 DEBUG Supabase rows:', data);
+    } catch (error) {
+      if (isSupabaseParseError(error)) {
+        console.warn('⚠️ Supabase parse error in debug');
+        triggerSupabaseBackoff(60000);
+        setSupabaseTemporarilyUnavailable(true);
+        return;
+      }
+      console.error('🐛 DEBUG error:', error);
+    }
   }, []);
 
   return {
@@ -1636,6 +1674,7 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     loadRecipesFromSupabase,
     syncRecipeToSupabase,
     debugSupabaseRecipesForUser,
+    supabaseTemporarilyUnavailable,
   };
 });
 

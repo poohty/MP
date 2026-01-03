@@ -11,7 +11,7 @@ import { Plus, RefreshCw, Image } from 'lucide-react-native';
 import { useTheme } from '@/hooks/theme-store';
 
 export default function RecipeBookScreen() {
-  const { recipes, isLoading, debugStorage, deleteRecipe, toggleFavorite, refreshRecipes, reExtractImages, forceReExtractAllImages } = useRecipes();
+  const { recipes, isLoading, debugStorage, deleteRecipe, toggleFavorite, refreshRecipes, reExtractImages, forceReExtractAllImages, supabaseTemporarilyUnavailable } = useRecipes();
   const { isDark } = useTheme();
   const themeColors = isDark ? Colors.dark : Colors.light;
   const [selectedCategory, setSelectedCategory] = useState<RecipeCategory>('Breakfast');
@@ -276,6 +276,14 @@ export default function RecipeBookScreen() {
           onSelectCategory={setSelectedCategory}
         />
       </View>
+
+      {supabaseTemporarilyUnavailable && (
+        <View style={[styles.syncBanner, { backgroundColor: themeColors.warning }]}>
+          <Text style={[styles.syncBannerText, { color: themeColors.background }]}>
+            ⚠️ Sync temporarily unavailable. Pull to refresh or try again in a minute.
+          </Text>
+        </View>
+      )}
       
       <View style={styles.listContainer}>
         <RecipeList
@@ -365,5 +373,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: 'bold',
+  },
+  syncBanner: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  syncBannerText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
 });
