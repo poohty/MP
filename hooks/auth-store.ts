@@ -336,6 +336,7 @@ const result = createContextHook(() => {
       }
 
       try {
+        if (!isSupabaseEnabled) return { ok: false, reason: 'LOGIN_FAILED' };
         console.log('🔐 Supabase login attempt:', { email });
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -407,6 +408,7 @@ const result = createContextHook(() => {
       }
 
       try {
+        if (!isSupabaseEnabled) return { ok: false, reason: 'SIGNUP_FAILED' };
         const emailRedirectTo = getEmailRedirectTo();
         console.log('🧾 Supabase signUp attempt:', { email, emailRedirectTo });
         const { data, error } = await supabase.auth.signUp({

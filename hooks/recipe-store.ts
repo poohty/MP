@@ -58,6 +58,7 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
     }
 
     try {
+      if (!isSupabaseEnabled) return;
       if (!ownerUserId) {
         console.error('❌ syncRecipeToSupabase called without ownerUserId', { recipeId: recipe.id });
         return;
@@ -1591,6 +1592,7 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
 
     console.log('🐛 DEBUG: Checking Supabase recipes for', ownerUserId);
 
+    if (!isSupabaseEnabled) return;
     const { data, error } = await withRetry(async () => {
       return await supabase
         .from('recipes')

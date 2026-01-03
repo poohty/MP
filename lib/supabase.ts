@@ -1,18 +1,36 @@
 import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-
-const isSupabaseConfigured = !!(SUPABASE_URL && SUPABASE_ANON_KEY && 
-  SUPABASE_URL !== 'https://placeholder.supabase.co' &&
-  SUPABASE_ANON_KEY !== 'placeholder-key' &&
-  SUPABASE_URL.includes('supabase.co'));
-
-if (!isSupabaseConfigured) {
-  console.warn('⚠️ Supabase is not configured properly. App will work in offline mode.');
-  console.warn('⚠️ To enable social features, set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY');
+function sanitizeSupabaseUrl(raw?: string): string | null {
+  if (!raw) return null;
+  const v = raw.trim().replace(/^['"]|['"]$/g, '');
+  try {
+    const u = new URL(v);
+    return u.origin;
+  } catch {
+    const m = v.match(/https:\/\/[a-z0-9-]+\.supabase\.co/i);
+    return m ? m[0] : null;
+  }
 }
+
+const RAW_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const RAW_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+const SUPABASE_URL = sanitizeSupabaseUrl(RAW_URL);
+const SUPABASE_ANON_KEY = (RAW_KEY || '').trim().replace(/^['"]|['"]$/g, '');
+
+const isSupabaseConfigured =
+  !!SUPABASE_URL &&
+  SUPABASE_URL.startsWith('https://') &&
+  SUPABASE_URL.includes('.supabase.co') &&
+  !!SUPABASE_ANON_KEY &&
+  SUPABASE_ANON_KEY.startsWith('eyJ');
+
+console.log('🔧 Supabase config:', {
+  url: SUPABASE_URL,
+  anonKeyPrefix: SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY.slice(0, 6) : null,
+  configured: isSupabaseConfigured,
+});
 
 export const supabase = createClient(
   SUPABASE_URL || 'https://placeholder.supabase.co',
@@ -123,8 +141,3 @@ export async function withRetry<T>(
 }
 
 export const isSupabaseEnabled = isSupabaseConfigured;
-
-console.log('🗄️ Supabase status:', isSupabaseConfigured ? '✅ ENABLED' : '❌ OFFLINE MODE');
-if (isSupabaseConfigured) {
-  console.log('🗄️ Supabase URL:', SUPABASE_URL);
-}
