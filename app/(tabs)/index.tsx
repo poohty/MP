@@ -55,7 +55,7 @@ export default function HomeScreen() {
         
         <View style={[styles.heroContainer, { height: layout.heroHeight }]}>
           <Image
-            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/go2xqufleh6nyngscogs1?v=20251220' }}
+            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/3wt8yn3zdq9xk2cq8v5hz' }}
             style={styles.heroImage}
             resizeMode="cover"
             testID="home-hero-image"
