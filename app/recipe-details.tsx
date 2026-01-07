@@ -1,18 +1,15 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert, Platform, TextInput, Modal } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import { useAuth } from '@/hooks/auth-store';
 import Colors from '@/constants/colors';
-import { ExternalLink, Trash2, CheckSquare, Square, Edit3, Camera, Link as LinkIcon, BookPlus, Mic, MicOff, SkipForward, RotateCcw, Settings } from 'lucide-react-native';
+import { ExternalLink, Trash2, CheckSquare, Square, Edit3, Camera, Link as LinkIcon, BookPlus } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import GradientBackground from '@/components/GradientBackground';
 import { Recipe, RecipeCategory } from '@/types';
 import DropdownSelect from '@/components/DropdownSelect';
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchTtsAudioFile } from '@/lib/voiceTts';
 
 export default function RecipeDetailsScreen() {
   const { id, friendUserId } = useLocalSearchParams<{ id: string; friendUserId?: string }>();
@@ -26,13 +23,6 @@ export default function RecipeDetailsScreen() {
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [, setIsImporting] = useState(false);
-  const [isVoiceMode, setIsVoiceMode] = useState(false);
-  const [currentVoiceStep, setCurrentVoiceStep] = useState(0);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [voiceVariant, setVoiceVariant] = useState<'female' | 'male' | 'neutral'>('female');
-  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
-  const voiceStepsRef = useRef<string[]>([]);
-  const soundRef = useRef<Audio.Sound | null>(null);
 
   const handleExtractRecipeContent = useCallback(async (recipeToUpdate: Recipe) => {
     if (!recipeToUpdate.url) return;
@@ -77,132 +67,10 @@ export default function RecipeDetailsScreen() {
   useEffect(() => {
     if (id) {
       loadRecipe();
-      loadVoiceSettings();
     }
   }, [id, loadRecipe]);
 
-  const stopCurrentVoice = async () => {
-    if (soundRef.current) {
-      try {
-        await soundRef.current.stopAsync();
-      } catch {}
-      try {
-        await soundRef.current.unloadAsync();
-      } catch {}
-      soundRef.current = null;
-    }
-  };
 
-  useEffect(() => {
-    return () => {
-      stopCurrentVoice();
-    };
-  }, []);
-
-  const loadVoiceSettings = async () => {
-    try {
-      const saved = await AsyncStorage.getItem('@voice_variant');
-      if (saved === 'female' || saved === 'male' || saved === 'neutral') {
-        setVoiceVariant(saved);
-      }
-    } catch (error) {
-      console.error('Failed to load voice settings:', error);
-    }
-  };
-
-  const saveVoiceSettings = async (variant: 'female' | 'male' | 'neutral') => {
-    try {
-      await AsyncStorage.setItem('@voice_variant', variant);
-      setVoiceVariant(variant);
-    } catch (error) {
-      console.error('Failed to save voice settings:', error);
-    }
-  };
-
-  const speakStep = async (stepIndex: number) => {
-    await stopCurrentVoice();
-
-    try {
-      await Audio.setAudioModeAsync({
-        playsInSilentModeIOS: true,
-        allowsRecordingIOS: false,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: false,
-        playThroughEarpieceAndroid: false,
-      });
-    } catch (error) {
-      console.error('Failed to set audio mode:', error);
-    }
-
-    const isDoneMessage = stepIndex >= voiceStepsRef.current.length;
-
-    const stepText = isDoneMessage ? '' : voiceStepsRef.current[stepIndex];
-    const speakText = isDoneMessage
-      ? 'Enjoy your meal. See ya next time'
-      : `Step ${stepIndex + 1}. ${stepText}`;
-
-    setIsSpeaking(true);
-
-    try {
-      const uri = await fetchTtsAudioFile(speakText, voiceVariant);
-
-      const { sound } = await Audio.Sound.createAsync(
-        { uri },
-        { shouldPlay: true, volume: 1.0 }
-      );
-
-      soundRef.current = sound;
-
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (!status.isLoaded) return;
-        if (status.didJustFinish) {
-          stopCurrentVoice();
-          setIsSpeaking(false);
-
-          if (isDoneMessage) {
-            setIsVoiceMode(false);
-            setCurrentVoiceStep(0);
-          }
-        }
-      });
-    } catch (error) {
-      console.error('Voice TTS failed:', error);
-      Alert.alert('Voice error', 'Could not generate voice audio. Try again.');
-      setIsSpeaking(false);
-    }
-  };
-
-  const handleStartVoiceMode = (steps: string[]) => {
-    voiceStepsRef.current = steps;
-    setIsVoiceMode(true);
-    setCurrentVoiceStep(0);
-    speakStep(0);
-  };
-
-  const handleStopVoiceMode = () => {
-    stopCurrentVoice();
-    setIsSpeaking(false);
-    setIsVoiceMode(false);
-    setCurrentVoiceStep(0);
-  };
-
-  const handleRepeatStep = () => {
-    stopCurrentVoice();
-    speakStep(currentVoiceStep);
-  };
-
-  const handleNextStep = async () => {
-    stopCurrentVoice();
-    
-    if (!recipe) return;
-    
-    await toggleStepCheck(currentVoiceStep);
-    
-    const nextStep = currentVoiceStep + 1;
-    setCurrentVoiceStep(nextStep);
-    
-    speakStep(nextStep);
-  };
 
   const handleImportToMyCookbook = async () => {
     if (!recipe || !user) return;
@@ -833,56 +701,7 @@ export default function RecipeDetailsScreen() {
                 {/* Instructions Section */}
                 {parsedContent.instructions.length > 0 && (
                   <View style={styles.section}>
-                    <View style={styles.instructionsHeader}>
-                      <Text style={styles.sectionTitle}>👨‍🍳 Instructions</Text>
-                      <TouchableOpacity
-                        onPress={() => {
-                          if (isVoiceMode) {
-                            handleStopVoiceMode();
-                          } else {
-                            handleStartVoiceMode(parsedContent.instructions);
-                          }
-                        }}
-                        style={styles.voiceButton}
-                      >
-                        {isVoiceMode ? (
-                          <MicOff size={24} color={Colors.error} />
-                        ) : (
-                          <Mic size={24} color={Colors.primary} />
-                        )}
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => setShowVoiceSettings(true)}
-                        style={styles.voiceButton}
-                      >
-                        <Settings size={20} color={Colors.textSecondary} />
-                      </TouchableOpacity>
-                    </View>
-                    {isVoiceMode && (
-                      <View style={styles.voiceControls}>
-                        <Text style={styles.voiceControlsTitle}>
-                          🎙️ Voice Mode Active - Step {currentVoiceStep + 1} of {parsedContent.instructions.length}
-                        </Text>
-                        <View style={styles.voiceControlButtons}>
-                          <TouchableOpacity
-                            onPress={handleRepeatStep}
-                            style={[styles.voiceControlButton, styles.repeatButton]}
-                            disabled={isSpeaking}
-                          >
-                            <RotateCcw size={20} color="#FFFFFF" />
-                            <Text style={styles.voiceControlButtonText}>Repeat</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            onPress={handleNextStep}
-                            style={[styles.voiceControlButton, styles.nextButton]}
-                            disabled={isSpeaking}
-                          >
-                            <SkipForward size={20} color="#FFFFFF" />
-                            <Text style={styles.voiceControlButtonText}>Next Step</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    )}
+                    <Text style={styles.sectionTitle}>👨‍🍳 Instructions</Text>
                     <Text style={styles.instructionsSubtitle}>Tap each step to check it off as you cook!</Text>
                     {parsedContent.instructions.map((instruction, index) => {
                       // Clean up instruction text and handle checkboxes
@@ -1092,98 +911,6 @@ export default function RecipeDetailsScreen() {
                 disabled={isUploadingImage}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-
-        <Modal
-          visible={showVoiceSettings}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setShowVoiceSettings(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Voice Settings</Text>
-              <Text style={styles.modalDescription}>
-                Choose your preferred voice for cooking instructions
-              </Text>
-
-              <TouchableOpacity
-                style={[
-                  styles.voiceVariantButton,
-                  voiceVariant === 'female' && styles.voiceVariantButtonActive,
-                ]}
-                onPress={() => saveVoiceSettings('female')}
-              >
-                <View style={styles.voiceVariantContent}>
-                  <Text style={[
-                    styles.voiceVariantText,
-                    voiceVariant === 'female' && styles.voiceVariantTextActive,
-                  ]}>
-                    Female Voice
-                  </Text>
-                  <Text style={styles.voiceVariantDescription}>Higher pitch</Text>
-                </View>
-                {voiceVariant === 'female' && (
-                  <View style={styles.checkmark}>
-                    <CheckSquare size={24} color={Colors.primary} />
-                  </View>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.voiceVariantButton,
-                  voiceVariant === 'male' && styles.voiceVariantButtonActive,
-                ]}
-                onPress={() => saveVoiceSettings('male')}
-              >
-                <View style={styles.voiceVariantContent}>
-                  <Text style={[
-                    styles.voiceVariantText,
-                    voiceVariant === 'male' && styles.voiceVariantTextActive,
-                  ]}>
-                    Male Voice
-                  </Text>
-                  <Text style={styles.voiceVariantDescription}>Lower pitch</Text>
-                </View>
-                {voiceVariant === 'male' && (
-                  <View style={styles.checkmark}>
-                    <CheckSquare size={24} color={Colors.primary} />
-                  </View>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.voiceVariantButton,
-                  voiceVariant === 'neutral' && styles.voiceVariantButtonActive,
-                ]}
-                onPress={() => saveVoiceSettings('neutral')}
-              >
-                <View style={styles.voiceVariantContent}>
-                  <Text style={[
-                    styles.voiceVariantText,
-                    voiceVariant === 'neutral' && styles.voiceVariantTextActive,
-                  ]}>
-                    Neutral Voice
-                  </Text>
-                  <Text style={styles.voiceVariantDescription}>Balanced tone</Text>
-                </View>
-                {voiceVariant === 'neutral' && (
-                  <View style={styles.checkmark}>
-                    <CheckSquare size={24} color={Colors.primary} />
-                  </View>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setShowVoiceSettings(false)}
-              >
-                <Text style={styles.cancelButtonText}>Close</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1564,89 +1291,5 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginBottom: 2,
   },
-  instructionsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  voiceButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: Colors.cardBackground,
-    marginLeft: 8,
-  },
-  voiceControls: {
-    backgroundColor: Colors.primary + '15',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: Colors.primary + '40',
-  },
-  voiceControlsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  voiceControlButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  voiceControlButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    borderRadius: 8,
-    gap: 8,
-  },
-  repeatButton: {
-    backgroundColor: Colors.textSecondary,
-  },
-  nextButton: {
-    backgroundColor: Colors.success,
-  },
-  voiceControlButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  voiceVariantButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  voiceVariantButtonActive: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '10',
-  },
-  voiceVariantContent: {
-    flex: 1,
-  },
-  voiceVariantText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  voiceVariantTextActive: {
-    color: Colors.primary,
-  },
-  voiceVariantDescription: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  checkmark: {
-    marginLeft: 12,
-  },
+
 });
