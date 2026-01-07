@@ -3,7 +3,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
 import { Recipe, RecipeCategory } from '@/types';
 import { useAuth } from './auth-store';
-import { supabase, isSupabaseEnabled, withRetry, shouldBackoffSupabase, triggerSupabaseBackoff, isSupabaseParseError } from '@/lib/supabase';
+import { supabase, isSupabaseEnabled, withRetry, shouldBackoffSupabase, triggerSupabaseBackoff, isSupabaseParseError, clearSupabaseBackoff } from '@/lib/supabase';
 
 const RECIPES_STORAGE_KEY = 'meal-planner-recipes';
 
@@ -44,12 +44,32 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
           throw error;
         }
 
-        const recipes = (data || []).map((row: any) => ({
-          ...row.data_json,
-          id: row.id,
-        })) as Recipe[];
+        const recipes = (data || []).map((row: any) => {
+          let parsedData: any = {};
+          
+          if (row.data_json) {
+            if (typeof row.data_json === 'object') {
+              parsedData = row.data_json;
+            } else if (typeof row.data_json === 'string') {
+              try {
+                parsedData = JSON.parse(row.data_json);
+              } catch {
+                parsedData = {};
+              }
+            }
+          }
+          
+          return {
+            ...parsedData,
+            id: row.id,
+            name: parsedData.name || row.name || 'Untitled Recipe',
+            category: parsedData.category || row.category || 'Main Course',
+          } as Recipe;
+        });
 
         console.log(`✅ Loaded ${recipes.length} recipes from Supabase`);
+        setSupabaseTemporarilyUnavailable(false);
+        clearSupabaseBackoff();
         return recipes;
       }, 'loadRecipesFromSupabase');
     } catch (error) {
@@ -93,7 +113,7 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
               data_json: recipe,
               updated_at: new Date().toISOString(),
             },
-            { onConflict: 'id' }
+            { onConflict: 'owner_user_id,id' }
           );
 
         if (error) {
@@ -104,6 +124,8 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
           throw error;
         } else {
           console.log('✅ Synced recipe to Supabase', recipe.id, ownerUserId);
+          setSupabaseTemporarilyUnavailable(false);
+          clearSupabaseBackoff();
         }
       }, 'syncRecipeToSupabase');
     } catch (error) {

@@ -174,3 +174,7 @@ export function triggerSupabaseBackoff(ms = 60000) {
   supabaseBackoffUntil = Date.now() + ms;
   console.warn(`🚫 Supabase backoff triggered for ${ms / 1000} seconds`);
 }
+
+export function clearSupabaseBackoff() {
+  supabaseBackoffUntil = 0;
+}
