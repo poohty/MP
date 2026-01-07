@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { useUser } from '@/hooks/user-store';
-import { useAuth } from '@/hooks/auth-store';
 import { supabase } from '@/lib/supabase';
 import { UserProfile, FriendLink } from '@/types';
 import Colors from '@/constants/colors';
@@ -11,7 +10,6 @@ import GradientBackground from '@/components/GradientBackground';
 import { Search, UserPlus, Check, X, RefreshCw, Bug } from 'lucide-react-native';
 
 export default function FriendsScreen() {
-  const { user, isEmailVerified, resendVerification } = useAuth();
   const { 
     searchUsersByUsername,
     searchResults,
@@ -53,10 +51,6 @@ export default function FriendsScreen() {
   }, [loadFriendsAndRequests]);
 
   const handleSearch = async () => {
-    if (!isEmailVerified) {
-      Alert.alert('Verify your email', 'Verify your email to search and add friends.', [{ text: 'OK' }]);
-      return;
-    }
     if (!searchQuery.trim()) {
       Alert.alert('Search', 'Please enter a username to search');
       return;
@@ -73,10 +67,6 @@ export default function FriendsScreen() {
   };
 
   const handleSendFriendRequest = async (targetUserId: string) => {
-    if (!isEmailVerified) {
-      Alert.alert('Verify your email', 'Verify your email to search and add friends.', [{ text: 'OK' }]);
-      return;
-    }
     try {
       const success = await sendFriendRequest(targetUserId);
       if (success) {
@@ -184,27 +174,6 @@ export default function FriendsScreen() {
     <GradientBackground>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.searchSection}>
-          {!isEmailVerified ? (
-            <View style={styles.verifyGate} testID="friendsVerifyGate">
-              <Text style={styles.verifyGateTitle}>Verify your email</Text>
-              <Text style={styles.verifyGateBody}>Verify your email to search and add friends.</Text>
-              <TouchableOpacity
-                style={styles.verifyGateButton}
-                onPress={async () => {
-                  const email = user?.email ?? '';
-                  const result = await resendVerification(email);
-                  if (!result.ok) {
-                    Alert.alert('Could not resend', result.error || 'Please try again.', [{ text: 'OK' }]);
-                    return;
-                  }
-                  Alert.alert('Sent', 'Check your email for a verification link.', [{ text: 'OK' }]);
-                }}
-                testID="friendsResendVerificationButton"
-              >
-                <Text style={styles.verifyGateButtonText}>Resend verification email</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Find Friends</Text>
             <View style={styles.headerButtons}>
@@ -224,20 +193,17 @@ export default function FriendsScreen() {
           </View>
           <View style={styles.searchContainer}>
             <TextInput
-              style={[styles.searchInput, !isEmailVerified ? { opacity: 0.6 } : null]}
+              style={styles.searchInput}
               placeholder="Search by username..."
               placeholderTextColor={Colors.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
               onSubmitEditing={handleSearch}
-              editable={isEmailVerified}
-              testID="friendsSearchInput"
             />
             <TouchableOpacity 
-              style={[styles.searchButton, !isEmailVerified ? { opacity: 0.6 } : null]} 
+              style={styles.searchButton} 
               onPress={handleSearch}
-              disabled={isSearching || !isEmailVerified}
-              testID="friendsSearchButton"
+              disabled={isSearching}
             >
               <Search size={20} color={Colors.text} />
             </TouchableOpacity>
@@ -269,10 +235,8 @@ export default function FriendsScreen() {
                       </View>
                     ) : (
                       <TouchableOpacity
-                        style={[styles.addButton, !isEmailVerified ? { opacity: 0.5 } : null]}
+                        style={styles.addButton}
                         onPress={() => handleSendFriendRequest(user.id)}
-                        disabled={!isEmailVerified}
-                        testID={`addFriendButton-${user.id}`}
                       >
                         <UserPlus size={18} color={Colors.text} />
                       </TouchableOpacity>
@@ -365,38 +329,6 @@ const styles = StyleSheet.create({
   },
   searchSection: {
     marginBottom: 24,
-  },
-  verifyGate: {
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  verifyGateTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.text,
-    marginBottom: 6,
-  },
-  verifyGateBody: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: Colors.textSecondary,
-    marginBottom: 12,
-  },
-  verifyGateButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  verifyGateButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 13,
   },
   section: {
     marginBottom: 24,

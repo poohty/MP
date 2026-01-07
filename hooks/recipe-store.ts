@@ -3,7 +3,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
 import { Recipe, RecipeCategory } from '@/types';
 import { useAuth } from './auth-store';
-import { supabase, isSupabaseEnabled, withRetry, shouldBackoffSupabase, triggerSupabaseBackoff, isSupabaseParseError, clearSupabaseBackoff } from '@/lib/supabase';
+import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 
 const RECIPES_STORAGE_KEY = 'meal-planner-recipes';
 
@@ -14,7 +14,6 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
   const { user } = useAuth();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [supabaseTemporarilyUnavailable, setSupabaseTemporarilyUnavailable] = useState(false);
 
   const loadRecipesFromSupabase = useCallback(async (ownerUserId: string): Promise<Recipe[]> => {
     if (!isSupabaseEnabled) {
@@ -22,63 +21,30 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
       return [];
     }
 
-    if (shouldBackoffSupabase()) {
-      console.log('⏸️ Supabase in backoff, skipping loadRecipes');
-      return [];
-    }
-
     try {
       console.log(`📥 Loading recipes from Supabase for user: ${ownerUserId}`);
-      return await withRetry(async () => {
-        const { data, error } = await supabase
-          .from('recipes')
-          .select('*')
-          .eq('owner_user_id', ownerUserId)
-          .order('created_at', { ascending: false });
+      const { data, error } = await supabase
+        .from('recipes')
+        .select('*')
+        .eq('owner_user_id', ownerUserId)
+        .order('created_at', { ascending: false });
 
-        if (error) {
-          console.error('❌ Supabase loadRecipes error:', JSON.stringify(error, null, 2));
-          console.error('❌ Error message:', error.message);
-          console.error('❌ Error details:', error.details);
-          console.error('❌ Error hint:', error.hint);
-          throw error;
-        }
-
-        const recipes = (data || []).map((row: any) => {
-          let parsedData: any = {};
-          
-          if (row.data_json) {
-            if (typeof row.data_json === 'object') {
-              parsedData = row.data_json;
-            } else if (typeof row.data_json === 'string') {
-              try {
-                parsedData = JSON.parse(row.data_json);
-              } catch {
-                parsedData = {};
-              }
-            }
-          }
-          
-          return {
-            ...parsedData,
-            id: row.id,
-            name: parsedData.name || row.name || 'Untitled Recipe',
-            category: parsedData.category || row.category || 'Main Course',
-          } as Recipe;
-        });
-
-        console.log(`✅ Loaded ${recipes.length} recipes from Supabase`);
-        setSupabaseTemporarilyUnavailable(false);
-        clearSupabaseBackoff();
-        return recipes;
-      }, 'loadRecipesFromSupabase');
-    } catch (error) {
-      if (isSupabaseParseError(error)) {
-        console.warn('⚠️ Supabase parse error detected in loadRecipes');
-        triggerSupabaseBackoff(60000);
-        setSupabaseTemporarilyUnavailable(true);
+      if (error) {
+        console.error('❌ Supabase loadRecipes error:', JSON.stringify(error, null, 2));
+        console.error('❌ Error message:', error.message);
+        console.error('❌ Error details:', error.details);
+        console.error('❌ Error hint:', error.hint);
         return [];
       }
+
+      const recipes = (data || []).map((row: any) => ({
+        ...row.data_json,
+        id: row.id,
+      })) as Recipe[];
+
+      console.log(`✅ Loaded ${recipes.length} recipes from Supabase`);
+      return recipes;
+    } catch (error) {
       console.error('❌ Failed to load recipes from Supabase:', error);
       return [];
     }
@@ -89,52 +55,35 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
       return;
     }
 
-    if (shouldBackoffSupabase()) {
-      console.log('⏸️ Supabase in backoff, skipping syncRecipe');
-      return;
-    }
-
     try {
-      if (!isSupabaseEnabled) return;
       if (!ownerUserId) {
         console.error('❌ syncRecipeToSupabase called without ownerUserId', { recipeId: recipe.id });
         return;
       }
 
-      await withRetry(async () => {
-        const { error } = await supabase
-          .from('recipes')
-          .upsert(
-            {
-              id: recipe.id,
-              owner_user_id: ownerUserId,
-              name: recipe.name,
-              category: recipe.category,
-              data_json: recipe,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'owner_user_id,id' }
-          );
+      const { error } = await supabase
+        .from('recipes')
+        .upsert(
+          {
+            id: recipe.id,
+            owner_user_id: ownerUserId,
+            name: recipe.name,
+            category: recipe.category,
+            data_json: recipe,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'owner_user_id,id' }
+        );
 
-        if (error) {
-          console.error('❌ Supabase syncRecipe error:', JSON.stringify(error, null, 2));
-          console.error('❌ Error message:', error.message);
-          console.error('❌ Error details:', error.details);
-          console.error('❌ Error hint:', error.hint);
-          throw error;
-        } else {
-          console.log('✅ Synced recipe to Supabase', recipe.id, ownerUserId);
-          setSupabaseTemporarilyUnavailable(false);
-          clearSupabaseBackoff();
-        }
-      }, 'syncRecipeToSupabase');
-    } catch (error) {
-      if (isSupabaseParseError(error)) {
-        console.warn('⚠️ Supabase parse error detected in syncRecipe');
-        triggerSupabaseBackoff(60000);
-        setSupabaseTemporarilyUnavailable(true);
-        return;
+      if (error) {
+        console.error('❌ Supabase syncRecipe error:', JSON.stringify(error, null, 2));
+        console.error('❌ Error message:', error.message);
+        console.error('❌ Error details:', error.details);
+        console.error('❌ Error hint:', error.hint);
+      } else {
+        console.log('✅ Synced recipe to Supabase', recipe.id, ownerUserId);
       }
+    } catch (error) {
       console.error('❌ Failed to sync recipe to Supabase:', error);
     }
   }, []);
@@ -1635,39 +1584,21 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
       return;
     }
 
-    if (shouldBackoffSupabase()) {
-      console.log('⏸️ Supabase in backoff, skipping debug');
+    console.log('🐛 DEBUG: Checking Supabase recipes for', ownerUserId);
+
+    const { data, error } = await supabase
+      .from('recipes')
+      .select('id, owner_user_id, name, category, created_at')
+      .eq('owner_user_id', ownerUserId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('🐛 DEBUG Supabase error:', error);
       return;
     }
 
-    console.log('🐛 DEBUG: Checking Supabase recipes for', ownerUserId);
-
-    if (!isSupabaseEnabled) return;
-    try {
-      const { data, error } = await withRetry(async () => {
-        return await supabase
-          .from('recipes')
-          .select('id, owner_user_id, name, category, created_at')
-          .eq('owner_user_id', ownerUserId)
-          .order('created_at', { ascending: false });
-      }, 'debugSupabaseRecipes');
-
-      if (error) {
-        console.error('🐛 DEBUG Supabase error:', error);
-        return;
-      }
-
-      console.log('🐛 DEBUG Supabase recipe count:', data?.length || 0);
-      console.log('🐛 DEBUG Supabase rows:', data);
-    } catch (error) {
-      if (isSupabaseParseError(error)) {
-        console.warn('⚠️ Supabase parse error in debug');
-        triggerSupabaseBackoff(60000);
-        setSupabaseTemporarilyUnavailable(true);
-        return;
-      }
-      console.error('🐛 DEBUG error:', error);
-    }
+    console.log('🐛 DEBUG Supabase recipe count:', data?.length || 0);
+    console.log('🐛 DEBUG Supabase rows:', data);
   }, []);
 
   return {
@@ -1696,7 +1627,6 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     loadRecipesFromSupabase,
     syncRecipeToSupabase,
     debugSupabaseRecipesForUser,
-    supabaseTemporarilyUnavailable,
   };
 });
 

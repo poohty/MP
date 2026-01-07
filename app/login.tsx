@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, KeyboardAvoidingView, Platfor
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/auth-store';
 import { useTheme } from '@/hooks/theme-store';
+import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
@@ -11,7 +12,7 @@ import { ArrowLeft } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function LoginScreen() {
-  const { login, requestPasswordReset, resendVerification, checkProfileExistsByEmail, recoverLegacyAccount } = useAuth();
+  const { login } = useAuth();
   const { isDark } = useTheme();
   const themeColors = isDark ? Colors.dark : Colors.light;
   const [email, setEmail] = useState('');
@@ -43,64 +44,21 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     if (!validate()) return;
 
-    const trimmedEmail = email.trim();
-
     setIsLoading(true);
     try {
-      const result = await login(trimmedEmail, password);
+      const result = await login(email.trim(), password);
 
       if (!result.ok) {
-        if (result.reason === 'BAD_CREDENTIALS') {
-          setErrors({ email: 'Invalid email or password' });
-
-          const exists = await checkProfileExistsByEmail(trimmedEmail);
-          if (exists) {
-            Alert.alert(
-              'Activate your account',
-              'Your account was created before we upgraded login. Tap Activate to enable login for this email. Your cookbook will remain intact.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Activate',
-                  onPress: async () => {
-                    setIsLoading(true);
-                    try {
-                      const recovery = await recoverLegacyAccount(trimmedEmail, password);
-
-                      if (!recovery.ok) {
-                        if (recovery.reason === 'ALREADY_AUTH_USER') {
-                          Alert.alert(
-                            'Already activated',
-                            'This email already has login enabled. Please try logging in again.',
-                            [{ text: 'OK' }]
-                          );
-                          return;
-                        }
-
-                        Alert.alert('Activation failed', recovery.error || 'Could not activate account. Please try again.', [{ text: 'OK' }]);
-                        return;
-                      }
-
-                      const retry = await login(trimmedEmail, password);
-                      if (!retry.ok) {
-                        Alert.alert('Login failed', 'Activation worked, but login still failed. Please try again.', [{ text: 'OK' }]);
-                      }
-                    } catch (e) {
-                      console.error('Legacy activation error:', e);
-                      Alert.alert('Activation failed', 'Could not activate account. Please try again.', [{ text: 'OK' }]);
-                    } finally {
-                      setIsLoading(false);
-                    }
-                  },
-                },
-              ]
-            );
-          }
-
+        if (result.reason === 'EMAIL_NOT_VERIFIED') {
+          Alert.alert(
+            'Email not verified',
+            'Please verify your email using the link we sent, then log in.',
+            [{ text: 'OK' }]
+          );
           return;
         }
 
-        setErrors({ email: 'An error occurred during login' });
+        setErrors({ email: 'Invalid email or password' });
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -117,17 +75,29 @@ export default function LoginScreen() {
       return;
     }
 
-    const result = await resendVerification(trimmed);
-    if (!result.ok) {
-      Alert.alert('Could not resend', result.error || 'Please try again.', [{ text: 'OK' }]);
+    if (!isSupabaseEnabled) {
+      Alert.alert('Unavailable', 'Email verification is unavailable in offline mode.', [{ text: 'OK' }]);
       return;
     }
 
-    Alert.alert(
-      'Verification email sent',
-      'Check your inbox for a new verification link.',
-      [{ text: 'OK' }]
-    );
+    try {
+      console.log('📨 Resend verification email:', { email: trimmed });
+      const { error } = await supabase.auth.resend({ type: 'signup', email: trimmed });
+      if (error) {
+        console.error('📨 Resend verification error:', error);
+        Alert.alert('Could not resend', error.message || 'Please try again.', [{ text: 'OK' }]);
+        return;
+      }
+
+      Alert.alert(
+        'Verification email sent',
+        'Check your inbox for a new verification link, then come back and log in.',
+        [{ text: 'OK' }]
+      );
+    } catch (e) {
+      console.error('📨 Resend verification unexpected error:', e);
+      Alert.alert('Could not resend', 'Please try again.', [{ text: 'OK' }]);
+    }
   };
 
   return (
@@ -193,32 +163,6 @@ export default function LoginScreen() {
             isLoading={isLoading}
             style={styles.button}
           />
-
-          <TouchableOpacity
-            onPress={async () => {
-              const trimmed = email.trim();
-              if (!trimmed) {
-                Alert.alert('Enter your email first', 'Please enter your email address, then tap Forgot password.', [{ text: 'OK' }]);
-                return;
-              }
-              if (!/\S+@\S+\.\S+/.test(trimmed)) {
-                Alert.alert('Invalid email', 'Please enter a valid email address.', [{ text: 'OK' }]);
-                return;
-              }
-
-              const result = await requestPasswordReset(trimmed);
-              if (!result.ok) {
-                Alert.alert('Could not send reset email', result.error || 'Please try again.', [{ text: 'OK' }]);
-                return;
-              }
-
-              Alert.alert('Check your email', 'We sent you a password reset link.', [{ text: 'OK' }]);
-            }}
-            style={styles.forgotButton}
-            testID="forgotPasswordButton"
-          >
-            <Text style={[styles.forgotText, { color: themeColors.textSecondary }]}>Forgot password?</Text>
-          </TouchableOpacity>
         </View>
         
         <View style={styles.footer}>
@@ -355,15 +299,5 @@ const styles = StyleSheet.create({
   footerLink: {
     fontWeight: '700',
     fontSize: 15,
-  },
-  forgotButton: {
-    marginTop: 10,
-    paddingVertical: 10,
-    alignSelf: 'flex-start',
-  },
-  forgotText: {
-    fontSize: 13,
-    fontWeight: '700',
-    textDecorationLine: 'underline',
   },
 });

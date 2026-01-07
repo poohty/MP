@@ -7,16 +7,16 @@ import CategorySelector from '@/components/CategorySelector';
 import GradientBackground from '@/components/GradientBackground';
 import { Recipe, RecipeCategory } from '@/types';
 import Colors from '@/constants/colors';
-import { Image } from 'lucide-react-native';
+import { Plus, RefreshCw, Image } from 'lucide-react-native';
 import { useTheme } from '@/hooks/theme-store';
 
 export default function RecipeBookScreen() {
-  const { recipes, isLoading, deleteRecipe, toggleFavorite, reExtractImages, supabaseTemporarilyUnavailable } = useRecipes();
+  const { recipes, isLoading, debugStorage, deleteRecipe, toggleFavorite, refreshRecipes, reExtractImages, forceReExtractAllImages } = useRecipes();
   const { isDark } = useTheme();
   const themeColors = isDark ? Colors.dark : Colors.light;
   const [selectedCategory, setSelectedCategory] = useState<RecipeCategory>('Breakfast');
   const [searchQuery, setSearchQuery] = useState<string>('');
-
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExtractingImages, setIsExtractingImages] = useState(false);
 
   const trimmedSearch = useMemo(() => searchQuery.trim(), [searchQuery]);
@@ -62,9 +62,83 @@ export default function RecipeBookScreen() {
     }
   };
 
+  const handleRefresh = async () => {
+    try {
+      setIsRefreshing(true);
+      await refreshRecipes();
+    } catch (error) {
+      console.error('Error refreshing recipes:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
-
-
+  const handleForceReExtractAll = async () => {
+    try {
+      const recipesWithUrls = recipes.filter(r => r.url).length;
+      
+      if (recipesWithUrls === 0) {
+        Alert.alert(
+          'No Recipes to Process',
+          'There are no recipes with URLs to re-extract images from.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      
+      Alert.alert(
+        '🔄 Force Re-Extract All Images',
+        `This will force re-extract images for ${recipesWithUrls} recipe${recipesWithUrls !== 1 ? 's' : ''} with URLs.\n\nThis process may take several minutes. You'll see progress updates.\n\nContinue?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Start Re-Extract',
+            style: 'destructive',
+            onPress: async () => {
+              setIsExtractingImages(true);
+              
+              // Show progress alert
+              Alert.alert(
+                '🔄 Re-Extracting Images',
+                `Processing ${recipesWithUrls} recipes...\n\nThis will run in the background. Check console logs for detailed progress.\n\nPlease wait...`,
+                []
+              );
+              
+              try {
+                console.log(`🚀 Starting FORCE re-extraction for ${recipesWithUrls} recipes...`);
+                const result = await forceReExtractAllImages();
+                console.log(`✅ FORCE re-extraction complete: ${result.success} success, ${result.failed} failed`);
+                
+                // Refresh recipes to update UI
+                await refreshRecipes();
+                
+                setIsExtractingImages(false);
+                
+                // Show completion alert
+                Alert.alert(
+                  'Re-Extraction Complete! 🎉',
+                  `Successfully processed ${result.success} image${result.success !== 1 ? 's' : ''}.${result.failed > 0 ? `\n\n⚠️ ${result.failed} failed to extract.` : ''}\n\n✨ Your cookbook should now display all available images!`,
+                  [{ text: 'Great!' }]
+                );
+              } catch (error) {
+                console.error('❌ Error during force re-extraction:', error);
+                setIsExtractingImages(false);
+                
+                Alert.alert(
+                  'Re-Extraction Error',
+                  'An error occurred during the re-extraction process. Please try again.',
+                  [{ text: 'OK' }]
+                );
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error force re-extracting images:', error);
+      setIsExtractingImages(false);
+    }
+  };
   
   const handleExtractImages = async () => {
     try {
@@ -120,8 +194,21 @@ export default function RecipeBookScreen() {
   };
 
   const recipesWithoutImages = recipes.filter(recipe => recipe.url && !recipe.imageUri).length;
+  const recipesWithImages = recipes.filter(recipe => recipe.imageUri).length;
+  const totalRecipes = recipes.length;
   
-
+  const handleDebugMenu = () => {
+    Alert.alert(
+      '🛠️ Debug Menu',
+      `Total Recipes: ${totalRecipes}\nWith Images: ${recipesWithImages}\nWithout Images: ${recipesWithoutImages}`,
+      [
+        { text: 'Image Diagnostics', onPress: () => router.push('/image-diagnostics') },
+        { text: 'Debug Storage', onPress: debugStorage },
+        { text: 'Force Re-Extract ALL', onPress: handleForceReExtractAll },
+        { text: 'Close', style: 'cancel' }
+      ]
+    );
+  };
 
   return (
     <GradientBackground>
@@ -131,7 +218,7 @@ export default function RecipeBookScreen() {
         <View style={styles.headerButtons}>
           {recipesWithoutImages > 0 && (
             <TouchableOpacity 
-              style={[styles.addButton, { backgroundColor: themeColors.accent }]}
+              style={[styles.addButton, { marginRight: 8, backgroundColor: themeColors.accent }]}
               onPress={handleExtractImages}
               disabled={isExtractingImages}
             >
@@ -143,6 +230,25 @@ export default function RecipeBookScreen() {
               )}
             </TouchableOpacity>
           )}
+          <TouchableOpacity 
+            style={[styles.addButton, { marginRight: 8, backgroundColor: themeColors.primary }]}
+            onPress={handleRefresh}
+            disabled={isRefreshing}
+          >
+            <RefreshCw size={20} color={isRefreshing ? themeColors.textSecondary : themeColors.primaryForeground} />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.addButton, { marginRight: 8, backgroundColor: themeColors.primary }]}
+            onPress={handleDebugMenu}
+          >
+            <Text style={[styles.debugText, { color: themeColors.primaryForeground }]}>Debug</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.addButton, { backgroundColor: themeColors.primary }]}
+            onPress={() => router.push('../add-recipe-photo')}
+          >
+            <Plus size={24} color={themeColors.primaryForeground} />
+          </TouchableOpacity>
         </View>
       </View>
       
@@ -170,14 +276,6 @@ export default function RecipeBookScreen() {
           onSelectCategory={setSelectedCategory}
         />
       </View>
-
-      {supabaseTemporarilyUnavailable && (
-        <View style={[styles.syncBanner, { backgroundColor: themeColors.warning }]}>
-          <Text style={[styles.syncBannerText, { color: themeColors.background }]}>
-            ⚠️ Sync temporarily unavailable. Pull to refresh or try again in a minute.
-          </Text>
-        </View>
-      )}
       
       <View style={styles.listContainer}>
         <RecipeList
@@ -248,6 +346,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...Colors.shadow,
   },
+  debugText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
   badge: {
     position: 'absolute',
     top: -4,
@@ -263,14 +365,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: 'bold',
-  },
-  syncBanner: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  syncBannerText: {
-    fontSize: 13,
-    fontWeight: '500',
   },
 });
