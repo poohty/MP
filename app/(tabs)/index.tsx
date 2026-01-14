@@ -55,7 +55,7 @@ export default function HomeScreen() {
         
         <View style={[styles.heroContainer, { height: layout.heroHeight }]}>
           <Image
-            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/hux956n7ytvzrma6tzvnh' }}
+            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/jrg902x4tvh7qfksxqiol' }}
             style={styles.heroImage}
             resizeMode="cover"
             testID="home-hero-image"
@@ -313,7 +313,7 @@ function WelcomeScreen() {
       <View style={welcomeStyles.content}>
         <View style={welcomeStyles.logoContainer}>
           <Image
-            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/3hcmxxxhnr8aykl1w78r1' }}
+            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/jrg902x4tvh7qfksxqiol' }}
             style={welcomeStyles.image}
             resizeMode="cover"
           />

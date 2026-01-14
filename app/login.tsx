@@ -121,7 +121,7 @@ export default function LoginScreen() {
         
         <View style={styles.heroContainer}>
           <Image
-            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/go2xqufleh6nyngscogs1?v=20251220' }}
+            source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/jrg902x4tvh7qfksxqiol' }}
             style={styles.heroImage}
             resizeMode="cover"
           />
