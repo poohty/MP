@@ -12,12 +12,12 @@ const [UserContext, useUser] = createContextHook(() => {
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadUserProfileFromSupabase = useCallback(async (userId: string): Promise<UserProfile | null> => {
+  const loadUserProfileFromSupabase = useCallback(async (authId: string): Promise<UserProfile | null> => {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
-        .eq('id', userId)
+        .eq('auth_id', authId)
         .single();
 
       if (error) {
@@ -32,7 +32,7 @@ const [UserContext, useUser] = createContextHook(() => {
       if (!data) return null;
 
       return {
-        id: data.id,
+        id: data.auth_id,
         email: data.email,
         username: data.username,
         displayName: data.display_name,
@@ -46,9 +46,9 @@ const [UserContext, useUser] = createContextHook(() => {
 
 
 
-  const loadFriendLinks = useCallback(async (userId?: string) => {
-    const profileId = userId || currentUserProfile?.id;
-    if (!profileId) {
+  const loadFriendLinks = useCallback(async (authId?: string) => {
+    const currentAuthId = authId || currentUserProfile?.id;
+    if (!currentAuthId) {
       setFriendLinks([]);
       return [];
     }
@@ -57,7 +57,7 @@ const [UserContext, useUser] = createContextHook(() => {
       const { data, error } = await supabase
         .from('friend_links')
         .select('*')
-        .or(`user_id.eq.${profileId},friend_user_id.eq.${profileId}`);
+        .or(`requester_auth_id.eq.${currentAuthId},recipient_auth_id.eq.${currentAuthId}`);
 
       if (error) {
         if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
@@ -70,8 +70,8 @@ const [UserContext, useUser] = createContextHook(() => {
 
       const links: FriendLink[] = (data || []).map((row: any) => ({
         id: row.id,
-        userId: row.user_id,
-        friendUserId: row.friend_user_id,
+        userId: row.requester_auth_id,
+        friendUserId: row.recipient_auth_id,
         status: row.status,
         requestedAt: new Date(row.created_at).getTime(),
       }));
@@ -99,7 +99,7 @@ const [UserContext, useUser] = createContextHook(() => {
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
-        .eq('id', authUser.id)
+        .eq('auth_id', authUser.id)
         .maybeSingle();
 
       if (error && error.code === 'PGRST116') {
@@ -130,7 +130,7 @@ const [UserContext, useUser] = createContextHook(() => {
         const fallbackShareCookbook = !!authUser.shareCookbookWithFriends;
 
         const fallbackProfileRow = {
-          id: authUser.id,
+          auth_id: authUser.id,
           email: fallbackEmail,
           username: fallbackUsername,
           display_name: fallbackDisplayName,
@@ -140,7 +140,7 @@ const [UserContext, useUser] = createContextHook(() => {
 
         const { error: upsertError } = await supabase
           .from('user_profiles')
-          .upsert(fallbackProfileRow, { onConflict: 'id' });
+          .upsert(fallbackProfileRow, { onConflict: 'auth_id' });
 
         if (upsertError) {
           console.error('❌ Supabase upsert fallback profile error:', upsertError.message || upsertError.code);
@@ -160,7 +160,7 @@ const [UserContext, useUser] = createContextHook(() => {
       }
 
       const profile: UserProfile = {
-        id: data.id,
+        id: data.auth_id,
         email: data.email,
         username: data.username,
         displayName: data.display_name,
@@ -241,10 +241,10 @@ const [UserContext, useUser] = createContextHook(() => {
       }
 
       const results: UserProfile[] = (data || [])
-        .filter((row: any) => row.id !== currentUserProfile.id)
+        .filter((row: any) => row.auth_id !== currentUserProfile.id)
         .map((row: any) => ({
-          id: row.id,
-          email: row.email,
+          id: row.auth_id,
+          email: '',
           username: row.username,
           displayName: row.display_name,
           shareCookbookWithFriends: row.share_cookbook_with_friends,
@@ -279,8 +279,8 @@ const [UserContext, useUser] = createContextHook(() => {
       const { data, error } = await supabase
         .from('friend_links')
         .insert({
-          user_id: currentUserProfile.id,
-          friend_user_id: targetUserId,
+          requester_auth_id: currentUserProfile.id,
+          recipient_auth_id: targetUserId,
           status: 'pending',
         })
         .select()
@@ -293,8 +293,8 @@ const [UserContext, useUser] = createContextHook(() => {
 
       const newLink: FriendLink = {
         id: data.id,
-        userId: data.user_id,
-        friendUserId: data.friend_user_id,
+        userId: data.requester_auth_id,
+        friendUserId: data.recipient_auth_id,
         status: data.status,
         requestedAt: new Date(data.created_at).getTime(),
       };
@@ -357,7 +357,7 @@ const [UserContext, useUser] = createContextHook(() => {
       const { error } = await supabase
         .from('friend_links')
         .delete()
-        .or(`and(user_id.eq.${currentUserProfile.id},friend_user_id.eq.${friendUserId}),and(user_id.eq.${friendUserId},friend_user_id.eq.${currentUserProfile.id})`);
+        .or(`and(requester_auth_id.eq.${currentUserProfile.id},recipient_auth_id.eq.${friendUserId}),and(requester_auth_id.eq.${friendUserId},recipient_auth_id.eq.${currentUserProfile.id})`);
 
       if (error) {
         console.error('❌ Remove friend error:', error.message || error.code || 'Unknown error');

@@ -10,7 +10,7 @@ const USER_STORAGE_KEY = 'meal-planner-user';
 
 type LoginResult =
   | { ok: true }
-  | { ok: false; reason: 'BAD_CREDENTIALS' | 'EMAIL_NOT_VERIFIED' | 'LOGIN_FAILED' };
+  | { ok: false; reason: 'BAD_CREDENTIALS' | 'LOGIN_FAILED' };
 
 type SignupResult =
   | { ok: true; reason?: 'VERIFY_EMAIL_REQUIRED' }
@@ -23,7 +23,7 @@ function getEmailRedirectTo(): string {
     return url;
   } catch (e) {
     console.warn('⚠️ Failed to create email redirect URL. Falling back to scheme.', e);
-    return 'myapp://auth-callback';
+    return 'mealplannerroulette://auth-callback';
   }
 }
 
@@ -31,13 +31,13 @@ const result = createContextHook(() => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const upsertUserProfileToSupabase = useCallback(async (userToStore: User) => {
+  const upsertUserProfileToSupabase = useCallback(async (userToStore: User, authId: string) => {
     if (!isSupabaseEnabled) {
       return;
     }
 
-    if (!userToStore?.id || !userToStore?.email) {
-      console.warn('⚠️ Cannot upsert user without id or email');
+    if (!authId || !userToStore?.email) {
+      console.warn('⚠️ Cannot upsert user without authId or email');
       return;
     }
 
@@ -46,7 +46,7 @@ const result = createContextHook(() => {
       const displayName = userToStore.name || userToStore.username || userToStore.email;
 
       console.log('📤 Upserting user to Supabase:', {
-        id: userToStore.id,
+        auth_id: authId,
         email: userToStore.email,
         username,
         displayName,
@@ -57,24 +57,69 @@ const result = createContextHook(() => {
         .from('user_profiles')
         .upsert(
           {
-            id: userToStore.id,
+            auth_id: authId,
             email: userToStore.email,
             username,
             display_name: displayName,
             share_cookbook_with_friends: !!userToStore.shareCookbookWithFriends,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: 'id' }
+          { onConflict: 'auth_id' }
         );
 
       if (error) {
+        if (error.code === '23505' && error.message?.includes('username')) {
+          console.error('❌ Username already taken');
+          throw new Error('Username already taken. Please choose a different one.');
+        }
         console.error('❌ Supabase upsertUserProfile error:', error);
         console.error('❌ Full error details:', JSON.stringify(error, null, 2));
+        throw error;
       } else {
-        console.log('✅ Supabase user_profiles upserted:', { id: userToStore.id, username });
+        console.log('✅ Supabase user_profiles upserted:', { auth_id: authId, username });
       }
     } catch (error) {
       console.error('❌ Failed to upsert user to Supabase:', error);
+      throw error;
+    }
+  }, []);
+
+  const migrateUserLegacyData = useCallback(async (authId: string, email: string) => {
+    if (!isSupabaseEnabled) {
+      return;
+    }
+
+    try {
+      console.log('🔄 Migrating legacy data for auth user:', authId);
+      
+      const legacyUserId = email.toLowerCase().replace(/[^a-z0-9]/g, '');
+      console.log('🔄 Legacy user ID:', legacyUserId);
+
+      const { error: recipeError } = await supabase
+        .from('recipes')
+        .update({ owner_auth_id: authId })
+        .eq('owner_user_id', legacyUserId)
+        .is('owner_auth_id', null);
+
+      if (recipeError) {
+        console.warn('⚠️ Failed to migrate legacy recipes:', recipeError.message);
+      } else {
+        console.log('✅ Migrated legacy recipes');
+      }
+
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update({ auth_id: authId })
+        .ilike('email', email)
+        .is('auth_id', null);
+
+      if (profileError) {
+        console.warn('⚠️ Failed to migrate legacy profile:', profileError.message);
+      } else {
+        console.log('✅ Migrated legacy profile');
+      }
+    } catch (error) {
+      console.warn('⚠️ Legacy migration error (non-fatal):', error);
     }
   }, []);
 
@@ -96,7 +141,17 @@ const result = createContextHook(() => {
         console.log('Parsed user:', parsedUser);
         setUser(parsedUser);
 
-        await upsertUserProfileToSupabase(parsedUser);
+        if (isSupabaseEnabled) {
+          try {
+            const { data: { user: authUser } } = await supabase.auth.getUser();
+            if (authUser?.id) {
+              await migrateUserLegacyData(authUser.id, parsedUser.email);
+              await upsertUserProfileToSupabase(parsedUser, authUser.id);
+            }
+          } catch (error) {
+            console.warn('⚠️ Failed to sync user profile on load:', error);
+          }
+        }
       } else {
         console.log('No user found in storage');
       }
@@ -105,7 +160,7 @@ const result = createContextHook(() => {
     } finally {
       setIsLoading(false);
     }
-  }, [upsertUserProfileToSupabase]);
+  }, [upsertUserProfileToSupabase, migrateUserLegacyData]);
 
   useEffect(() => {
     loadUser();
@@ -147,18 +202,10 @@ const result = createContextHook(() => {
           return { ok: false, reason: 'BAD_CREDENTIALS' };
         }
 
-        const confirmedAt = (data.user.email_confirmed_at ?? null) as string | null;
         console.log('🔐 Supabase login user:', {
           id: data.user.id,
           email: data.user.email,
-          email_confirmed_at: confirmedAt,
         });
-
-        if (!confirmedAt) {
-          console.warn('🔐 Email not verified. Signing out.');
-          await supabase.auth.signOut();
-          return { ok: false, reason: 'EMAIL_NOT_VERIFIED' };
-        }
 
         const safeEmail = data.user.email ?? email;
         const username = safeEmail.split('@')[0].toLowerCase();
@@ -173,7 +220,15 @@ const result = createContextHook(() => {
         await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
         setUser(newUser);
 
-        await upsertUserProfileToSupabase(newUser);
+        try {
+          await migrateUserLegacyData(data.user.id, safeEmail);
+          await upsertUserProfileToSupabase(newUser, data.user.id);
+        } catch (error) {
+          console.error('❌ Failed to sync profile on login:', error);
+          await AsyncStorage.removeItem(USER_STORAGE_KEY);
+          setUser(null);
+          return { ok: false, reason: 'LOGIN_FAILED' };
+        }
 
         router.replace('/(tabs)');
         return { ok: true };
@@ -182,7 +237,7 @@ const result = createContextHook(() => {
         return { ok: false, reason: 'LOGIN_FAILED' };
       }
     },
-    [upsertUserProfileToSupabase]
+    [upsertUserProfileToSupabase, migrateUserLegacyData]
   );
 
   const signup = useCallback(
@@ -260,7 +315,15 @@ const result = createContextHook(() => {
         await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
         setUser(newUser);
 
-        await upsertUserProfileToSupabase(newUser);
+        try {
+          await upsertUserProfileToSupabase(newUser, supaUser.id);
+        } catch (error) {
+          console.error('❌ Failed to create profile on signup:', error);
+          await supabase.auth.signOut();
+          await AsyncStorage.removeItem(USER_STORAGE_KEY);
+          setUser(null);
+          return { ok: false, reason: 'SIGNUP_FAILED' };
+        }
 
         router.replace('/(tabs)');
         return { ok: true };
@@ -285,7 +348,16 @@ const result = createContextHook(() => {
       await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
       setUser(updatedUser);
       
-      await upsertUserProfileToSupabase(updatedUser);
+      if (isSupabaseEnabled) {
+        try {
+          const { data: { user: authUser } } = await supabase.auth.getUser();
+          if (authUser?.id) {
+            await upsertUserProfileToSupabase(updatedUser, authUser.id);
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to sync profile update:', error);
+        }
+      }
     } catch (error) {
       console.error('Failed to update profile:', error);
     }

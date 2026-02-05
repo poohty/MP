@@ -15,18 +15,18 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadRecipesFromSupabase = useCallback(async (ownerUserId: string): Promise<Recipe[]> => {
+  const loadRecipesFromSupabase = useCallback(async (ownerAuthId: string): Promise<Recipe[]> => {
     if (!isSupabaseEnabled) {
       console.log('📴 Supabase disabled, skipping remote load');
       return [];
     }
 
     try {
-      console.log(`📥 Loading recipes from Supabase for user: ${ownerUserId}`);
+      console.log(`📥 Loading recipes from Supabase for auth user: ${ownerAuthId}`);
       const { data, error } = await supabase
         .from('recipes')
         .select('*')
-        .eq('owner_user_id', ownerUserId)
+        .eq('owner_auth_id', ownerAuthId)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -50,29 +50,32 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
     }
   }, []);
 
-  const syncRecipeToSupabase = useCallback(async (recipe: Recipe, ownerUserId: string) => {
+  const syncRecipeToSupabase = useCallback(async (recipe: Recipe, ownerAuthId: string) => {
     if (!isSupabaseEnabled) {
       return;
     }
 
     try {
-      if (!ownerUserId) {
-        console.error('❌ syncRecipeToSupabase called without ownerUserId', { recipeId: recipe.id });
+      if (!ownerAuthId) {
+        console.error('❌ syncRecipeToSupabase called without ownerAuthId', { recipeId: recipe.id });
         return;
       }
+
+      const legacyOwnerId = recipe.ownerUserId || '';
 
       const { error } = await supabase
         .from('recipes')
         .upsert(
           {
             id: recipe.id,
-            owner_user_id: ownerUserId,
+            owner_auth_id: ownerAuthId,
+            owner_user_id: legacyOwnerId,
             name: recipe.name,
             category: recipe.category,
             data_json: recipe,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: 'owner_user_id,id' }
+          { onConflict: 'id' }
         );
 
       if (error) {
@@ -81,7 +84,7 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         console.error('❌ Error details:', error.details);
         console.error('❌ Error hint:', error.hint);
       } else {
-        console.log('✅ Synced recipe to Supabase', recipe.id, ownerUserId);
+        console.log('✅ Synced recipe to Supabase', recipe.id, ownerAuthId);
       }
     } catch (error) {
       console.error('❌ Failed to sync recipe to Supabase:', error);
