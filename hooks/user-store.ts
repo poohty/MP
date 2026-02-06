@@ -18,13 +18,13 @@ const [UserContext, useUser] = createContextHook(() => {
         .from('user_profiles')
         .select('*')
         .eq('auth_id', authId)
-        .single();
+        .maybeSingle();
 
       if (error) {
         if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
           console.error('⚠️ Supabase unavailable (server error). Operating in offline mode.');
         } else {
-          console.error('❌ Supabase error:', error.message || error.code || 'Unknown error');
+          console.error('Supabase load current user profile error:', JSON.stringify(error, null, 2));
         }
         return null;
       }
@@ -63,7 +63,7 @@ const [UserContext, useUser] = createContextHook(() => {
         if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
           console.warn('⚠️ Supabase unavailable. Friend features disabled.');
         } else {
-          console.error('❌ Supabase error loading friend links:', error.message || error.code);
+          console.error('Supabase load friend links error:', JSON.stringify(error, null, 2));
         }
         return [];
       }
