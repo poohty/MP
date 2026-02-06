@@ -49,15 +49,6 @@ export default function LoginScreen() {
       const result = await login(email.trim(), password);
 
       if (!result.ok) {
-        if (result.reason === 'EMAIL_NOT_VERIFIED') {
-          Alert.alert(
-            'Email not verified',
-            'Please verify your email using the link we sent, then log in.',
-            [{ text: 'OK' }]
-          );
-          return;
-        }
-
         setErrors({ email: 'Invalid email or password' });
       }
     } catch (error) {
