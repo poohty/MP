@@ -167,7 +167,7 @@ const [UserContext, useUser] = createContextHook(() => {
         shareCookbookWithFriends: data.share_cookbook_with_friends,
       };
       setCurrentUserProfile(profile);
-      await loadFriendLinks(data.id);
+      await loadFriendLinks(data.auth_id);
     } catch {
       console.warn('⚠️ Network error. Using local profile data.');
       const fallbackProfile: UserProfile = {
