@@ -20,12 +20,10 @@ export default function HomeScreen() {
   const layout = useMemo(() => {
     const heroHeight = Math.max(112, Math.min(140, Math.round(windowHeight * 0.17)));
     const actionCardMinHeight = Math.max(112, Math.min(142, Math.round(windowHeight * 0.17)));
-    const statPaddingV = Math.max(10, Math.min(12, Math.round(windowHeight * 0.014)));
 
     return {
       heroHeight,
       actionCardMinHeight,
-      statPaddingV,
     };
   }, [windowHeight]);
 
@@ -69,42 +67,6 @@ export default function HomeScreen() {
             <Text style={styles.heroSubtitle}>
               Create random meal plans from your recipe collection
             </Text>
-          </View>
-        </View>
-        
-        <View style={styles.statsContainer}>
-          <View
-            style={[
-              styles.statCard,
-              { backgroundColor: themeColors.card, borderColor: themeColors.border, paddingVertical: layout.statPaddingV },
-            ]}
-          >
-            <Text style={[styles.statNumber, { color: themeColors.text }]}>{recipes.length}</Text>
-            <Text style={[styles.statLabel, { color: themeColors.textSecondary }]}>Recipes</Text>
-          </View>
-          
-          <View
-            style={[
-              styles.statCard,
-              { backgroundColor: themeColors.card, borderColor: themeColors.border, paddingVertical: layout.statPaddingV },
-            ]}
-          >
-            <Text style={[styles.statNumber, { color: themeColors.text }]}>
-              {recipes.filter(r => r.category === 'Main Course').length}
-            </Text>
-            <Text style={[styles.statLabel, { color: themeColors.textSecondary }]}>Main Courses</Text>
-          </View>
-          
-          <View
-            style={[
-              styles.statCard,
-              { backgroundColor: themeColors.card, borderColor: themeColors.border, paddingVertical: layout.statPaddingV },
-            ]}
-          >
-            <Text style={[styles.statNumber, { color: themeColors.text }]}>
-              {recipes.filter(r => r.category === 'Desserts').length}
-            </Text>
-            <Text style={[styles.statLabel, { color: themeColors.textSecondary }]}>Desserts</Text>
           </View>
         </View>
         
@@ -229,29 +191,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
     color: 'rgba(255, 255, 255, 0.9)',
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-    gap: 8,
-  },
-  statCard: {
-    borderRadius: Colors.radius,
-    paddingHorizontal: 10,
-    alignItems: 'center' as const,
-    flex: 1,
-    borderWidth: 1,
-    ...Colors.shadow,
-  },
-  statNumber: {
-    fontSize: 17,
-    fontWeight: 'bold' as const,
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: 10,
-    fontWeight: '600' as const,
   },
   sectionTitle: {
     fontSize: 15,
