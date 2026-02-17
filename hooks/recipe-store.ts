@@ -30,6 +30,9 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         .order('created_at', { ascending: false });
 
       if (error) {
+        if (error.message?.includes('Failed to fetch')) {
+          return [];
+        }
         console.error('❌ Supabase loadRecipes error:', JSON.stringify(error, null, 2));
         console.error('❌ Error message:', error.message);
         console.error('❌ Error details:', error.details);
@@ -45,6 +48,9 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
       console.log(`✅ Loaded ${recipes.length} recipes from Supabase`);
       return recipes;
     } catch (error) {
+      if (error instanceof TypeError && (error as TypeError).message.includes('Failed to fetch')) {
+        return [];
+      }
       console.error('❌ Failed to load recipes from Supabase:', error);
       return [];
     }
@@ -76,6 +82,9 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         );
 
       if (error) {
+        if (error.message?.includes('Failed to fetch')) {
+          return;
+        }
         console.error('❌ Supabase syncRecipe error:', JSON.stringify(error, null, 2));
         console.error('❌ Error message:', error.message);
         console.error('❌ Error details:', error.details);
@@ -84,6 +93,9 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         console.log('✅ Synced recipe to Supabase', recipe.id, ownerUserId);
       }
     } catch (error) {
+      if (error instanceof TypeError && (error as TypeError).message.includes('Failed to fetch')) {
+        return;
+      }
       console.error('❌ Failed to sync recipe to Supabase:', error);
     }
   }, []);

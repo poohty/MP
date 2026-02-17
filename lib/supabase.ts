@@ -3,10 +3,11 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-const isSupabaseConfigured = !!(SUPABASE_URL && SUPABASE_ANON_KEY && 
+export const isSupabaseConfigured = !!(SUPABASE_URL && SUPABASE_ANON_KEY && 
   SUPABASE_URL !== 'https://placeholder.supabase.co' &&
   SUPABASE_ANON_KEY !== 'placeholder-key' &&
-  SUPABASE_URL.includes('supabase.co'));
+  SUPABASE_URL.startsWith('https://') &&
+  SUPABASE_ANON_KEY.length > 100);
 
 if (!isSupabaseConfigured) {
   console.warn('⚠️ Supabase is not configured properly. App will work in offline mode.');
@@ -21,15 +22,7 @@ export const supabase = createClient(
       persistSession: false,
     },
     global: {
-      fetch: (url, options) => {
-        if (!isSupabaseConfigured) {
-          return Promise.reject(new Error('Supabase not configured'));
-        }
-        return fetch(url, options).catch((error) => {
-          console.warn('⚠️ Supabase fetch error (connection issue):', error.message);
-          return Promise.reject(error);
-        });
-      },
+      fetch: (input, init) => fetch(input as any, init as any),
     },
   }
 );

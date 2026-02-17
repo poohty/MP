@@ -185,11 +185,6 @@ const [UserContext, useUser] = createContextHook(() => {
       setCurrentUserProfile(profile);
       await loadFriendLinks(data.id);
     } catch (error) {
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        console.warn('⚠️ Supabase connection failed. Using offline mode.');
-      } else {
-        console.warn('⚠️ Network error. Using local profile data.');
-      }
       const fallbackProfile: UserProfile = {
         id: authUser.id,
         email: authUser.email,
