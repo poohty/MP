@@ -20,6 +20,17 @@ export const supabase = createClient(
     auth: {
       persistSession: false,
     },
+    global: {
+      fetch: (url, options) => {
+        if (!isSupabaseConfigured) {
+          return Promise.reject(new Error('Supabase not configured'));
+        }
+        return fetch(url, options).catch((error) => {
+          console.warn('⚠️ Supabase fetch error (connection issue):', error.message);
+          return Promise.reject(error);
+        });
+      },
+    },
   }
 );
 

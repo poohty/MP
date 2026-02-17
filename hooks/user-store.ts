@@ -2,7 +2,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
 import { UserProfile, FriendLink } from '@/types';
 import { useAuth } from './auth-store';
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 
 const [UserContext, useUser] = createContextHook(() => {
   const { user: authUser, updateProfile: updateAuthProfile } = useAuth();
@@ -13,6 +13,10 @@ const [UserContext, useUser] = createContextHook(() => {
   const [isLoading, setIsLoading] = useState(true);
 
   const loadUserProfileFromSupabase = useCallback(async (userId: string): Promise<UserProfile | null> => {
+    if (!isSupabaseEnabled) {
+      return null;
+    }
+    
     try {
       const { data, error } = await supabase
         .from('user_profiles')
@@ -39,7 +43,6 @@ const [UserContext, useUser] = createContextHook(() => {
         shareCookbookWithFriends: data.share_cookbook_with_friends,
       };
     } catch {
-      console.error('⚠️ Network error loading user profile. Operating in offline mode.');
       return null;
     }
   }, []);
@@ -48,7 +51,7 @@ const [UserContext, useUser] = createContextHook(() => {
 
   const loadFriendLinks = useCallback(async (userId?: string) => {
     const profileId = userId || currentUserProfile?.id;
-    if (!profileId) {
+    if (!profileId || !isSupabaseEnabled) {
       setFriendLinks([]);
       return [];
     }
@@ -79,7 +82,6 @@ const [UserContext, useUser] = createContextHook(() => {
       setFriendLinks(links);
       return links;
     } catch {
-      console.warn('⚠️ Network error. Friend features unavailable.');
       return [];
     }
   }, [currentUserProfile]);
@@ -89,6 +91,20 @@ const [UserContext, useUser] = createContextHook(() => {
   const loadCurrentUser = useCallback(async () => {
     if (!authUser) {
       setCurrentUserProfile(null);
+      setFriendLinks([]);
+      setIsLoading(false);
+      return;
+    }
+
+    if (!isSupabaseEnabled) {
+      const fallbackProfile: UserProfile = {
+        id: authUser.id,
+        email: authUser.email,
+        username: authUser.username || authUser.email.split('@')[0],
+        displayName: authUser.name,
+        shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
+      };
+      setCurrentUserProfile(fallbackProfile);
       setFriendLinks([]);
       setIsLoading(false);
       return;
@@ -168,8 +184,12 @@ const [UserContext, useUser] = createContextHook(() => {
       };
       setCurrentUserProfile(profile);
       await loadFriendLinks(data.id);
-    } catch {
-      console.warn('⚠️ Network error. Using local profile data.');
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        console.warn('⚠️ Supabase connection failed. Using offline mode.');
+      } else {
+        console.warn('⚠️ Network error. Using local profile data.');
+      }
       const fallbackProfile: UserProfile = {
         id: authUser.id,
         email: authUser.email,
@@ -219,7 +239,7 @@ const [UserContext, useUser] = createContextHook(() => {
       return;
     }
 
-    if (!currentUserProfile?.id) {
+    if (!currentUserProfile?.id || !isSupabaseEnabled) {
       setSearchResults([]);
       return;
     }
@@ -260,7 +280,7 @@ const [UserContext, useUser] = createContextHook(() => {
   }, [currentUserProfile]);
 
   const sendFriendRequest = useCallback(async (targetUserId: string) => {
-    if (!currentUserProfile) return false;
+    if (!currentUserProfile || !isSupabaseEnabled) return false;
 
     try {
       const links = await loadFriendLinks();
@@ -309,6 +329,8 @@ const [UserContext, useUser] = createContextHook(() => {
   }, [currentUserProfile, loadFriendLinks]);
 
   const acceptFriendRequest = useCallback(async (friendLinkId: string) => {
+    if (!isSupabaseEnabled) return false;
+    
     try {
       const { error } = await supabase
         .from('friend_links')
@@ -330,6 +352,8 @@ const [UserContext, useUser] = createContextHook(() => {
   }, [loadFriendLinks]);
 
   const rejectFriendRequest = useCallback(async (friendLinkId: string) => {
+    if (!isSupabaseEnabled) return false;
+    
     try {
       const { error } = await supabase
         .from('friend_links')
@@ -351,7 +375,7 @@ const [UserContext, useUser] = createContextHook(() => {
   }, [loadFriendLinks]);
 
   const removeFriend = useCallback(async (friendUserId: string) => {
-    if (!currentUserProfile) return false;
+    if (!currentUserProfile || !isSupabaseEnabled) return false;
 
     try {
       const { error } = await supabase
