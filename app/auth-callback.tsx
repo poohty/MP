@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
 import Button from '@/components/Button';
 import { BadgeCheck } from 'lucide-react-native';
+import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 
 type AuthCallbackParams = {
   verified?: string | string[];
@@ -22,6 +23,8 @@ function firstParam(v: string | string[] | undefined): string {
 export default function AuthCallbackScreen() {
   const params = useLocalSearchParams<AuthCallbackParams>();
   const [showVerifiedHint, setShowVerifiedHint] = useState<boolean>(false);
+  const [isChecking, setIsChecking] = useState<boolean>(true);
+  const [verificationStatus, setVerificationStatus] = useState<'checking' | 'verified' | 'not_verified'>('checking');
 
   const parsed = useMemo(() => {
     const error = firstParam(params.error);
@@ -45,11 +48,70 @@ export default function AuthCallbackScreen() {
 
     if (parsed.error) {
       Alert.alert('Verification issue', parsed.errorDescription || parsed.error, [{ text: 'OK' }]);
+      setIsChecking(false);
+      setVerificationStatus('not_verified');
+      return;
     }
 
     if (parsed.hasAnyParams) {
       setShowVerifiedHint(true);
     }
+
+    async function checkVerification() {
+      if (!isSupabaseEnabled) {
+        console.log('✅ Supabase not enabled, skipping verification check');
+        setIsChecking(false);
+        setVerificationStatus('verified');
+        return;
+      }
+
+      try {
+        console.log('🔍 Checking user verification status...');
+
+        if (Platform.OS === 'web') {
+          const urlParams = new URLSearchParams(window.location.search);
+          const code = urlParams.get('code');
+          if (code) {
+            console.log('🔗 Found code param on web, exchanging for session...');
+            const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+            if (error) {
+              console.error('❌ Code exchange failed:', error);
+            }
+          }
+        }
+
+        const { data: sessionData } = await supabase.auth.getSession();
+        const { data: userData } = await supabase.auth.getUser();
+
+        console.log('🔍 Session data:', { hasSession: !!sessionData?.session });
+        console.log('🔍 User data:', {
+          userId: userData?.user?.id,
+          email: userData?.user?.email,
+          email_confirmed_at: userData?.user?.email_confirmed_at,
+        });
+
+        const user = userData?.user;
+        if (user && user.email_confirmed_at) {
+          console.log('✅ Email verified successfully!');
+          setVerificationStatus('verified');
+          setIsChecking(false);
+          setTimeout(() => {
+            console.log('🔄 Navigating to login...');
+            router.replace('/login');
+          }, 1000);
+        } else {
+          console.log('⏳ Email not yet verified');
+          setVerificationStatus('not_verified');
+          setIsChecking(false);
+        }
+      } catch (error) {
+        console.error('❌ Verification check failed:', error);
+        setVerificationStatus('not_verified');
+        setIsChecking(false);
+      }
+    }
+
+    checkVerification();
   }, [parsed]);
 
   return (
@@ -66,25 +128,50 @@ export default function AuthCallbackScreen() {
               <BadgeCheck size={28} color={Colors.primary} />
             </View>
 
-            <Text style={styles.title}>Email verified</Text>
-            <Text style={styles.subtitle} testID="authCallbackBody">
-              Your email has been verified. You can return to the app and log in.
-            </Text>
-
-            {showVerifiedHint ? (
-              <Text style={styles.hint} testID="authCallbackVerifiedHint">
-                Verified ✅
-              </Text>
-            ) : null}
-
-            <View style={styles.actions}>
-              <Button
-                title="Go to Login"
-                onPress={() => router.replace('/login')}
-                variant="primary"
-                testID="authCallbackGoToLoginButton"
-              />
-            </View>
+            {isChecking ? (
+              <>
+                <Text style={styles.title}>Finishing verification...</Text>
+                <ActivityIndicator size="large" color={Colors.primary} style={styles.loader} />
+                <Text style={styles.subtitle} testID="authCallbackBody">
+                  Please wait while we verify your email.
+                </Text>
+              </>
+            ) : verificationStatus === 'verified' ? (
+              <>
+                <Text style={styles.title}>Email verified!</Text>
+                <Text style={styles.subtitle} testID="authCallbackBody">
+                  Your email has been verified. You can sign in now.
+                </Text>
+                {showVerifiedHint && (
+                  <Text style={styles.hint} testID="authCallbackVerifiedHint">
+                    Verified ✅
+                  </Text>
+                )}
+                <View style={styles.actions}>
+                  <Button
+                    title="Go to Login"
+                    onPress={() => router.replace('/login')}
+                    variant="primary"
+                    testID="authCallbackGoToLoginButton"
+                  />
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.title}>Email verified</Text>
+                <Text style={styles.subtitle} testID="authCallbackBody">
+                  Your email has been verified. You can return to the app and log in.
+                </Text>
+                <View style={styles.actions}>
+                  <Button
+                    title="Go to Login"
+                    onPress={() => router.replace('/login')}
+                    variant="primary"
+                    testID="authCallbackGoToLoginButton"
+                  />
+                </View>
+              </>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -133,6 +220,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#16A34A',
+  },
+  loader: {
+    marginVertical: 16,
   },
   actions: {
     marginTop: 16,

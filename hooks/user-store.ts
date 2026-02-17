@@ -12,19 +12,19 @@ const [UserContext, useUser] = createContextHook(() => {
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadUserProfileFromSupabase = useCallback(async (authId: string): Promise<UserProfile | null> => {
+  const loadUserProfileFromSupabase = useCallback(async (userId: string): Promise<UserProfile | null> => {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
-        .eq('auth_id', authId)
-        .maybeSingle();
+        .eq('id', userId)
+        .single();
 
       if (error) {
         if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
           console.error('⚠️ Supabase unavailable (server error). Operating in offline mode.');
         } else {
-          console.error('Supabase load current user profile error:', JSON.stringify(error, null, 2));
+          console.error('❌ Supabase error:', error.message || error.code || 'Unknown error');
         }
         return null;
       }
@@ -32,7 +32,7 @@ const [UserContext, useUser] = createContextHook(() => {
       if (!data) return null;
 
       return {
-        id: data.auth_id,
+        id: data.id,
         email: data.email,
         username: data.username,
         displayName: data.display_name,
@@ -46,9 +46,9 @@ const [UserContext, useUser] = createContextHook(() => {
 
 
 
-  const loadFriendLinks = useCallback(async (authId?: string) => {
-    const currentAuthId = authId || currentUserProfile?.id;
-    if (!currentAuthId) {
+  const loadFriendLinks = useCallback(async (userId?: string) => {
+    const profileId = userId || currentUserProfile?.id;
+    if (!profileId) {
       setFriendLinks([]);
       return [];
     }
@@ -57,21 +57,21 @@ const [UserContext, useUser] = createContextHook(() => {
       const { data, error } = await supabase
         .from('friend_links')
         .select('*')
-        .or(`requester_auth_id.eq.${currentAuthId},recipient_auth_id.eq.${currentAuthId}`);
+        .or(`user_id.eq.${profileId},friend_user_id.eq.${profileId}`);
 
       if (error) {
         if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
           console.warn('⚠️ Supabase unavailable. Friend features disabled.');
         } else {
-          console.error('Supabase load friend links error:', JSON.stringify(error, null, 2));
+          console.error('❌ Supabase error loading friend links:', error.message || error.code);
         }
         return [];
       }
 
       const links: FriendLink[] = (data || []).map((row: any) => ({
         id: row.id,
-        userId: row.requester_auth_id,
-        friendUserId: row.recipient_auth_id,
+        userId: row.user_id,
+        friendUserId: row.friend_user_id,
         status: row.status,
         requestedAt: new Date(row.created_at).getTime(),
       }));
@@ -99,7 +99,7 @@ const [UserContext, useUser] = createContextHook(() => {
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
-        .eq('auth_id', authUser.id)
+        .eq('id', authUser.id)
         .maybeSingle();
 
       if (error && error.code === 'PGRST116') {
@@ -130,7 +130,7 @@ const [UserContext, useUser] = createContextHook(() => {
         const fallbackShareCookbook = !!authUser.shareCookbookWithFriends;
 
         const fallbackProfileRow = {
-          auth_id: authUser.id,
+          id: authUser.id,
           email: fallbackEmail,
           username: fallbackUsername,
           display_name: fallbackDisplayName,
@@ -140,7 +140,7 @@ const [UserContext, useUser] = createContextHook(() => {
 
         const { error: upsertError } = await supabase
           .from('user_profiles')
-          .upsert(fallbackProfileRow, { onConflict: 'auth_id' });
+          .upsert(fallbackProfileRow, { onConflict: 'id' });
 
         if (upsertError) {
           console.error('❌ Supabase upsert fallback profile error:', upsertError.message || upsertError.code);
@@ -160,14 +160,14 @@ const [UserContext, useUser] = createContextHook(() => {
       }
 
       const profile: UserProfile = {
-        id: data.auth_id,
+        id: data.id,
         email: data.email,
         username: data.username,
         displayName: data.display_name,
         shareCookbookWithFriends: data.share_cookbook_with_friends,
       };
       setCurrentUserProfile(profile);
-      await loadFriendLinks(data.auth_id);
+      await loadFriendLinks(data.id);
     } catch {
       console.warn('⚠️ Network error. Using local profile data.');
       const fallbackProfile: UserProfile = {
@@ -241,10 +241,10 @@ const [UserContext, useUser] = createContextHook(() => {
       }
 
       const results: UserProfile[] = (data || [])
-        .filter((row: any) => row.auth_id !== currentUserProfile.id)
+        .filter((row: any) => row.id !== currentUserProfile.id)
         .map((row: any) => ({
-          id: row.auth_id,
-          email: '',
+          id: row.id,
+          email: row.email,
           username: row.username,
           displayName: row.display_name,
           shareCookbookWithFriends: row.share_cookbook_with_friends,
@@ -279,8 +279,8 @@ const [UserContext, useUser] = createContextHook(() => {
       const { data, error } = await supabase
         .from('friend_links')
         .insert({
-          requester_auth_id: currentUserProfile.id,
-          recipient_auth_id: targetUserId,
+          user_id: currentUserProfile.id,
+          friend_user_id: targetUserId,
           status: 'pending',
         })
         .select()
@@ -293,8 +293,8 @@ const [UserContext, useUser] = createContextHook(() => {
 
       const newLink: FriendLink = {
         id: data.id,
-        userId: data.requester_auth_id,
-        friendUserId: data.recipient_auth_id,
+        userId: data.user_id,
+        friendUserId: data.friend_user_id,
         status: data.status,
         requestedAt: new Date(data.created_at).getTime(),
       };
@@ -357,7 +357,7 @@ const [UserContext, useUser] = createContextHook(() => {
       const { error } = await supabase
         .from('friend_links')
         .delete()
-        .or(`and(requester_auth_id.eq.${currentUserProfile.id},recipient_auth_id.eq.${friendUserId}),and(requester_auth_id.eq.${friendUserId},recipient_auth_id.eq.${currentUserProfile.id})`);
+        .or(`and(user_id.eq.${currentUserProfile.id},friend_user_id.eq.${friendUserId}),and(user_id.eq.${friendUserId},friend_user_id.eq.${currentUserProfile.id})`);
 
       if (error) {
         console.error('❌ Remove friend error:', error.message || error.code || 'Unknown error');

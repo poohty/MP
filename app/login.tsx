@@ -49,6 +49,15 @@ export default function LoginScreen() {
       const result = await login(email.trim(), password);
 
       if (!result.ok) {
+        if (result.reason === 'EMAIL_NOT_VERIFIED') {
+          Alert.alert(
+            'Email not verified',
+            'Please verify your email using the link we sent, then log in.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+
         setErrors({ email: 'Invalid email or password' });
       }
     } catch (error) {
@@ -72,8 +81,17 @@ export default function LoginScreen() {
     }
 
     try {
-      console.log('📨 Resend verification email:', { email: trimmed });
-      const { error } = await supabase.auth.resend({ type: 'signup', email: trimmed });
+      const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const emailRedirectTo = SUPABASE_URL && SUPABASE_URL.includes('supabase.co')
+        ? `${SUPABASE_URL}/auth/v1/callback?redirect_to=mealplannerroulette://auth-callback`
+        : 'mealplannerroulette://auth-callback';
+
+      console.log('📨 Resend verification email:', { email: trimmed, emailRedirectTo });
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: trimmed,
+        options: { emailRedirectTo },
+      });
       if (error) {
         console.error('📨 Resend verification error:', error);
         Alert.alert('Could not resend', error.message || 'Please try again.', [{ text: 'OK' }]);

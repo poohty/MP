@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, Switch } from 'react-native';
 import { useAuth } from '@/hooks/auth-store';
 import { useUser } from '@/hooks/user-store';
@@ -6,64 +6,16 @@ import { useTheme } from '@/hooks/theme-store';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
-import { User, Settings, Info, Heart, Users, Moon, Mail } from 'lucide-react-native';
+import { User, Settings, Info, Heart, Users, Moon } from 'lucide-react-native';
 import { router } from 'expo-router';
-import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const { currentUserProfile, updateShareCookbook } = useUser();
   const { toggleTheme, isDark } = useTheme();
   const [isUpdatingShare, setIsUpdatingShare] = useState(false);
-  const [isEmailVerified, setIsEmailVerified] = useState(true);
-  const [isResendingEmail, setIsResendingEmail] = useState(false);
 
   const colors = isDark ? Colors.dark : Colors.light;
-
-  useEffect(() => {
-    async function checkEmailVerification() {
-      if (!isSupabaseEnabled || !user) {
-        setIsEmailVerified(true);
-        return;
-      }
-
-      try {
-        const { data: { user: authUser } } = await supabase.auth.getUser();
-        const verified = !!authUser?.email_confirmed_at;
-        setIsEmailVerified(verified);
-      } catch (error) {
-        console.warn('Failed to check email verification:', error);
-        setIsEmailVerified(true);
-      }
-    }
-
-    checkEmailVerification();
-  }, [user]);
-
-  const handleResendVerification = async () => {
-    if (!user?.email) return;
-
-    setIsResendingEmail(true);
-    try {
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: user.email,
-        options: {
-          emailRedirectTo: 'mealplannerroulette://auth-callback',
-        },
-      });
-
-      if (error) {
-        Alert.alert('Error', 'Failed to resend verification email. Please try again.');
-      } else {
-        Alert.alert('Email Sent', 'Verification email has been sent. Please check your inbox.');
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to resend verification email.');
-    } finally {
-      setIsResendingEmail(false);
-    }
-  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -86,26 +38,6 @@ export default function ProfileScreen() {
   return (
     <GradientBackground>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        {!isEmailVerified && (
-          <View style={[styles.verificationBanner, { backgroundColor: colors.primary }]}>
-            <View style={styles.verificationContent}>
-              <Mail size={20} color="#FFFFFF" style={styles.verificationIcon} />
-              <View style={styles.verificationTextContainer}>
-                <Text style={styles.verificationTitle}>Verify your email</Text>
-                <Text style={styles.verificationMessage}>
-                  Check your inbox and click the verification link
-                </Text>
-              </View>
-            </View>
-            <Button
-              title={isResendingEmail ? 'Sending...' : 'Resend'}
-              onPress={handleResendVerification}
-              disabled={isResendingEmail}
-              variant="outline"
-              style={styles.resendButton}
-            />
-          </View>
-        )}
         <View style={styles.header}>
           <View style={[styles.avatarContainer, { backgroundColor: colors.primary }]}>
             <Text style={[styles.avatarText, { color: colors.primaryForeground }]}>
@@ -290,39 +222,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: Colors.textSecondary,
     fontSize: 14,
-  },
-  verificationBanner: {
-    backgroundColor: Colors.primary,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 24,
-  },
-  verificationContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  verificationIcon: {
-    marginRight: 12,
-    marginTop: 2,
-  },
-  verificationTextContainer: {
-    flex: 1,
-  },
-  verificationTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  verificationMessage: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    opacity: 0.9,
-  },
-  resendButton: {
-    backgroundColor: 'transparent',
-    borderColor: '#FFFFFF',
-    borderWidth: 1,
   },
 });
