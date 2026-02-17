@@ -51,7 +51,7 @@ export default function HomeScreen() {
           <Text style={[styles.name, { color: themeColors.text }]}>{user?.name || 'Chef'}</Text>
         </View>
         
-        <View style={[styles.heroContainer, { height: layout.heroHeight }]}>
+        <View style={styles.heroContainer}>
           <Image
             source={{ uri: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/jrg902x4tvh7qfksxqiol' }}
             style={styles.heroImage}
@@ -158,14 +158,17 @@ const styles = StyleSheet.create({
     fontWeight: 'bold' as const,
   },
   heroContainer: {
+    width: 358,
+    height: 180,
     borderRadius: Colors.radius,
     overflow: 'hidden',
     marginBottom: 10,
+    alignSelf: 'center',
     ...Colors.shadowMd,
   },
   heroImage: {
-    width: '100%',
-    height: '100%',
+    width: 358,
+    height: 180,
   },
   heroGradient: {
     position: 'absolute',
