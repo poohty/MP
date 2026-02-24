@@ -9,6 +9,15 @@ import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
 import { Camera, Link, FolderOpen } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useWalkthrough, WalkthroughStep } from '@/hooks/useWalkthrough';
+import WalkthroughModal from '@/components/WalkthroughModal';
+
+const HOME_WALKTHROUGH_STEPS: WalkthroughStep[] = [
+  { title: 'Add recipes', body: 'You can add recipes in three ways. Let\'s go over them.' },
+  { title: 'Upload a photo', body: 'Use the Photo option to scan a recipe from an image.' },
+  { title: 'Paste a link', body: 'Use the Link option to paste any recipe URL and import it.' },
+  { title: 'Import a folder', body: 'Use Folder/Bookmark import to upload multiple recipe links at once.' },
+];
 
 export default function HomeScreen() {
   const { user, isAuthenticated, isLoading } = useAuth();
@@ -16,6 +25,7 @@ export default function HomeScreen() {
   const { isDark } = useTheme();
   const themeColors = isDark ? Colors.dark : Colors.light;
   const { height: windowHeight } = useWindowDimensions();
+  const walkthrough = useWalkthrough('home', HOME_WALKTHROUGH_STEPS);
 
   const layout = useMemo(() => {
     const heroHeight = Math.max(112, Math.min(140, Math.round(windowHeight * 0.17)));
@@ -133,6 +143,14 @@ export default function HomeScreen() {
           testID="home-create-meal-plan"
         />
       </ScrollView>
+      <WalkthroughModal
+        visible={walkthrough.isVisible}
+        step={walkthrough.currentStep}
+        stepIndex={walkthrough.stepIndex}
+        totalSteps={walkthrough.totalSteps}
+        onNext={walkthrough.next}
+        onSkip={walkthrough.skip}
+      />
     </GradientBackground>
   );
 }

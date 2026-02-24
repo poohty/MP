@@ -7,6 +7,12 @@ import { Trash2, ChevronRight, ShoppingCart } from 'lucide-react-native';
 import { MealPlan, MealPlanRecipe, RecipeCategory } from '@/types';
 import MultiplierDropdown from '@/components/MultiplierDropdown';
 import Button from '@/components/Button';
+import { useWalkthrough, WalkthroughStep } from '@/hooks/useWalkthrough';
+import WalkthroughModal from '@/components/WalkthroughModal';
+
+const MEAL_PLAN_REVIEW_STEPS: WalkthroughStep[] = [
+  { title: 'Roulette changes', body: 'Tap the Roulette Wheel to swap a suggestion. You can spin as many times as you want.' },
+];
 import Svg, { Circle, Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 
 const RouletteWheelIcon = ({ size = 20 }: { size?: number }) => (
@@ -60,6 +66,7 @@ export default function MealPlanDetailsScreen() {
   const { mealPlans, deleteMealPlan, respinRecipe, updateRecipeMultiplier, generateGroceryList } = useMealPlans();
   const [mealPlan, setMealPlan] = useState<MealPlan | null>(null);
   const [isGeneratingGroceryList, setIsGeneratingGroceryList] = useState(false);
+  const walkthrough = useWalkthrough('meal-plan-review', MEAL_PLAN_REVIEW_STEPS);
 
   useEffect(() => {
     if (id) {
@@ -259,6 +266,14 @@ export default function MealPlanDetailsScreen() {
           </Button>
         </View>
       </ScrollView>
+      <WalkthroughModal
+        visible={walkthrough.isVisible}
+        step={walkthrough.currentStep}
+        stepIndex={walkthrough.stepIndex}
+        totalSteps={walkthrough.totalSteps}
+        onNext={walkthrough.next}
+        onSkip={walkthrough.skip}
+      />
     </>
   );
 }

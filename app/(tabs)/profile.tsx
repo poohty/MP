@@ -121,7 +121,10 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>About</Text>
           
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/help-support' as any)}
+          >
             <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
               <Info size={20} color={colors.primary} />
             </View>

@@ -9,6 +9,14 @@ import { Recipe, RecipeCategory } from '@/types';
 import Colors from '@/constants/colors';
 import { Plus } from 'lucide-react-native';
 import { useTheme } from '@/hooks/theme-store';
+import { useWalkthrough, WalkthroughStep } from '@/hooks/useWalkthrough';
+import WalkthroughModal from '@/components/WalkthroughModal';
+
+const RECIPE_BOOK_STEPS: WalkthroughStep[] = [
+  { title: 'Browse categories', body: 'Tap a category to filter your cookbook.' },
+  { title: 'Search recipes', body: 'Use the search bar to find recipes by name across your cookbook.' },
+  { title: 'Open a recipe', body: 'Tap a recipe card to view ingredients, instructions, and details.' },
+];
 
 export default function RecipeBookScreen() {
   const { recipes, isLoading, deleteRecipe, toggleFavorite } = useRecipes();
@@ -16,6 +24,7 @@ export default function RecipeBookScreen() {
   const themeColors = isDark ? Colors.dark : Colors.light;
   const [selectedCategory, setSelectedCategory] = useState<RecipeCategory>('Breakfast');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const walkthrough = useWalkthrough('recipe-book', RECIPE_BOOK_STEPS);
 
   const trimmedSearch = useMemo(() => searchQuery.trim(), [searchQuery]);
   const isSearching = trimmedSearch.length > 0;
@@ -111,6 +120,14 @@ export default function RecipeBookScreen() {
         />
       </View>
     </View>
+      <WalkthroughModal
+        visible={walkthrough.isVisible}
+        step={walkthrough.currentStep}
+        stepIndex={walkthrough.stepIndex}
+        totalSteps={walkthrough.totalSteps}
+        onNext={walkthrough.next}
+        onSkip={walkthrough.skip}
+      />
     </GradientBackground>
   );
 }

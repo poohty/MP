@@ -7,9 +7,17 @@ import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
 import { MealPlan } from '@/types';
+import { useWalkthrough, WalkthroughStep } from '@/hooks/useWalkthrough';
+import WalkthroughModal from '@/components/WalkthroughModal';
+
+const MEAL_PLANS_STEPS: WalkthroughStep[] = [
+  { title: 'Create a meal plan', body: 'Tap Create Meal Plan to answer a few questions so we can build your plan.' },
+  { title: 'Review plans', body: 'Your saved meal plans appear here. Tap one to open it.' },
+];
 
 export default function MealPlansScreen() {
   const { mealPlans, isLoading, refreshMealPlans } = useMealPlans();
+  const walkthrough = useWalkthrough('meal-plans', MEAL_PLANS_STEPS);
 
   useFocusEffect(
     useCallback(() => {
@@ -57,6 +65,14 @@ export default function MealPlansScreen() {
         />
       )}
       </View>
+      <WalkthroughModal
+        visible={walkthrough.isVisible}
+        step={walkthrough.currentStep}
+        stepIndex={walkthrough.stepIndex}
+        totalSteps={walkthrough.totalSteps}
+        onNext={walkthrough.next}
+        onSkip={walkthrough.skip}
+      />
     </GradientBackground>
   );
 }

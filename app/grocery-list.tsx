@@ -7,6 +7,14 @@ import { GroceryList, GroceryItem, StoreComparison } from '@/types';
 
 import * as Location from 'expo-location';
 import Button from '@/components/Button';
+import { useWalkthrough, WalkthroughStep } from '@/hooks/useWalkthrough';
+import WalkthroughModal from '@/components/WalkthroughModal';
+
+const GROCERY_LIST_STEPS: WalkthroughStep[] = [
+  { title: 'Check items off', body: 'Tap the checkbox to mark items as you shop.' },
+  { title: 'Find cheapest store near me', body: 'Use Find Cheapest Store to compare the 3 closest stores for your full list.' },
+  { title: 'Add a store manually', body: 'You can also add a store manually to compare pricing.' },
+];
 
 export default function GroceryListScreen() {
   const { groceryListData } = useLocalSearchParams<{ groceryListData: string }>();
@@ -28,6 +36,7 @@ export default function GroceryListScreen() {
   const [newStoreAddress, setNewStoreAddress] = useState('');
   const [newStoreDistance, setNewStoreDistance] = useState('');
 
+  const walkthrough = useWalkthrough('grocery-list', GROCERY_LIST_STEPS);
   const scrollViewRef = useRef<ScrollView | null>(null);
   const [groceryItemsAnchorY, setGroceryItemsAnchorY] = useState<number>(0);
 
@@ -827,6 +836,14 @@ Use realistic grocery store pricing. Consider the store type and location for pr
           </ScrollView>
         </View>
       </Modal>
+      <WalkthroughModal
+        visible={walkthrough.isVisible}
+        step={walkthrough.currentStep}
+        stepIndex={walkthrough.stepIndex}
+        totalSteps={walkthrough.totalSteps}
+        onNext={walkthrough.next}
+        onSkip={walkthrough.skip}
+      />
     </>
   );
 }
