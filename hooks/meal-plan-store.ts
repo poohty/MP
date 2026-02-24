@@ -29,8 +29,18 @@ const result = createContextHook(() => {
           setMealPlans([]);
           return;
         }
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        const freshPlans = parsedMealPlans.filter((plan: any) => {
+          const createdAt = plan.createdAt ?? 0;
+          return now - createdAt <= THIRTY_DAYS_MS;
+        });
+        if (freshPlans.length < parsedMealPlans.length) {
+          console.log(`🗑️ Auto-deleted ${parsedMealPlans.length - freshPlans.length} meal plan(s) older than 30 days`);
+          await AsyncStorage.setItem(`${MEAL_PLANS_STORAGE_KEY}-${user?.id}`, JSON.stringify(freshPlans));
+        }
         // Migrate old meal plans to new structure
-        const migratedMealPlans = parsedMealPlans.map((plan: any) => {
+        const migratedMealPlans = freshPlans.map((plan: any) => {
           // Check if this is an old format meal plan
           if (plan.mainCourses && plan.mainCourses.length > 0 && !plan.mainCourses[0].recipe) {
             return {

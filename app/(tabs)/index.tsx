@@ -46,19 +46,11 @@ export default function HomeScreen() {
     return null;
   }
 
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good Morning';
-    if (hour < 18) return 'Good Afternoon';
-    return 'Good Evening';
-  };
-
   return (
     <GradientBackground>
       <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={[styles.greeting, { color: themeColors.textSecondary }]}>{getGreeting()}</Text>
-          <Text style={[styles.name, { color: themeColors.text }]}>{user?.name || 'Chef'}</Text>
+          <Text style={[styles.name, { color: themeColors.text }]}>Meal Planning Roulette</Text>
         </View>
         
         <View style={styles.heroContainer}>
