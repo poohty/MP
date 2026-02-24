@@ -25,8 +25,10 @@ const [UserContext, useUser] = createContextHook(() => {
         .single();
 
       if (error) {
-        if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
-          console.error('⚠️ Supabase unavailable (server error). Operating in offline mode.');
+        if (error.message?.includes('Failed to fetch') || error.message?.includes('Network request failed')) {
+          console.warn('⚠️ Network unavailable. Profile load skipped.');
+        } else if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
+          console.warn('⚠️ Supabase unavailable (server error). Operating in offline mode.');
         } else {
           console.error('❌ Supabase error:', error.message || error.code || 'Unknown error');
         }
@@ -63,7 +65,9 @@ const [UserContext, useUser] = createContextHook(() => {
         .or(`user_id.eq.${profileId},friend_user_id.eq.${profileId}`);
 
       if (error) {
-        if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
+        if (error.message?.includes('Failed to fetch') || error.message?.includes('Network request failed')) {
+          console.warn('⚠️ Network unavailable. Friend links load skipped.');
+        } else if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
           console.warn('⚠️ Supabase unavailable. Friend features disabled.');
         } else {
           console.error('❌ Supabase error loading friend links:', error.message || error.code);
@@ -121,7 +125,9 @@ const [UserContext, useUser] = createContextHook(() => {
       if (error && error.code === 'PGRST116') {
         console.warn('⚠️ Supabase profile missing for new user. Creating fallback profile.');
       } else if (error) {
-        if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
+        if (error.message?.includes('Failed to fetch') || error.message?.includes('Network request failed')) {
+          console.warn('⚠️ Network unavailable. Using local profile data.');
+        } else if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
           console.warn('⚠️ Supabase unavailable. Using local profile data.');
         } else {
           console.error('❌ Supabase error:', error.message || error.code);
@@ -246,7 +252,9 @@ const [UserContext, useUser] = createContextHook(() => {
         .ilike('username', `%${normalized}%`);
 
       if (error) {
-        if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
+        if (error.message?.includes('Failed to fetch') || error.message?.includes('Network request failed')) {
+          console.warn('⚠️ Network unavailable. User search disabled.');
+        } else if (error.message?.includes('<!DOCTYPE html>') || error.message?.includes('Cloudflare')) {
           console.warn('⚠️ Supabase unavailable. User search disabled.');
         } else {
           console.error('❌ Search error:', error.message || error.code);
