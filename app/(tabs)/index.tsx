@@ -211,6 +211,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800' as const,
     marginBottom: 8,
+    textAlign: 'center' as const,
   },
   actionsContainer: {
     flexDirection: 'row',
