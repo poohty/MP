@@ -158,6 +158,7 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 10,
+    alignItems: 'center' as const,
   },
   greeting: {
     fontSize: 15,
@@ -166,10 +167,11 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 28,
     fontWeight: 'bold' as const,
+    textAlign: 'center' as const,
   },
   heroContainer: {
     width: 358,
-    height: 180,
+    height: 230,
     borderRadius: Colors.radius,
     overflow: 'hidden',
     marginBottom: 10,
@@ -178,7 +180,7 @@ const styles = StyleSheet.create({
   },
   heroImage: {
     width: 358,
-    height: 180,
+    height: 230,
   },
   heroGradient: {
     position: 'absolute',

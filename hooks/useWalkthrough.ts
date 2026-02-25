@@ -12,7 +12,7 @@ function getStorageKey(userId: string, screenKey: string): string {
 }
 
 export function useWalkthrough(screenKey: string, steps: WalkthroughStep[]) {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const userId = user?.id ?? 'anon';
 
   const [isVisible, setIsVisible] = useState(false);
@@ -20,6 +20,8 @@ export function useWalkthrough(screenKey: string, steps: WalkthroughStep[]) {
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
+    if (authLoading) return;
+
     let cancelled = false;
 
     (async () => {
@@ -31,6 +33,8 @@ export function useWalkthrough(screenKey: string, steps: WalkthroughStep[]) {
           if (done !== 'true') {
             setStepIndex(0);
             setIsVisible(true);
+          } else {
+            setIsVisible(false);
           }
         }
       } catch (e) {
@@ -42,7 +46,7 @@ export function useWalkthrough(screenKey: string, steps: WalkthroughStep[]) {
     return () => {
       cancelled = true;
     };
-  }, [userId, screenKey]);
+  }, [authLoading, userId, screenKey]);
 
   const markDone = useCallback(async () => {
     try {
