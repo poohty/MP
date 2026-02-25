@@ -11,7 +11,7 @@ import { router } from 'expo-router';
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
-  const { currentUserProfile, updateShareCookbook } = useUser();
+  const { currentUserProfile, updateShareCookbook, isLoading: isProfileLoading } = useUser();
   const { toggleTheme, isDark } = useTheme();
   const [isUpdatingShare, setIsUpdatingShare] = useState(false);
 
@@ -96,25 +96,29 @@ export default function ProfileScreen() {
               <Users size={20} color={colors.primary} />
             </View>
             <Text style={[styles.menuText, { color: colors.text }]}>Share Cookbook with Friends</Text>
-            <Switch
-              value={currentUserProfile?.shareCookbookWithFriends || false}
-              onValueChange={async (value) => {
-                setIsUpdatingShare(true);
-                try {
-                  const success = await updateShareCookbook(value);
-                  if (!success) {
+            {isProfileLoading ? (
+              <Text style={{ color: colors.textSecondary, fontSize: 13 }}>Loading…</Text>
+            ) : (
+              <Switch
+                value={currentUserProfile?.shareCookbookWithFriends ?? user?.shareCookbookWithFriends ?? false}
+                onValueChange={async (value) => {
+                  setIsUpdatingShare(true);
+                  try {
+                    const success = await updateShareCookbook(value);
+                    if (!success) {
+                      Alert.alert('Error', 'Failed to update setting');
+                    }
+                  } catch {
                     Alert.alert('Error', 'Failed to update setting');
+                  } finally {
+                    setIsUpdatingShare(false);
                   }
-                } catch {
-                  Alert.alert('Error', 'Failed to update setting');
-                } finally {
-                  setIsUpdatingShare(false);
-                }
-              }}
-              disabled={isUpdatingShare}
-              trackColor={{ false: colors.muted, true: colors.primary }}
-              thumbColor="#FFFFFF"
-            />
+                }}
+                disabled={isUpdatingShare}
+                trackColor={{ false: colors.muted, true: colors.primary }}
+                thumbColor="#FFFFFF"
+              />
+            )}
           </View>
         </View>
         

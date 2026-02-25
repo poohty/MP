@@ -163,12 +163,28 @@ const result = createContextHook(() => {
 
         const safeEmail = data.user.email ?? email;
         const username = safeEmail.split('@')[0].toLowerCase();
+
+        let savedShareCookbook = false;
+        try {
+          const { data: profileData } = await supabase
+            .from('user_profiles')
+            .select('share_cookbook_with_friends')
+            .eq('id', data.user.id)
+            .maybeSingle();
+          if (profileData?.share_cookbook_with_friends != null) {
+            savedShareCookbook = !!profileData.share_cookbook_with_friends;
+          }
+          console.log('🔐 Fetched shareCookbook from Supabase profile:', savedShareCookbook);
+        } catch {
+          console.warn('⚠️ Could not fetch profile during login, defaulting shareCookbook to false');
+        }
+
         const newUser: User = {
           id: data.user.id,
           email: safeEmail,
           name: safeEmail.split('@')[0],
           username,
-          shareCookbookWithFriends: false,
+          shareCookbookWithFriends: savedShareCookbook,
         };
 
         await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));

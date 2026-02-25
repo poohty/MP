@@ -186,9 +186,15 @@ const [UserContext, useUser] = createContextHook(() => {
         email: data.email,
         username: data.username,
         displayName: data.display_name,
-        shareCookbookWithFriends: data.share_cookbook_with_friends,
+        shareCookbookWithFriends: !!data.share_cookbook_with_friends,
       };
       setCurrentUserProfile(profile);
+
+      if (authUser.shareCookbookWithFriends !== profile.shareCookbookWithFriends) {
+        console.log('🔄 Syncing shareCookbook from Supabase to auth store:', profile.shareCookbookWithFriends);
+        await updateAuthProfile({ shareCookbookWithFriends: profile.shareCookbookWithFriends });
+      }
+
       await loadFriendLinks(data.id);
     } catch (error) {
       const fallbackProfile: UserProfile = {
