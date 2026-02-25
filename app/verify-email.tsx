@@ -5,7 +5,7 @@ import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
 import Button from '@/components/Button';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
-import { MailCheck } from 'lucide-react-native';
+import { MailCheck, CheckCircle } from 'lucide-react-native';
 
 type VerifyEmailParams = {
   email?: string | string[];
@@ -22,6 +22,7 @@ export default function VerifyEmailScreen() {
   const params = useLocalSearchParams<VerifyEmailParams>();
   const email = useMemo(() => normalizeEmailParam(params.email), [params.email]);
   const [isResending, setIsResending] = useState<boolean>(false);
+  const [isChecking, setIsChecking] = useState<boolean>(false);
 
   const handleResend = useCallback(async () => {
     const trimmed = email.trim();
@@ -45,7 +46,7 @@ export default function VerifyEmailScreen() {
       setIsResending(true);
       const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
       const emailRedirectTo = SUPABASE_URL && SUPABASE_URL.includes('supabase.co')
-        ? `${SUPABASE_URL}/auth/v1/callback?redirect_to=mealplannerroulette://auth-callback`
+        ? `${SUPABASE_URL}/auth/v1/verify`
         : 'mealplannerroulette://auth-callback';
 
       console.log('📨 VerifyEmail: resend verification email:', { email: trimmed, emailRedirectTo });
@@ -69,6 +70,43 @@ export default function VerifyEmailScreen() {
     }
   }, [email]);
 
+  const handleCheckVerification = useCallback(async () => {
+    const trimmed = email.trim();
+    if (!trimmed || !isSupabaseEnabled) {
+      Alert.alert('Info', 'Please return to the login screen and log in with your credentials.', [{ text: 'OK', onPress: () => router.replace('/login') }]);
+      return;
+    }
+
+    setIsChecking(true);
+    try {
+      const { data, error } = await supabase.auth.getUser();
+      console.log('🔍 Check verification result:', { data: data?.user?.email_confirmed_at, error: error?.message });
+
+      if (data?.user?.email_confirmed_at) {
+        await supabase.auth.signOut();
+        Alert.alert('Verified!', 'Your email has been verified. Please log in.', [
+          { text: 'OK', onPress: () => router.replace('/login') },
+        ]);
+      } else {
+        Alert.alert(
+          'Not verified yet',
+          'Your email is not verified yet. Check your inbox and click the verification link, then try again. You can also go back to the login screen and log in directly.',
+          [
+            { text: 'Go to Login', onPress: () => router.replace('/login') },
+            { text: 'Stay Here' },
+          ]
+        );
+      }
+    } catch (e) {
+      console.error('🔍 Check verification error:', e);
+      Alert.alert('Info', 'Could not check verification status. Please go to the login screen and try logging in.', [
+        { text: 'OK', onPress: () => router.replace('/login') },
+      ]);
+    } finally {
+      setIsChecking(false);
+    }
+  }, [email]);
+
   return (
     <GradientBackground>
       <KeyboardAvoidingView
@@ -86,9 +124,15 @@ export default function VerifyEmailScreen() {
             <Text style={styles.title}>Verify your email</Text>
             <Text style={styles.subtitle} testID="verifyEmailBody">
               We sent a verification link to: {email || 'your email'}.
-              {'\n'}Open your email, tap the link, then return here and log in.
-              {'\n\n'}If the link opens a browser and fails, return to the app and log in again.
+              {'\n\n'}Open your email and tap the link to verify.
             </Text>
+
+            <View style={styles.tipBox}>
+              <CheckCircle size={18} color={Colors.primary} />
+              <Text style={styles.tipText}>
+                If the link opens Safari and shows an error page, your email may still be verified. Return to the app and tap "I clicked the link" below, or go back to the login screen.
+              </Text>
+            </View>
 
             <View style={styles.actions}>
               <Button
@@ -101,9 +145,11 @@ export default function VerifyEmailScreen() {
               />
 
               <Button
-                title="I already verified"
-                onPress={() => router.replace('/login')}
-                variant="secondary"
+                title={isChecking ? 'Checking…' : 'I clicked the link'}
+                onPress={handleCheckVerification}
+                isLoading={isChecking}
+                disabled={isChecking}
+                variant="primary"
                 testID="alreadyVerifiedButton"
               />
 
@@ -155,6 +201,21 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     lineHeight: 20,
+    color: Colors.textSecondary,
+  },
+  tipBox: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 126, 92, 0.08)',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 14,
+    gap: 10,
+    alignItems: 'flex-start',
+  },
+  tipText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
     color: Colors.textSecondary,
   },
   actions: {

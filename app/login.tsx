@@ -83,7 +83,7 @@ export default function LoginScreen() {
     try {
       const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
       const emailRedirectTo = SUPABASE_URL && SUPABASE_URL.includes('supabase.co')
-        ? `${SUPABASE_URL}/auth/v1/callback?redirect_to=mealplannerroulette://auth-callback`
+        ? `${SUPABASE_URL}/auth/v1/verify`
         : 'mealplannerroulette://auth-callback';
 
       console.log('📨 Resend verification email:', { email: trimmed, emailRedirectTo });

@@ -23,7 +23,7 @@ function getEmailRedirectTo(): string {
     return 'mealplannerroulette://auth-callback';
   }
 
-  const redirectUrl = `${SUPABASE_URL}/auth/v1/callback?redirect_to=mealplannerroulette://auth-callback`;
+  const redirectUrl = `${SUPABASE_URL}/auth/v1/verify`;
   console.log('🔗 Email redirect URL:', redirectUrl);
   return redirectUrl;
 }
