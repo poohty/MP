@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, Switch } from 'react-native';
 import { useAuth } from '@/hooks/auth-store';
 import { useUser } from '@/hooks/user-store';
@@ -13,7 +13,36 @@ export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const { currentUserProfile, updateShareCookbook, isLoading: isProfileLoading } = useUser();
   const { toggleTheme, isDark } = useTheme();
-  const [isUpdatingShare, setIsUpdatingShare] = useState(false);
+  const [shareToggle, setShareToggle] = useState<boolean | null>(null);
+  const [isSavingShare, setIsSavingShare] = useState(false);
+  const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    if (!hydratedRef.current) {
+      const sourceValue = currentUserProfile?.shareCookbookWithFriends ?? user?.shareCookbookWithFriends;
+      if (typeof sourceValue === 'boolean') {
+        setShareToggle(sourceValue);
+        hydratedRef.current = true;
+      }
+    }
+  }, [currentUserProfile?.shareCookbookWithFriends, user?.shareCookbookWithFriends]);
+
+  const handleShareToggle = async (nextValue: boolean) => {
+    setShareToggle(nextValue);
+    setIsSavingShare(true);
+    try {
+      const success = await updateShareCookbook(nextValue);
+      if (!success) {
+        setShareToggle(!nextValue);
+        Alert.alert('Error', 'Failed to update setting');
+      }
+    } catch {
+      setShareToggle(!nextValue);
+      Alert.alert('Error', 'Failed to update setting');
+    } finally {
+      setIsSavingShare(false);
+    }
+  };
 
   const colors = isDark ? Colors.dark : Colors.light;
 
@@ -96,25 +125,13 @@ export default function ProfileScreen() {
               <Users size={20} color={colors.primary} />
             </View>
             <Text style={[styles.menuText, { color: colors.text }]}>Share Cookbook with Friends</Text>
-            {isProfileLoading ? (
+            {shareToggle === null ? (
               <Text style={{ color: colors.textSecondary, fontSize: 13 }}>Loading…</Text>
             ) : (
               <Switch
-                value={currentUserProfile?.shareCookbookWithFriends ?? user?.shareCookbookWithFriends ?? false}
-                onValueChange={async (value) => {
-                  setIsUpdatingShare(true);
-                  try {
-                    const success = await updateShareCookbook(value);
-                    if (!success) {
-                      Alert.alert('Error', 'Failed to update setting');
-                    }
-                  } catch {
-                    Alert.alert('Error', 'Failed to update setting');
-                  } finally {
-                    setIsUpdatingShare(false);
-                  }
-                }}
-                disabled={isUpdatingShare}
+                value={shareToggle}
+                onValueChange={handleShareToggle}
+                disabled={isSavingShare}
                 trackColor={{ false: colors.muted, true: colors.primary }}
                 thumbColor="#FFFFFF"
               />

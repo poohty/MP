@@ -219,14 +219,20 @@ const [UserContext, useUser] = createContextHook(() => {
     if (!currentUserProfile || !authUser) return false;
 
     try {
-      await updateAuthProfile({ shareCookbookWithFriends: shareCookbook });
-      
-      const updatedProfile = {
-        ...currentUserProfile,
-        shareCookbookWithFriends: shareCookbook,
-      };
+      setCurrentUserProfile(prev => prev ? { ...prev, shareCookbookWithFriends: shareCookbook } : prev);
 
-      setCurrentUserProfile(updatedProfile);
+      if (isSupabaseEnabled) {
+        const { error } = await supabase
+          .from('user_profiles')
+          .update({ share_cookbook_with_friends: shareCookbook, updated_at: new Date().toISOString() })
+          .eq('id', currentUserProfile.id);
+
+        if (error) {
+          console.error('❌ Supabase update share_cookbook error:', error.message || error.code);
+        }
+      }
+
+      await updateAuthProfile({ shareCookbookWithFriends: shareCookbook });
       
       console.log('✅ Updated share cookbook setting:', shareCookbook);
       return true;
