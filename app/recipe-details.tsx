@@ -1,16 +1,30 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert, Platform, TextInput, Modal } from 'react-native';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert, Platform, TextInput, Modal, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import { useAuth } from '@/hooks/auth-store';
 import Colors from '@/constants/colors';
-import { ExternalLink, Trash2, CheckSquare, Square, Edit3, Camera, Link as LinkIcon, BookPlus } from 'lucide-react-native';
+import { ExternalLink, Trash2, CheckSquare, Square, Edit3, Camera, Link as LinkIcon, BookPlus, Mic, MicOff } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import GradientBackground from '@/components/GradientBackground';
 import { Recipe, RecipeCategory } from '@/types';
 import DropdownSelect from '@/components/DropdownSelect';
 import * as ImagePicker from 'expo-image-picker';
+import { useCookAlong } from '@/hooks/useCookAlong';
+import { useWalkthrough, WalkthroughStep } from '@/hooks/useWalkthrough';
+import WalkthroughModal from '@/components/WalkthroughModal';
 
+
+const RECIPE_DETAIL_WALKTHROUGH_STEPS: WalkthroughStep[] = [
+  {
+    title: 'Hands-free cooking',
+    body: 'Tap the microphone next to Instructions to start the hands-free cook-along.',
+  },
+  {
+    title: 'Voice commands',
+    body: "Say 'Step Complete' to move to the next step. Say 'Repeat Step' to hear the current step again.",
+  },
+];
 
 export default function RecipeDetailsScreen() {
   const { id, friendUserId } = useLocalSearchParams<{ id: string; friendUserId?: string }>();
@@ -24,6 +38,8 @@ export default function RecipeDetailsScreen() {
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [, setIsImporting] = useState(false);
+
+  const walkthrough = useWalkthrough('recipe-detail', RECIPE_DETAIL_WALKTHROUGH_STEPS);
 
 
   const handleExtractRecipeContent = useCallback(async (recipeToUpdate: Recipe) => {
@@ -535,6 +551,24 @@ export default function RecipeDetailsScreen() {
     return undefined;
   };
 
+  const parsedInstructions = useMemo(() => {
+    if (!recipe?.content) return [] as string[];
+    const parsed = parseRecipeContent(recipe.content);
+    return parsed.instructions;
+  }, [recipe?.content]);
+
+  const cookAlong = useCookAlong(parsedInstructions);
+
+  useEffect(() => {
+    if (cookAlong.cookAlongActive && cookAlong.currentStepIndex >= 0) {
+      const newChecked = { ...checkedSteps };
+      for (let i = 0; i <= cookAlong.currentStepIndex; i++) {
+        newChecked[i] = true;
+      }
+      setCheckedSteps(newChecked);
+    }
+  }, [cookAlong.currentStepIndex, cookAlong.cookAlongActive]);
+
   if (!recipe) {
     return (
       <>
@@ -705,7 +739,45 @@ export default function RecipeDetailsScreen() {
                 {/* Instructions Section */}
                 {parsedContent.instructions.length > 0 && (
                   <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>👨‍🍳 Instructions</Text>
+                    <View style={styles.instructionHeaderRow}>
+                      <Text style={styles.sectionTitle}>👨‍🍳 Instructions</Text>
+                      {!friendUserId && (
+                        <TouchableOpacity
+                          style={[
+                            styles.micButton,
+                            cookAlong.cookAlongActive && styles.micButtonActive,
+                          ]}
+                          onPress={cookAlong.cookAlongActive ? cookAlong.stopCookAlong : cookAlong.startCookAlong}
+                          activeOpacity={0.7}
+                          testID="cook-along-mic-button"
+                        >
+                          {cookAlong.cookAlongActive ? (
+                            <MicOff size={18} color="#FFFFFF" />
+                          ) : (
+                            <Mic size={18} color={Colors.primary} />
+                          )}
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    {cookAlong.cookAlongActive && (
+                      <View style={styles.cookAlongStatus}>
+                        {cookAlong.isSpeaking && (
+                          <View style={styles.statusRow}>
+                            <ActivityIndicator size="small" color={Colors.primary} />
+                            <Text style={styles.statusText}>Speaking...</Text>
+                          </View>
+                        )}
+                        {cookAlong.isListening && (
+                          <View style={styles.statusRow}>
+                            <View style={styles.listeningDot} />
+                            <Text style={styles.statusText}>Listening...</Text>
+                          </View>
+                        )}
+                        {!cookAlong.isSpeaking && !cookAlong.isListening && (
+                          <Text style={styles.statusText}>Cook-along active - Step {cookAlong.currentStepIndex + 1}</Text>
+                        )}
+                      </View>
+                    )}
                     <Text style={styles.instructionsSubtitle}>Tap each step to check it off as you cook!</Text>
                     {parsedContent.instructions.map((instruction, index) => {
                       // Clean up instruction text and handle checkboxes
@@ -851,6 +923,15 @@ export default function RecipeDetailsScreen() {
           )}
         </View>
         </ScrollView>
+
+        <WalkthroughModal
+          visible={walkthrough.isVisible}
+          step={walkthrough.currentStep}
+          stepIndex={walkthrough.stepIndex}
+          totalSteps={walkthrough.totalSteps}
+          onNext={walkthrough.next}
+          onSkip={walkthrough.skip}
+        />
 
         <Modal
           visible={showImageModal}
@@ -1297,5 +1378,47 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginBottom: 2,
   },
-
+  instructionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  micButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.surface,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micButtonActive: {
+    backgroundColor: Colors.error,
+    borderColor: Colors.error,
+  },
+  cookAlongStatus: {
+    backgroundColor: Colors.primary + '12',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusText: {
+    color: Colors.primary,
+    fontSize: 13,
+    fontWeight: '600' as const,
+  },
+  listeningDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.error,
+  },
 });
