@@ -3,6 +3,7 @@ import { trpcServer } from "@hono/trpc-server";
 import { cors } from "hono/cors";
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
+import { voiceRoutes } from "./trpc/routes/voice";
 
 export const BACKEND_INSTANCE_ID = Math.random().toString(36).slice(2);
 export const BACKEND_START_TIME = new Date().toISOString();
@@ -35,6 +36,8 @@ app.use(
     endpoint: "/api/trpc",
   })
 );
+
+app.route("/api/voice", voiceRoutes);
 
 app.get("/", (c) => {
   return c.json({ 
