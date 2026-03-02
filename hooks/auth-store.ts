@@ -63,19 +63,30 @@ const result = createContextHook(() => {
         updated_at: new Date().toISOString(),
       };
 
-      if (!userToStore.ttsVoiceId) {
-        upsertData.tts_voice_id = 'Cz0K1kOv9tD8l0b5Qu53';
-      }
-
       const { error } = await supabase
         .from('user_profiles')
         .upsert(upsertData, { onConflict: 'id' });
 
       if (error) {
-        console.error('❌ Supabase upsertUserProfile error:', error);
-        console.error('❌ Full error details:', JSON.stringify(error, null, 2));
+        console.error('❌ Supabase upsertUserProfile error:', error.message || error.code);
       } else {
         console.log('✅ Supabase user_profiles upserted:', { id: userToStore.id, username });
+      }
+
+      if (userToStore.ttsVoiceId || !userToStore.ttsVoiceId) {
+        const voiceId = userToStore.ttsVoiceId || 'Cz0K1kOv9tD8l0b5Qu53';
+        const { error: voiceError } = await supabase
+          .from('user_profiles')
+          .update({ tts_voice_id: voiceId })
+          .eq('id', userToStore.id);
+
+        if (voiceError) {
+          if (voiceError.code === 'PGRST204' || voiceError.message?.includes('tts_voice_id')) {
+            console.warn('⚠️ tts_voice_id column not found in user_profiles. Run the SUPABASE_ADD_TTS_VOICE_ID.sql migration.');
+          } else {
+            console.error('❌ Failed to update tts_voice_id:', voiceError.message || voiceError.code);
+          }
+        }
       }
     } catch (error) {
       console.error('❌ Failed to upsert user to Supabase:', error);
@@ -172,7 +183,7 @@ const result = createContextHook(() => {
         try {
           const { data: profileData } = await supabase
             .from('user_profiles')
-            .select('share_cookbook_with_friends, tts_voice_id')
+            .select('*')
             .eq('id', data.user.id)
             .maybeSingle();
           if (profileData?.share_cookbook_with_friends != null) {
