@@ -160,6 +160,7 @@ const [UserContext, useUser] = createContextHook(() => {
           username: fallbackUsername,
           display_name: fallbackDisplayName,
           share_cookbook_with_friends: fallbackShareCookbook,
+          tts_voice_id: authUser.ttsVoiceId || 'Cz0K1kOv9tD8l0b5Qu53',
           updated_at: new Date().toISOString(),
         };
 
