@@ -43,6 +43,7 @@ const [UserContext, useUser] = createContextHook(() => {
         username: data.username,
         displayName: data.display_name,
         shareCookbookWithFriends: data.share_cookbook_with_friends,
+        ttsVoiceId: data.tts_voice_id ?? null,
       };
     } catch {
       return null;
@@ -107,6 +108,7 @@ const [UserContext, useUser] = createContextHook(() => {
         username: authUser.username || authUser.email.split('@')[0],
         displayName: authUser.name,
         shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
+        ttsVoiceId: authUser.ttsVoiceId ?? null,
       };
       setCurrentUserProfile(fallbackProfile);
       setFriendLinks([]);
@@ -139,6 +141,7 @@ const [UserContext, useUser] = createContextHook(() => {
           username: authUser.username || authUser.email.split('@')[0],
           displayName: authUser.name,
           shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
+          ttsVoiceId: authUser.ttsVoiceId ?? null,
         };
         setCurrentUserProfile(fallbackProfile);
         setFriendLinks([]);
@@ -174,6 +177,7 @@ const [UserContext, useUser] = createContextHook(() => {
           username: fallbackUsername,
           displayName: fallbackDisplayName,
           shareCookbookWithFriends: fallbackShareCookbook,
+          ttsVoiceId: authUser.ttsVoiceId ?? null,
         };
 
         setCurrentUserProfile(fallbackProfile);
@@ -187,6 +191,7 @@ const [UserContext, useUser] = createContextHook(() => {
         username: data.username,
         displayName: data.display_name,
         shareCookbookWithFriends: !!data.share_cookbook_with_friends,
+        ttsVoiceId: data.tts_voice_id ?? null,
       };
       setCurrentUserProfile(profile);
 
@@ -203,6 +208,7 @@ const [UserContext, useUser] = createContextHook(() => {
         username: authUser.username || authUser.email.split('@')[0],
         displayName: authUser.name,
         shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
+        ttsVoiceId: authUser.ttsVoiceId ?? null,
       };
       setCurrentUserProfile(fallbackProfile);
       setFriendLinks([]);
@@ -283,6 +289,7 @@ const [UserContext, useUser] = createContextHook(() => {
           username: row.username,
           displayName: row.display_name,
           shareCookbookWithFriends: row.share_cookbook_with_friends,
+          ttsVoiceId: row.tts_voice_id ?? null,
         }));
 
       console.log('🔍 USER SEARCH results count:', results.length);

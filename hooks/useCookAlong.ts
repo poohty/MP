@@ -3,7 +3,7 @@ import { Alert, Platform } from 'react-native';
 import { Audio } from 'expo-av';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || '';
-const DEFAULT_VOICE_ID = '21m00Tcm4TlvDq8ikWAM';
+const DEFAULT_VOICE_ID = 'Cz0K1kOv9tD8l0b5Qu53';
 const RECORD_DURATION_MS = 3000;
 
 type VoiceCommand = 'STEP_COMPLETE' | 'REPEAT_STEP' | 'NONE';
@@ -16,7 +16,7 @@ interface CookAlongState {
   lastTranscript: string;
 }
 
-async function speakText(text: string, soundRef: React.MutableRefObject<Audio.Sound | null>): Promise<void> {
+async function speakText(text: string, soundRef: React.MutableRefObject<Audio.Sound | null>, voiceId: string): Promise<void> {
   if (!API_BASE_URL) {
     throw new Error('Backend not configured');
   }
@@ -31,7 +31,7 @@ async function speakText(text: string, soundRef: React.MutableRefObject<Audio.So
   const response = await fetch(`${API_BASE_URL}/api/voice/tts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, voiceId: DEFAULT_VOICE_ID }),
+    body: JSON.stringify({ text, voiceId }),
   });
 
   if (!response.ok) {
@@ -154,7 +154,7 @@ async function listenForCommand(
   return { command: result.command, transcript: result.transcript };
 }
 
-export function useCookAlong(instructions: string[]) {
+export function useCookAlong(instructions: string[], userVoiceId?: string | null) {
   const [state, setState] = useState<CookAlongState>({
     cookAlongActive: false,
     currentStepIndex: 0,
@@ -167,6 +167,7 @@ export function useCookAlong(instructions: string[]) {
   const soundRef = useRef<Audio.Sound | null>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const loopRunningRef = useRef(false);
+  const resolvedVoiceId = userVoiceId || DEFAULT_VOICE_ID;
 
   const cleanup = useCallback(async () => {
     activeRef.current = false;
@@ -215,13 +216,13 @@ export function useCookAlong(instructions: string[]) {
     if (!activeRef.current) return;
     setState((prev) => ({ ...prev, isSpeaking: true }));
     try {
-      await speakText(text, soundRef);
+      await speakText(text, soundRef, resolvedVoiceId);
     } catch (e) {
       console.log('[CookAlong] Speak error:', e);
     } finally {
       setState((prev) => ({ ...prev, isSpeaking: false }));
     }
-  }, []);
+  }, [resolvedVoiceId]);
 
   const safeListenForCommand = useCallback(async (): Promise<{ command: VoiceCommand; transcript: string }> => {
     if (!activeRef.current) return { command: 'NONE', transcript: '' };
@@ -236,7 +237,7 @@ export function useCookAlong(instructions: string[]) {
     } finally {
       setState((prev) => ({ ...prev, isListening: false }));
     }
-  }, []);
+  }, [resolvedVoiceId]);
 
   const runCookAlongLoop = useCallback(async (startIndex: number) => {
     if (loopRunningRef.current) return;

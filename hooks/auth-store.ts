@@ -54,19 +54,22 @@ const result = createContextHook(() => {
         shareCookbookWithFriends: !!userToStore.shareCookbookWithFriends,
       });
 
+      const upsertData: Record<string, any> = {
+        id: userToStore.id,
+        email: userToStore.email,
+        username,
+        display_name: displayName,
+        share_cookbook_with_friends: !!userToStore.shareCookbookWithFriends,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (!userToStore.ttsVoiceId) {
+        upsertData.tts_voice_id = 'Cz0K1kOv9tD8l0b5Qu53';
+      }
+
       const { error } = await supabase
         .from('user_profiles')
-        .upsert(
-          {
-            id: userToStore.id,
-            email: userToStore.email,
-            username,
-            display_name: displayName,
-            share_cookbook_with_friends: !!userToStore.shareCookbookWithFriends,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'id' }
-        );
+        .upsert(upsertData, { onConflict: 'id' });
 
       if (error) {
         console.error('❌ Supabase upsertUserProfile error:', error);
@@ -165,14 +168,18 @@ const result = createContextHook(() => {
         const username = safeEmail.split('@')[0].toLowerCase();
 
         let savedShareCookbook = false;
+        let savedTtsVoiceId: string | null = null;
         try {
           const { data: profileData } = await supabase
             .from('user_profiles')
-            .select('share_cookbook_with_friends')
+            .select('share_cookbook_with_friends, tts_voice_id')
             .eq('id', data.user.id)
             .maybeSingle();
           if (profileData?.share_cookbook_with_friends != null) {
             savedShareCookbook = !!profileData.share_cookbook_with_friends;
+          }
+          if (profileData?.tts_voice_id) {
+            savedTtsVoiceId = profileData.tts_voice_id;
           }
           console.log('🔐 Fetched shareCookbook from Supabase profile:', savedShareCookbook);
         } catch {
@@ -185,6 +192,7 @@ const result = createContextHook(() => {
           name: safeEmail.split('@')[0],
           username,
           shareCookbookWithFriends: savedShareCookbook,
+          ttsVoiceId: savedTtsVoiceId,
         };
 
         await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));

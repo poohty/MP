@@ -7,6 +7,7 @@ export type User = {
   bio?: string;
   shareCookbookWithFriends?: boolean;
   locationPermission?: boolean;
+  ttsVoiceId?: string | null;
 };
 
 export type RecipeCategory = 'Breakfast' | 'Appetizer' | 'Salads & Soups' | 'Main Course' | 'Desserts';
@@ -95,6 +96,7 @@ export type UserProfile = {
   username: string;
   displayName: string;
   shareCookbookWithFriends: boolean;
+  ttsVoiceId?: string | null;
 };
 
 export type FriendStatus = 'pending' | 'accepted';

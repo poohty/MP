@@ -557,7 +557,7 @@ export default function RecipeDetailsScreen() {
     return parsed.instructions;
   }, [recipe?.content]);
 
-  const cookAlong = useCookAlong(parsedInstructions);
+  const cookAlong = useCookAlong(parsedInstructions, user?.ttsVoiceId);
 
   useEffect(() => {
     if (cookAlong.cookAlongActive && cookAlong.currentStepIndex >= 0) {
