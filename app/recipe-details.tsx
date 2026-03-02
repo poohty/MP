@@ -802,7 +802,7 @@ export default function RecipeDetailsScreen() {
                             <Text style={[
                               styles.stepNumber,
                               checkedSteps[index] && styles.checkedStepNumber
-                            ]}>{index + 1}.</Text>
+                            ]}>{`${index + 1}.`}</Text>
                           </View>
                           <Text style={[
                             styles.instructionText,
@@ -877,7 +877,7 @@ export default function RecipeDetailsScreen() {
                                     <Text style={[
                                       styles.stepNumber,
                                       checkedSteps[index] && styles.checkedStepNumber
-                                    ]}>{index + 1}.</Text>
+                                    ]}>{`${index + 1}.`}</Text>
                                   </View>
                                   <Text style={[
                                     styles.instructionText,
@@ -899,7 +899,7 @@ export default function RecipeDetailsScreen() {
                       } else {
                         return <Text style={styles.contentText}>{recipe.content}</Text>;
                       }
-                    })()} 
+                    })()}
                   </View>
                 )}
               </View>
