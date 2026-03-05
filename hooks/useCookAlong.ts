@@ -2,7 +2,9 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Alert, Platform } from 'react-native';
 import { Audio } from 'expo-av';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || '';
+function getApiBaseUrl(): string {
+  return process.env.EXPO_PUBLIC_RORK_API_BASE_URL || '';
+}
 const DEFAULT_VOICE_ID = 'Cz0K1kOv9tD8l0b5Qu53';
 const RECORD_DURATION_MS = 3000;
 
@@ -17,7 +19,8 @@ interface CookAlongState {
 }
 
 async function speakText(text: string, soundRef: React.MutableRefObject<Audio.Sound | null>, voiceId: string): Promise<void> {
-  if (!API_BASE_URL) {
+  const apiBase = getApiBaseUrl();
+  if (!apiBase) {
     throw new Error('Backend not configured');
   }
 
@@ -28,7 +31,7 @@ async function speakText(text: string, soundRef: React.MutableRefObject<Audio.So
     shouldDuckAndroid: false,
   });
 
-  const response = await fetch(`${API_BASE_URL}/api/voice/tts`, {
+  const response = await fetch(`${apiBase}/api/voice/tts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text, voiceId }),
@@ -76,7 +79,8 @@ async function listenForCommand(
   recordingRef: React.MutableRefObject<Audio.Recording | null>,
   activeRef: React.MutableRefObject<boolean>
 ): Promise<{ command: VoiceCommand; transcript: string }> {
-  if (!API_BASE_URL) {
+  const apiBase = getApiBaseUrl();
+  if (!apiBase) {
     throw new Error('Backend not configured');
   }
 
@@ -138,7 +142,7 @@ async function listenForCommand(
 
   formData.append('keyterms', 'step complete,repeat step');
 
-  const response = await fetch(`${API_BASE_URL}/api/voice/stt`, {
+  const response = await fetch(`${apiBase}/api/voice/stt`, {
     method: 'POST',
     body: formData,
   });
@@ -303,7 +307,7 @@ export function useCookAlong(instructions: string[], userVoiceId?: string | null
   }, [instructions, safeSpeakText, safeListenForCommand]);
 
   const startCookAlong = useCallback(async () => {
-    if (!API_BASE_URL) {
+    if (!getApiBaseUrl()) {
       Alert.alert('Voice feature unavailable', 'Please try again later.');
       return;
     }
