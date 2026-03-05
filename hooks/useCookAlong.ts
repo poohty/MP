@@ -2,8 +2,12 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Alert, Platform } from 'react-native';
 import { Audio } from 'expo-av';
 
-function getApiBaseUrl(): string {
-  return process.env.EXPO_PUBLIC_RORK_API_BASE_URL || '';
+function getApiBaseUrl(): string | null {
+  const url = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
+  if (url && url.trim().length > 0) {
+    return url;
+  }
+  return null;
 }
 const DEFAULT_VOICE_ID = 'Cz0K1kOv9tD8l0b5Qu53';
 const RECORD_DURATION_MS = 3000;
@@ -21,6 +25,7 @@ interface CookAlongState {
 async function speakText(text: string, soundRef: React.MutableRefObject<Audio.Sound | null>, voiceId: string): Promise<void> {
   const apiBase = getApiBaseUrl();
   if (!apiBase) {
+    console.log('[CookAlong] TTS: EXPO_PUBLIC_RORK_API_BASE_URL =', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
     throw new Error('Backend not configured');
   }
 
@@ -31,6 +36,7 @@ async function speakText(text: string, soundRef: React.MutableRefObject<Audio.So
     shouldDuckAndroid: false,
   });
 
+  console.log('[CookAlong] Calling TTS at:', `${apiBase}/api/voice/tts`);
   const response = await fetch(`${apiBase}/api/voice/tts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -81,6 +87,7 @@ async function listenForCommand(
 ): Promise<{ command: VoiceCommand; transcript: string }> {
   const apiBase = getApiBaseUrl();
   if (!apiBase) {
+    console.log('[CookAlong] STT: EXPO_PUBLIC_RORK_API_BASE_URL =', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
     throw new Error('Backend not configured');
   }
 
@@ -307,8 +314,23 @@ export function useCookAlong(instructions: string[], userVoiceId?: string | null
   }, [instructions, safeSpeakText, safeListenForCommand]);
 
   const startCookAlong = useCallback(async () => {
-    if (!getApiBaseUrl()) {
-      Alert.alert('Voice feature unavailable', 'Please try again later.');
+    const apiBase = getApiBaseUrl();
+    console.log('[CookAlong] startCookAlong called. API base URL:', apiBase, '| raw env:', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
+    if (!apiBase) {
+      Alert.alert('Voice feature unavailable', 'Backend URL is not configured. Please try again later.');
+      return;
+    }
+
+    try {
+      const healthCheck = await fetch(`${apiBase}/api/voice/health`);
+      console.log('[CookAlong] Health check status:', healthCheck.status);
+      if (!healthCheck.ok) {
+        Alert.alert('Voice feature unavailable', 'Voice server is not responding. Please try again later.');
+        return;
+      }
+    } catch (e) {
+      console.log('[CookAlong] Health check failed:', e);
+      Alert.alert('Voice feature unavailable', 'Cannot reach voice server. Please try again later.');
       return;
     }
 
