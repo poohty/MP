@@ -1,17 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Alert, Platform } from 'react-native';
 import { Audio } from 'expo-av';
-
-function getApiBaseUrl(): string {
-  const envUrl = (process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '').trim();
-  if (envUrl) return envUrl;
-
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin;
-  }
-
-  return '';
-}
+import { getBackendBaseUrl } from '@/lib/trpc';
 const DEFAULT_VOICE_ID = 'Cz0K1kOv9tD8l0b5Qu53';
 const RECORD_DURATION_MS = 3000;
 
@@ -26,7 +16,7 @@ interface CookAlongState {
 }
 
 async function speakText(text: string, soundRef: React.MutableRefObject<Audio.Sound | null>, voiceId: string): Promise<void> {
-  const apiBase = getApiBaseUrl();
+  const apiBase = getBackendBaseUrl();
   if (!apiBase) {
     console.log('[CookAlong] TTS: no API base URL found');
     throw new Error('Backend not configured');
@@ -88,7 +78,7 @@ async function listenForCommand(
   recordingRef: React.MutableRefObject<Audio.Recording | null>,
   activeRef: React.MutableRefObject<boolean>
 ): Promise<{ command: VoiceCommand; transcript: string }> {
-  const apiBase = getApiBaseUrl();
+  const apiBase = getBackendBaseUrl();
   if (!apiBase) {
     console.log('[CookAlong] STT: no API base URL found');
     throw new Error('Backend not configured');
@@ -317,12 +307,12 @@ export function useCookAlong(instructions: string[], userVoiceId?: string | null
   }, [instructions, safeSpeakText, safeListenForCommand]);
 
   const startCookAlong = useCallback(async () => {
-    const apiBase = getApiBaseUrl();
-    console.log('[CookAlong] startCookAlong called. API base URL:', JSON.stringify(apiBase));
+    const apiBase = getBackendBaseUrl();
+    console.log('[Voice] backend base:', apiBase);
     if (!apiBase) {
       Alert.alert(
         'Voice feature unavailable',
-        'Backend URL not configured. Set EXPO_PUBLIC_RORK_API_BASE_URL in Rork Environment Variables to your backend URL (https://....rork.test.dev).'
+        'Could not determine backend URL. Please check your environment configuration.'
       );
       return;
     }

@@ -5,17 +5,24 @@ import superjson from "superjson";
 
 export const trpc = createTRPCReact<AppRouter>();
 
+export function getBackendBaseUrl(): string {
+  const envUrl = (process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '').trim();
+  if (envUrl) return envUrl;
+
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+
+  return '';
+}
+
 const getBaseUrl = () => {
-  if (process.env.EXPO_PUBLIC_RORK_API_BASE_URL) {
-    const url = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
-    console.log('🌐🌐🌐 ========================================');
-    console.log('🌐 tRPC CONFIGURATION');
-    console.log('🌐 Base URL:', url);
-    console.log('🌐 Full tRPC URL:', `${url}/api/trpc`);
-    console.log('🌐🌐🌐 ========================================');
+  const url = getBackendBaseUrl();
+  if (url) {
+    console.log('🌐 tRPC Base URL:', url);
     return url;
   }
-  console.warn('⚠️⚠️⚠️ EXPO_PUBLIC_RORK_API_BASE_URL is NOT set. tRPC backend may be unavailable.');
+  console.warn('⚠️ Backend base URL not resolved. tRPC backend may be unavailable.');
   return null;
 };
 
