@@ -666,7 +666,7 @@ export default function RecipeDetailsScreen() {
             </View>
           )}
           
-          {recipe.url && (
+          {recipe.url ? (
             <TouchableOpacity 
               style={styles.urlContainer}
               onPress={handleOpenUrl}
@@ -676,15 +676,13 @@ export default function RecipeDetailsScreen() {
                 {recipe.url}
               </Text>
             </TouchableOpacity>
-          )}
-          
-          {isLoadingContent && (
+          ) : null}
+          {isLoadingContent ? (
             <View style={styles.loadingContainer}>
               <Text style={styles.loadingText}>🤖 AI is extracting the full recipe content...</Text>
             </View>
-          )}
-          
-          {recipe.content && (() => {
+          ) : null}
+          {recipe.content ? (() => {
             const parsedContent = parseRecipeContent(recipe.content);
             
             // Use structured fields from Recipe object, falling back to parsed content
@@ -817,12 +815,12 @@ export default function RecipeDetailsScreen() {
                 )}
                 
                 {/* Notes Section */}
-                {parsedContent.notes && (
+                {parsedContent.notes ? (
                   <View style={styles.section}>
                     <Text style={styles.sectionTitle}>💡 Notes & Tips</Text>
                     <Text style={styles.notesText}>{parsedContent.notes}</Text>
                   </View>
-                )}
+                ) : null}
                 
                 {/* Show raw content with step checkboxes ONLY for instruction-like content */}
                 {(parsedContent.ingredients.length === 0 && parsedContent.instructions.length === 0) && (
@@ -904,9 +902,8 @@ export default function RecipeDetailsScreen() {
                 )}
               </View>
             );
-          })()}
-          
-          {!recipe.content && !isLoadingContent && recipe.url && (
+          })() : null}
+          {!recipe.content && !isLoadingContent && recipe.url ? (
             <View style={styles.noContentContainer}>
               <Text style={styles.noContentTitle}>Recipe Instructions</Text>
               <Text style={styles.noContentText}>
@@ -920,10 +917,9 @@ export default function RecipeDetailsScreen() {
                 <Text style={styles.extractButtonText}>🤖 Extract Recipe Content with AI</Text>
               </TouchableOpacity>
             </View>
-          )}
+          ) : null}
         </View>
         </ScrollView>
-
         <WalkthroughModal
           visible={walkthrough.isVisible}
           step={walkthrough.currentStep}
@@ -932,7 +928,6 @@ export default function RecipeDetailsScreen() {
           onNext={walkthrough.next}
           onSkip={walkthrough.skip}
         />
-
         <Modal
           visible={showImageModal}
           transparent
