@@ -1,9 +1,9 @@
-// Requires backend env var ElevenLabs_API_Key
+// Requires backend env var ELEVENLABS_API_KEY
 import { Hono } from "hono";
 
 const voiceRoutes = new Hono();
 
-const ELEVENLABS_API_KEY = () => process.env.ElevenLabs_API_Key;
+const ELEVENLABS_API_KEY = () => process.env.ELEVENLABS_API_KEY || process.env.ElevenLabs_API_Key;
 
 function detectCommand(transcript: string): "STEP_COMPLETE" | "REPEAT_STEP" | "NONE" {
   const lower = transcript.toLowerCase();
@@ -19,7 +19,7 @@ voiceRoutes.get("/health", (c) => {
 voiceRoutes.post("/stt", async (c) => {
   const apiKey = ELEVENLABS_API_KEY();
   if (!apiKey) {
-    return c.json({ error: "ElevenLabs_API_Key not set" }, 500);
+    return c.json({ error: "ELEVENLABS_API_KEY not set" }, 500);
   }
 
   try {
@@ -79,7 +79,7 @@ voiceRoutes.post("/stt", async (c) => {
 voiceRoutes.post("/tts", async (c) => {
   const apiKey = ELEVENLABS_API_KEY();
   if (!apiKey) {
-    return c.json({ error: "ElevenLabs_API_Key not set" }, 500);
+    return c.json({ error: "ELEVENLABS_API_KEY not set" }, 500);
   }
 
   try {

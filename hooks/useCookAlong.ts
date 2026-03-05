@@ -3,8 +3,14 @@ import { Alert, Platform } from 'react-native';
 import { Audio } from 'expo-av';
 
 function getApiBaseUrl(): string {
-  const url = process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '';
-  return url.trim();
+  const envUrl = (process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '').trim();
+  if (envUrl) return envUrl;
+
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+
+  return '';
 }
 const DEFAULT_VOICE_ID = 'Cz0K1kOv9tD8l0b5Qu53';
 const RECORD_DURATION_MS = 3000;
@@ -314,7 +320,10 @@ export function useCookAlong(instructions: string[], userVoiceId?: string | null
     const apiBase = getApiBaseUrl();
     console.log('[CookAlong] startCookAlong called. API base URL:', JSON.stringify(apiBase));
     if (!apiBase) {
-      Alert.alert('Voice feature unavailable', 'Please try again later.');
+      Alert.alert(
+        'Voice feature unavailable',
+        'Backend URL not configured. Set EXPO_PUBLIC_RORK_API_BASE_URL in Rork Environment Variables to your backend URL (https://....rork.test.dev).'
+      );
       return;
     }
 
@@ -326,7 +335,7 @@ export function useCookAlong(instructions: string[], userVoiceId?: string | null
         return;
       }
     } catch (e) {
-      console.log('[CookAlong] Health check failed:', e);
+      console.log('[CookAlong] Health check failed for base:', apiBase, e);
       Alert.alert('Voice feature unavailable', 'Cannot reach voice server. Please try again later.');
       return;
     }
