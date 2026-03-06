@@ -5,6 +5,8 @@ import superjson from "superjson";
 
 export const trpc = createTRPCReact<AppRouter>();
 
+const NATIVE_BACKEND_URL = 'https://dev-7g0mm8duw925pow1e3hiw.rorktest.dev';
+
 export function getBackendBaseUrl(): string {
   const envUrl = (process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '').trim();
   if (envUrl) return envUrl;
@@ -13,7 +15,7 @@ export function getBackendBaseUrl(): string {
     return window.location.origin;
   }
 
-  return '';
+  return NATIVE_BACKEND_URL;
 }
 
 const getBaseUrl = () => {
