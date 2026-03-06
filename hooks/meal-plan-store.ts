@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { MealPlan, MealPlanRecipe, Recipe, RecipeCategory, GroceryList } from '@/types';
+import { MealPlan, MealPlanRecipe, Recipe, RecipeCategory, GroceryList, CalendarAssignment, MealPlanCalendar } from '@/types';
 import { useAuth } from './auth-store';
 import { useRecipes } from './recipe-store';
 
@@ -13,6 +13,30 @@ const result = createContextHook(() => {
   const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
   const [currentMealPlan, setCurrentMealPlan] = useState<MealPlan | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const getCurrentMonthKey = useCallback((): string => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+  }, []);
+
+  const cleanupOldCalendarData = useCallback((plans: MealPlan[]): MealPlan[] => {
+    const currentMonth = getCurrentMonthKey();
+    let cleaned = false;
+    const result = plans.map(plan => {
+      if (plan.calendar && plan.calendar.monthKey !== currentMonth) {
+        console.log(`🗑️ Cleaning old calendar data for month ${plan.calendar.monthKey} on plan ${plan.id}`);
+        cleaned = true;
+        return { ...plan, calendar: undefined };
+      }
+      return plan;
+    });
+    if (cleaned) {
+      console.log('📅 Old calendar assignment data cleaned up');
+    }
+    return result;
+  }, [getCurrentMonthKey]);
 
   const loadMealPlans = useCallback(async () => {
     try {
@@ -39,9 +63,7 @@ const result = createContextHook(() => {
           console.log(`🗑️ Auto-deleted ${parsedMealPlans.length - freshPlans.length} meal plan(s) older than 30 days`);
           await AsyncStorage.setItem(`${MEAL_PLANS_STORAGE_KEY}-${user?.id}`, JSON.stringify(freshPlans));
         }
-        // Migrate old meal plans to new structure
         const migratedMealPlans = freshPlans.map((plan: any) => {
-          // Check if this is an old format meal plan
           if (plan.mainCourses && plan.mainCourses.length > 0 && !plan.mainCourses[0].recipe) {
             return {
               ...plan,
@@ -52,24 +74,27 @@ const result = createContextHook(() => {
               desserts: plan.desserts.map((recipe: any) => ({ recipe, multiplier: 1 })),
             };
           }
-          // Add breakfast array if it doesn't exist (for older meal plans)
           if (!plan.breakfast) {
             plan.breakfast = [];
           }
           return plan;
         });
-        setMealPlans(migratedMealPlans);
+        const cleanedPlans = cleanupOldCalendarData(migratedMealPlans);
+        if (JSON.stringify(cleanedPlans) !== JSON.stringify(migratedMealPlans)) {
+          await AsyncStorage.setItem(`${MEAL_PLANS_STORAGE_KEY}-${user?.id}`, JSON.stringify(cleanedPlans));
+        }
+        setMealPlans(cleanedPlans);
       }
     } catch (error) {
       console.error('Failed to load meal plans:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, cleanupOldCalendarData]);
 
   useEffect(() => {
     if (user) {
-      loadMealPlans();
+      void loadMealPlans();
     } else {
       setMealPlans([]);
       setIsLoading(false);
@@ -291,7 +316,7 @@ const result = createContextHook(() => {
       plan.id === mealPlanId ? updatedMealPlan : plan
     );
 
-    saveMealPlans(updatedMealPlans);
+    void saveMealPlans(updatedMealPlans);
     return updatedMealPlan;
   }, [mealPlans, getRandomRecipes, saveMealPlans]);
 
@@ -317,9 +342,71 @@ const result = createContextHook(() => {
       plan.id === mealPlanId ? updatedMealPlan : plan
     );
 
-    saveMealPlans(updatedMealPlans);
+    void saveMealPlans(updatedMealPlans);
     return updatedMealPlan;
   }, [mealPlans, saveMealPlans]);
+
+  const assignRecipeToDate = useCallback((mealPlanId: string, recipeId: string, recipeName: string, category: RecipeCategory, date: string): MealPlan | null => {
+    const mealPlan = mealPlans.find(plan => plan.id === mealPlanId);
+    if (!mealPlan) return null;
+
+    const currentMonth = getCurrentMonthKey();
+    const calendar: MealPlanCalendar = mealPlan.calendar && mealPlan.calendar.monthKey === currentMonth
+      ? { ...mealPlan.calendar, assignments: [...mealPlan.calendar.assignments] }
+      : { monthKey: currentMonth, assignments: [] };
+
+    const existingIdx = calendar.assignments.findIndex(a => a.recipeId === recipeId && a.date === date);
+    if (existingIdx >= 0) {
+      calendar.assignments.splice(existingIdx, 1);
+      console.log(`📅 Removed ${recipeName} from ${date}`);
+    } else {
+      const oldDateIdx = calendar.assignments.findIndex(a => a.recipeId === recipeId);
+      if (oldDateIdx >= 0) {
+        console.log(`📅 Moving ${recipeName} from ${calendar.assignments[oldDateIdx].date} to ${date}`);
+        calendar.assignments.splice(oldDateIdx, 1);
+      }
+      const duplicate = calendar.assignments.find(a => a.recipeId === recipeId && a.date === date);
+      if (!duplicate) {
+        calendar.assignments.push({ recipeId, recipeName, category, date });
+        console.log(`📅 Assigned ${recipeName} to ${date}`);
+      }
+    }
+
+    const updatedMealPlan: MealPlan = { ...mealPlan, calendar };
+    const updatedMealPlans = mealPlans.map(plan => plan.id === mealPlanId ? updatedMealPlan : plan);
+    void saveMealPlans(updatedMealPlans);
+    return updatedMealPlan;
+  }, [mealPlans, saveMealPlans, getCurrentMonthKey]);
+
+  const removeRecipeFromDate = useCallback((mealPlanId: string, recipeId: string, date: string): MealPlan | null => {
+    const mealPlan = mealPlans.find(plan => plan.id === mealPlanId);
+    if (!mealPlan || !mealPlan.calendar) return null;
+
+    const calendar: MealPlanCalendar = {
+      ...mealPlan.calendar,
+      assignments: mealPlan.calendar.assignments.filter(a => !(a.recipeId === recipeId && a.date === date)),
+    };
+
+    const updatedMealPlan: MealPlan = { ...mealPlan, calendar };
+    const updatedMealPlans = mealPlans.map(plan => plan.id === mealPlanId ? updatedMealPlan : plan);
+    void saveMealPlans(updatedMealPlans);
+    console.log(`📅 Removed recipe ${recipeId} from ${date}`);
+    return updatedMealPlan;
+  }, [mealPlans, saveMealPlans]);
+
+  const getCalendarAssignments = useCallback((mealPlanId: string): CalendarAssignment[] => {
+    const mealPlan = mealPlans.find(plan => plan.id === mealPlanId);
+    if (!mealPlan || !mealPlan.calendar) return [];
+    const currentMonth = getCurrentMonthKey();
+    if (mealPlan.calendar.monthKey !== currentMonth) return [];
+    return mealPlan.calendar.assignments;
+  }, [mealPlans, getCurrentMonthKey]);
+
+  const getRecipeAssignedDate = useCallback((mealPlanId: string, recipeId: string): string | null => {
+    const assignments = getCalendarAssignments(mealPlanId);
+    const found = assignments.find(a => a.recipeId === recipeId);
+    return found ? found.date : null;
+  }, [getCalendarAssignments]);
 
   const generateGroceryList = useCallback(async (mealPlan: MealPlan): Promise<GroceryList | null> => {
     try {
@@ -457,8 +544,12 @@ Categories to use: Produce, Meat & Seafood, Dairy & Eggs, Pantry, Bakery, Frozen
     respinRecipe,
     updateRecipeMultiplier,
     generateGroceryList,
+    assignRecipeToDate,
+    removeRecipeFromDate,
+    getCalendarAssignments,
+    getRecipeAssignedDate,
     refreshMealPlans: loadMealPlans,
-  }), [mealPlans, currentMealPlan, isLoading, generateMealPlan, saveMealPlan, deleteMealPlan, respinRecipe, updateRecipeMultiplier, generateGroceryList, loadMealPlans]);
+  }), [mealPlans, currentMealPlan, isLoading, generateMealPlan, saveMealPlan, deleteMealPlan, respinRecipe, updateRecipeMultiplier, generateGroceryList, assignRecipeToDate, removeRecipeFromDate, getCalendarAssignments, getRecipeAssignedDate, loadMealPlans]);
 });
 
 const MealPlanContext = result[0];

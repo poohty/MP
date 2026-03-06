@@ -51,6 +51,18 @@ export type MealPlanRecipe = {
   multiplier: number;
 };
 
+export type CalendarAssignment = {
+  recipeId: string;
+  recipeName: string;
+  category: RecipeCategory;
+  date: string; // YYYY-MM-DD
+};
+
+export type MealPlanCalendar = {
+  monthKey: string; // YYYY-MM
+  assignments: CalendarAssignment[];
+};
+
 export type MealPlan = {
   id: string;
   breakfast: MealPlanRecipe[];
@@ -58,6 +70,7 @@ export type MealPlan = {
   appetizers: MealPlanRecipe[];
   saladsAndSoups: MealPlanRecipe[];
   desserts: MealPlanRecipe[];
+  calendar?: MealPlanCalendar;
   createdAt: number;
 };
 

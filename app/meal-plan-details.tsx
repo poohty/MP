@@ -1,14 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useMealPlans } from '@/hooks/meal-plan-store';
 import Colors from '@/constants/colors';
-import { Trash2, ChevronRight, ShoppingCart } from 'lucide-react-native';
+import { Trash2, ChevronRight, ShoppingCart, CalendarDays } from 'lucide-react-native';
 import { MealPlan, MealPlanRecipe, RecipeCategory } from '@/types';
 import MultiplierDropdown from '@/components/MultiplierDropdown';
 import Button from '@/components/Button';
 import { useWalkthrough, WalkthroughStep } from '@/hooks/useWalkthrough';
 import WalkthroughModal from '@/components/WalkthroughModal';
+import MealCalendar from '@/components/MealCalendar';
+import DatePickerModal from '@/components/DatePickerModal';
 
 const MEAL_PLAN_REVIEW_STEPS: WalkthroughStep[] = [
   { title: 'Roulette changes', body: 'Tap the Roulette Wheel to swap a suggestion. You can spin as many times as you want.' },
@@ -33,21 +35,17 @@ const RouletteWheelIcon = ({ size = 20 }: { size?: number }) => (
       </LinearGradient>
     </Defs>
     
-    {/* Outer rim */}
     <Circle cx="12" cy="12" r="10" stroke="#D97706" strokeWidth="1" fill="url(#wheelGradient)" />
     
-    {/* Red sections */}
     <Path d="M12 2 A10 10 0 0 1 19.31 6.34 L12 12 Z" fill="url(#redSection)" />
     <Path d="M12 12 L19.31 17.66 A10 10 0 0 1 12 22 Z" fill="url(#redSection)" />
     <Path d="M12 12 L4.69 17.66 A10 10 0 0 1 2 12 Z" fill="url(#redSection)" />
     
-    {/* Black sections */}
     <Path d="M12 12 L19.31 6.34 A10 10 0 0 1 22 12 L12 12 Z" fill="url(#blackSection)" />
     <Path d="M12 12 L12 22 A10 10 0 0 1 4.69 17.66 Z" fill="url(#blackSection)" />
     <Path d="M12 12 L2 12 A10 10 0 0 1 4.69 6.34 Z" fill="url(#blackSection)" />
     <Path d="M12 12 L4.69 6.34 A10 10 0 0 1 12 2 Z" fill="url(#blackSection)" />
     
-    {/* Numbers */}
     <Circle cx="12" cy="5" r="1.5" fill="white" />
     <Circle cx="17" cy="8" r="1.5" fill="white" />
     <Circle cx="17" cy="16" r="1.5" fill="white" />
@@ -55,18 +53,35 @@ const RouletteWheelIcon = ({ size = 20 }: { size?: number }) => (
     <Circle cx="7" cy="16" r="1.5" fill="white" />
     <Circle cx="7" cy="8" r="1.5" fill="white" />
     
-    {/* Center hub */}
     <Circle cx="12" cy="12" r="2" fill="#F59E0B" stroke="#D97706" strokeWidth="1" />
     <Circle cx="12" cy="12" r="1" fill="#FCD34D" />
   </Svg>
 );
 
+function formatAssignedLabel(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 export default function MealPlanDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { mealPlans, deleteMealPlan, respinRecipe, updateRecipeMultiplier, generateGroceryList } = useMealPlans();
+  const {
+    mealPlans,
+    deleteMealPlan,
+    respinRecipe,
+    updateRecipeMultiplier,
+    generateGroceryList,
+    assignRecipeToDate,
+    getCalendarAssignments,
+    getRecipeAssignedDate,
+  } = useMealPlans();
   const [mealPlan, setMealPlan] = useState<MealPlan | null>(null);
   const [isGeneratingGroceryList, setIsGeneratingGroceryList] = useState(false);
   const walkthrough = useWalkthrough('meal-plan-review', MEAL_PLAN_REVIEW_STEPS);
+
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [datePickerRecipe, setDatePickerRecipe] = useState<{ recipeId: string; recipeName: string; category: RecipeCategory } | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -80,15 +95,17 @@ export default function MealPlanDetailsScreen() {
     }
   }, [id, mealPlans]);
 
+  const calendarAssignments = useMemo(() => {
+    if (!mealPlan) return [];
+    return getCalendarAssignments(mealPlan.id);
+  }, [mealPlan, getCalendarAssignments]);
+
   const handleDelete = () => {
     Alert.alert(
       'Delete Meal Plan',
       'Are you sure you want to delete this meal plan?',
       [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           onPress: async () => {
@@ -112,7 +129,6 @@ export default function MealPlanDetailsScreen() {
 
   const handleRespinRecipe = (category: RecipeCategory, index: number) => {
     if (!mealPlan) return;
-    
     const updatedMealPlan = respinRecipe(mealPlan.id, category, index);
     if (updatedMealPlan) {
       setMealPlan(updatedMealPlan);
@@ -121,16 +137,40 @@ export default function MealPlanDetailsScreen() {
 
   const handleMultiplierChange = (category: RecipeCategory, index: number, multiplier: number) => {
     if (!mealPlan) return;
-    
     const updatedMealPlan = updateRecipeMultiplier(mealPlan.id, category, index, multiplier);
     if (updatedMealPlan) {
       setMealPlan(updatedMealPlan);
     }
   };
 
+  const handleOpenDatePicker = useCallback((recipeId: string, recipeName: string, category: RecipeCategory) => {
+    setDatePickerRecipe({ recipeId, recipeName, category });
+    setDatePickerVisible(true);
+  }, []);
+
+  const handleDatePickerSave = useCallback((date: string | null) => {
+    if (!mealPlan || !datePickerRecipe) return;
+    if (date) {
+      const updated = assignRecipeToDate(mealPlan.id, datePickerRecipe.recipeId, datePickerRecipe.recipeName, datePickerRecipe.category, date);
+      if (updated) setMealPlan(updated);
+    } else {
+      const currentDate = getRecipeAssignedDate(mealPlan.id, datePickerRecipe.recipeId);
+      if (currentDate) {
+        const updated = assignRecipeToDate(mealPlan.id, datePickerRecipe.recipeId, datePickerRecipe.recipeName, datePickerRecipe.category, currentDate);
+        if (updated) setMealPlan(updated);
+      }
+    }
+    setDatePickerVisible(false);
+    setDatePickerRecipe(null);
+  }, [mealPlan, datePickerRecipe, assignRecipeToDate, getRecipeAssignedDate]);
+
+  const handleDatePickerClose = useCallback(() => {
+    setDatePickerVisible(false);
+    setDatePickerRecipe(null);
+  }, []);
+
   const handleGenerateGroceryList = async () => {
     if (!mealPlan) return;
-    
     setIsGeneratingGroceryList(true);
     try {
       const groceryList = await generateGroceryList(mealPlan);
@@ -150,30 +190,50 @@ export default function MealPlanDetailsScreen() {
     }
   };
 
-  const renderRecipeItem = (mealPlanRecipe: MealPlanRecipe, category: RecipeCategory, index: number) => (
-    <View key={`${category}-${index}-${mealPlanRecipe.recipe.id || index}`} style={styles.recipeItem}>
-      <TouchableOpacity
-        style={styles.recipeContent}
-        onPress={() => handleSelectRecipe(mealPlanRecipe)}
-      >
-        <Text style={styles.recipeName}>{mealPlanRecipe.recipe.name}</Text>
-        <ChevronRight size={20} color={Colors.primary} />
-      </TouchableOpacity>
-      
-      <View style={styles.recipeControls}>
-        <MultiplierDropdown
-          value={mealPlanRecipe.multiplier}
-          onValueChange={(multiplier) => handleMultiplierChange(category, index, multiplier)}
-        />
+  const renderRecipeItem = (mealPlanRecipe: MealPlanRecipe, category: RecipeCategory, index: number) => {
+    const assignedDate = mealPlan ? getRecipeAssignedDate(mealPlan.id, mealPlanRecipe.recipe.id) : null;
+
+    return (
+      <View key={`${category}-${index}-${mealPlanRecipe.recipe.id || index}`} style={styles.recipeItem}>
         <TouchableOpacity
-          style={styles.respinButton}
-          onPress={() => handleRespinRecipe(category, index)}
+          style={styles.recipeContent}
+          onPress={() => handleSelectRecipe(mealPlanRecipe)}
         >
-          <RouletteWheelIcon size={20} />
+          <View style={styles.recipeNameArea}>
+            <Text style={styles.recipeName} numberOfLines={2}>{mealPlanRecipe.recipe.name}</Text>
+            {assignedDate && (
+              <View style={styles.assignedBadge}>
+                <CalendarDays size={10} color={Colors.primary} />
+                <Text style={styles.assignedBadgeText}>{formatAssignedLabel(assignedDate)}</Text>
+              </View>
+            )}
+          </View>
+          <ChevronRight size={20} color={Colors.primary} />
         </TouchableOpacity>
+        
+        <View style={styles.recipeControls}>
+          <MultiplierDropdown
+            value={mealPlanRecipe.multiplier}
+            onValueChange={(multiplier) => handleMultiplierChange(category, index, multiplier)}
+          />
+          <View style={styles.iconRow}>
+            <TouchableOpacity
+              style={styles.respinButton}
+              onPress={() => handleRespinRecipe(category, index)}
+            >
+              <RouletteWheelIcon size={20} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.calendarButton, assignedDate ? styles.calendarButtonActive : null]}
+              onPress={() => handleOpenDatePicker(mealPlanRecipe.recipe.id, mealPlanRecipe.recipe.name, category)}
+            >
+              <CalendarDays size={18} color={assignedDate ? Colors.primary : Colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -188,6 +248,10 @@ export default function MealPlanDetailsScreen() {
   if (!mealPlan) {
     return null;
   }
+
+  const currentAssignedDate = datePickerRecipe && mealPlan
+    ? getRecipeAssignedDate(mealPlan.id, datePickerRecipe.recipeId)
+    : null;
 
   return (
     <>
@@ -204,6 +268,11 @@ export default function MealPlanDetailsScreen() {
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <Text style={styles.date}>{formatDate(mealPlan.createdAt)}</Text>
+        </View>
+
+        <View style={styles.calendarSection}>
+          <Text style={styles.calendarSectionTitle}>Meal Calendar</Text>
+          <MealCalendar assignments={calendarAssignments} />
         </View>
         
         {mealPlan.breakfast && mealPlan.breakfast.length > 0 && (
@@ -266,6 +335,15 @@ export default function MealPlanDetailsScreen() {
           </Button>
         </View>
       </ScrollView>
+
+      <DatePickerModal
+        visible={datePickerVisible}
+        recipeName={datePickerRecipe?.recipeName ?? ''}
+        currentAssignedDate={currentAssignedDate}
+        onSave={handleDatePickerSave}
+        onClose={handleDatePickerClose}
+      />
+
       <WalkthroughModal
         visible={walkthrough.isVisible}
         step={walkthrough.currentStep}
@@ -290,19 +368,28 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   header: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   date: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '600' as const,
     color: Colors.text,
+  },
+  calendarSection: {
+    marginBottom: 24,
+  },
+  calendarSectionTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: Colors.text,
+    marginBottom: 12,
   },
   section: {
     marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
     color: Colors.text,
     marginBottom: 16,
   },
@@ -318,20 +405,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  recipeNameArea: {
+    flex: 1,
+    marginRight: 8,
+  },
   recipeName: {
     fontSize: 16,
     color: Colors.text,
-    flex: 1,
+  },
+  assignedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    backgroundColor: `${Colors.primary}12`,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 4,
+  },
+  assignedBadgeText: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: Colors.primary,
   },
   recipeControls: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  iconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   respinButton: {
     backgroundColor: Colors.cardBackground,
     borderRadius: 8,
     padding: 8,
+  },
+  calendarButton: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 8,
+    padding: 8,
+  },
+  calendarButtonActive: {
+    backgroundColor: `${Colors.primary}15`,
+    borderWidth: 1,
+    borderColor: `${Colors.primary}30`,
   },
   groceryListSection: {
     marginTop: 24,
