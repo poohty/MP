@@ -18,7 +18,7 @@ const app = new Hono();
 
 app.use("*", cors());
 
-app.get("/api/trpc/health", (c) => {
+app.get("/trpc/health", (c) => {
   return c.json({ 
     status: "ok", 
     message: "tRPC is mounted at /api/trpc",
@@ -29,7 +29,7 @@ app.get("/api/trpc/health", (c) => {
 });
 
 app.use(
-  "/api/trpc/*",
+  "/trpc/*",
   trpcServer({
     router: appRouter,
     createContext,
@@ -37,8 +37,12 @@ app.use(
   })
 );
 
-app.route("/api/voice", voiceRoutes);
-console.log("✅ voice routes mounted at /api/voice");
+app.get("/_debug/ping", (c) => {
+  return c.json({ ok: true, source: "backend/hono.ts", time: new Date().toISOString() });
+});
+
+app.route("/voice", voiceRoutes);
+console.log("✅ voice routes mounted at /voice (served at /api/voice)");
 
 app.get("/", (c) => {
   return c.json({ 
