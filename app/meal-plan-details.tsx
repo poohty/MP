@@ -14,6 +14,13 @@ import DatePickerModal from '@/components/DatePickerModal';
 const MEAL_PLAN_REVIEW_STEPS: WalkthroughStep[] = [
   { title: 'Roulette changes', body: 'Tap the Roulette Wheel to swap a suggestion. You can spin as many times as you want.' },
 ];
+
+const CALENDAR_TUTORIAL_STEPS: WalkthroughStep[] = [
+  {
+    title: 'Schedule meals on your calendar',
+    body: 'See the calendar icon next to each recipe? Tap it to pick a day for that meal. Hit Save to lock it in. If you\'d rather skip scheduling, just head straight to Create Grocery List — no calendar needed!',
+  },
+];
 import Svg, { Circle, Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 
 const RouletteWheelIcon = ({ size = 20 }: { size?: number }) => (
@@ -76,7 +83,16 @@ export default function MealPlanDetailsScreen() {
   } = useMealPlans();
   const [mealPlan, setMealPlan] = useState<MealPlan | null>(null);
   const [isGeneratingGroceryList, setIsGeneratingGroceryList] = useState(false);
+  const hasMeals = mealPlan ? (
+    (mealPlan.breakfast?.length ?? 0) +
+    mealPlan.mainCourses.length +
+    mealPlan.appetizers.length +
+    mealPlan.saladsAndSoups.length +
+    mealPlan.desserts.length
+  ) > 0 : false;
+
   const walkthrough = useWalkthrough('meal-plan-review', MEAL_PLAN_REVIEW_STEPS);
+  const calendarTutorial = useWalkthrough('meal-plan-calendar', CALENDAR_TUTORIAL_STEPS, hasMeals && !walkthrough.isVisible);
 
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [datePickerRecipe, setDatePickerRecipe] = useState<{ recipeId: string; recipeName: string; category: RecipeCategory } | null>(null);
@@ -339,6 +355,15 @@ export default function MealPlanDetailsScreen() {
         totalSteps={walkthrough.totalSteps}
         onNext={walkthrough.next}
         onSkip={walkthrough.skip}
+      />
+
+      <WalkthroughModal
+        visible={calendarTutorial.isVisible}
+        step={calendarTutorial.currentStep}
+        stepIndex={calendarTutorial.stepIndex}
+        totalSteps={calendarTutorial.totalSteps}
+        onNext={calendarTutorial.next}
+        onSkip={calendarTutorial.skip}
       />
     </>
   );
