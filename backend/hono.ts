@@ -38,6 +38,7 @@ app.use(
 );
 
 app.route("/api/voice", voiceRoutes);
+console.log("✅ voice routes mounted at /api/voice");
 
 app.get("/", (c) => {
   return c.json({ 
