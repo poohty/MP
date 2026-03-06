@@ -8,9 +8,7 @@ import Input from '@/components/Input';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
-import { ArrowLeft, Copy } from 'lucide-react-native';
-import * as Clipboard from 'expo-clipboard';
-import { getBackendBaseUrl } from '@/lib/trpc';
+import { ArrowLeft } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function LoginScreen() {
@@ -201,29 +199,6 @@ export default function LoginScreen() {
             <Text style={[styles.resendText, { color: themeColors.textSecondary }]}>Resend verification email</Text>
           </TouchableOpacity>
         </View>
-
-        {__DEV__ && (
-          <View style={styles.debugRow}>
-            <Text style={[styles.debugText, { color: themeColors.textSecondary }]} selectable>
-              {`Backend URL: ${getBackendBaseUrl() || 'NOT SET'}`}
-            </Text>
-            <TouchableOpacity
-              style={[styles.copyButton, { borderColor: themeColors.border }]}
-              onPress={async () => {
-                const url = getBackendBaseUrl();
-                if (url) {
-                  await Clipboard.setStringAsync(url);
-                  Alert.alert('Copied!', url);
-                } else {
-                  Alert.alert('Backend URL is not set');
-                }
-              }}
-            >
-              <Copy size={14} color={themeColors.textSecondary} />
-              <Text style={[styles.copyText, { color: themeColors.textSecondary }]}>Copy</Text>
-            </TouchableOpacity>
-          </View>
-        )}
       </ScrollView>
       </KeyboardAvoidingView>
     </GradientBackground>
@@ -333,30 +308,5 @@ const styles = StyleSheet.create({
   footerLink: {
     fontWeight: '700',
     fontSize: 15,
-  },
-  debugRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-    paddingHorizontal: 12,
-    gap: 8,
-  },
-  debugText: {
-    fontSize: 11,
-    flexShrink: 1,
-  },
-  copyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  copyText: {
-    fontSize: 11,
-    fontWeight: '600' as const,
   },
 });
