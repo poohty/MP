@@ -40,7 +40,7 @@ voiceRoutes.post("/stt", async (c) => {
 
     const elevenLabsForm = new FormData();
     elevenLabsForm.append("file", audioFile, audioFile.name || "audio.webm");
-    elevenLabsForm.append("model_id", "scribe_v1");
+    elevenLabsForm.append("model_id", "scribe_v2");
 
     for (const term of mergedKeyterms) {
       elevenLabsForm.append("keyterms", term);
@@ -60,11 +60,13 @@ voiceRoutes.post("/stt", async (c) => {
       const errorText = await response.text();
       console.error("[voice/stt] ElevenLabs error:", response.status, errorText);
       let parsedError: string = errorText;
+      let param: string | undefined;
       try {
         const errJson = JSON.parse(errorText);
         parsedError = errJson?.detail?.message || errJson?.detail || errorText;
+        param = errJson?.detail?.param;
       } catch {}
-      return c.json({ error: `ElevenLabs STT error: ${parsedError}`, raw: errorText }, 502);
+      return c.json({ error: `ElevenLabs STT error: ${parsedError}`, param, raw: errorText }, 502);
     }
 
     const result = await response.json() as { text?: string };
