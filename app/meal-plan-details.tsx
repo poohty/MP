@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useMealPlans } from '@/hooks/meal-plan-store';
@@ -9,7 +9,6 @@ import MultiplierDropdown from '@/components/MultiplierDropdown';
 import Button from '@/components/Button';
 import { useWalkthrough, WalkthroughStep } from '@/hooks/useWalkthrough';
 import WalkthroughModal from '@/components/WalkthroughModal';
-import MealCalendar from '@/components/MealCalendar';
 import DatePickerModal from '@/components/DatePickerModal';
 
 const MEAL_PLAN_REVIEW_STEPS: WalkthroughStep[] = [
@@ -73,7 +72,6 @@ export default function MealPlanDetailsScreen() {
     updateRecipeMultiplier,
     generateGroceryList,
     assignRecipeToDate,
-    getCalendarAssignments,
     getRecipeAssignedDate,
   } = useMealPlans();
   const [mealPlan, setMealPlan] = useState<MealPlan | null>(null);
@@ -94,11 +92,6 @@ export default function MealPlanDetailsScreen() {
       }
     }
   }, [id, mealPlans]);
-
-  const calendarAssignments = useMemo(() => {
-    if (!mealPlan) return [];
-    return getCalendarAssignments(mealPlan.id);
-  }, [mealPlan, getCalendarAssignments]);
 
   const handleDelete = () => {
     Alert.alert(
@@ -270,11 +263,6 @@ export default function MealPlanDetailsScreen() {
           <Text style={styles.date}>{formatDate(mealPlan.createdAt)}</Text>
         </View>
 
-        <View style={styles.calendarSection}>
-          <Text style={styles.calendarSectionTitle}>Meal Calendar</Text>
-          <MealCalendar assignments={calendarAssignments} />
-        </View>
-        
         {mealPlan.breakfast && mealPlan.breakfast.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Breakfast</Text>
@@ -374,15 +362,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600' as const,
     color: Colors.text,
-  },
-  calendarSection: {
-    marginBottom: 24,
-  },
-  calendarSectionTitle: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: Colors.text,
-    marginBottom: 12,
   },
   section: {
     marginBottom: 24,
