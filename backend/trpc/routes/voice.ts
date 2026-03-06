@@ -42,8 +42,8 @@ voiceRoutes.post("/stt", async (c) => {
     elevenLabsForm.append("file", audioFile, audioFile.name || "audio.webm");
     elevenLabsForm.append("model_id", "scribe_v1");
 
-    if (mergedKeyterms.length > 0) {
-      elevenLabsForm.append("keyterms", JSON.stringify(mergedKeyterms));
+    for (const term of mergedKeyterms) {
+      elevenLabsForm.append("keyterms", term);
     }
 
     console.log("[voice/stt] Calling ElevenLabs Scribe API...");
@@ -59,7 +59,12 @@ voiceRoutes.post("/stt", async (c) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error("[voice/stt] ElevenLabs error:", response.status, errorText);
-      return c.json({ error: `ElevenLabs STT error: ${errorText}` }, 502);
+      let parsedError: string = errorText;
+      try {
+        const errJson = JSON.parse(errorText);
+        parsedError = errJson?.detail?.message || errJson?.detail || errorText;
+      } catch {}
+      return c.json({ error: `ElevenLabs STT error: ${parsedError}`, raw: errorText }, 502);
     }
 
     const result = await response.json() as { text?: string };
