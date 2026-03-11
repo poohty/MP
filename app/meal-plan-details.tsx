@@ -83,6 +83,8 @@ export default function MealPlanDetailsScreen() {
   } = useMealPlans();
   const [mealPlan, setMealPlan] = useState<MealPlan | null>(null);
   const [isGeneratingGroceryList, setIsGeneratingGroceryList] = useState(false);
+  const [isDeleted, setIsDeleted] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const hasMeals = mealPlan ? (
     (mealPlan.breakfast?.length ?? 0) +
     mealPlan.mainCourses.length +
@@ -98,16 +100,18 @@ export default function MealPlanDetailsScreen() {
   const [datePickerRecipe, setDatePickerRecipe] = useState<{ recipeId: string; recipeName: string; category: RecipeCategory } | null>(null);
 
   useEffect(() => {
+    if (isDeleted) return;
     if (id) {
       const foundMealPlan = mealPlans.find(p => p.id === id);
       if (foundMealPlan) {
         setMealPlan(foundMealPlan);
-      } else {
+        setHasLoadedOnce(true);
+      } else if (!hasLoadedOnce) {
         Alert.alert('Error', 'Meal plan not found');
         router.back();
       }
     }
-  }, [id, mealPlans]);
+  }, [id, mealPlans, isDeleted, hasLoadedOnce]);
 
   const handleDelete = () => {
     Alert.alert(
@@ -119,8 +123,14 @@ export default function MealPlanDetailsScreen() {
           text: 'Delete',
           onPress: async () => {
             if (mealPlan) {
+              setIsDeleted(true);
               await deleteMealPlan(mealPlan.id);
-              router.back();
+              Alert.alert('Meal Plan Deleted Successfully', '', [
+                {
+                  text: 'OK',
+                  onPress: () => router.back(),
+                },
+              ]);
             }
           },
           style: 'destructive',
