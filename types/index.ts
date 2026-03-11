@@ -1,3 +1,5 @@
+import type { VoicePreference } from '@/constants/voice';
+
 export type User = {
   id: string;
   email: string;
@@ -8,6 +10,7 @@ export type User = {
   shareCookbookWithFriends?: boolean;
   locationPermission?: boolean;
   ttsVoiceId?: string | null;
+  voicePreference?: VoicePreference | null;
 };
 
 export type RecipeCategory = 'Breakfast' | 'Appetizer' | 'Salads & Soups' | 'Main Course' | 'Desserts';
@@ -110,6 +113,7 @@ export type UserProfile = {
   displayName: string;
   shareCookbookWithFriends: boolean;
   ttsVoiceId?: string | null;
+  voicePreference?: VoicePreference | null;
 };
 
 export type FriendStatus = 'pending' | 'accepted';

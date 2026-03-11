@@ -44,6 +44,7 @@ const [UserContext, useUser] = createContextHook(() => {
         displayName: data.display_name,
         shareCookbookWithFriends: data.share_cookbook_with_friends,
         ttsVoiceId: data.tts_voice_id ?? null,
+        voicePreference: (data.voice_preference === 'male' || data.voice_preference === 'female') ? data.voice_preference : 'female',
       };
     } catch {
       return null;
@@ -109,6 +110,7 @@ const [UserContext, useUser] = createContextHook(() => {
         displayName: authUser.name,
         shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
         ttsVoiceId: authUser.ttsVoiceId ?? null,
+        voicePreference: authUser.voicePreference ?? 'female',
       };
       setCurrentUserProfile(fallbackProfile);
       setFriendLinks([]);
@@ -142,6 +144,7 @@ const [UserContext, useUser] = createContextHook(() => {
           displayName: authUser.name,
           shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
           ttsVoiceId: authUser.ttsVoiceId ?? null,
+          voicePreference: authUser.voicePreference ?? 'female',
         };
         setCurrentUserProfile(fallbackProfile);
         setFriendLinks([]);
@@ -179,6 +182,7 @@ const [UserContext, useUser] = createContextHook(() => {
           displayName: fallbackDisplayName,
           shareCookbookWithFriends: fallbackShareCookbook,
           ttsVoiceId: authUser.ttsVoiceId ?? null,
+          voicePreference: authUser.voicePreference ?? 'female',
         };
 
         setCurrentUserProfile(fallbackProfile);
@@ -193,6 +197,7 @@ const [UserContext, useUser] = createContextHook(() => {
         displayName: data.display_name,
         shareCookbookWithFriends: !!data.share_cookbook_with_friends,
         ttsVoiceId: data.tts_voice_id ?? null,
+        voicePreference: (data.voice_preference === 'male' || data.voice_preference === 'female') ? data.voice_preference : 'female',
       };
       setCurrentUserProfile(profile);
 
@@ -210,6 +215,7 @@ const [UserContext, useUser] = createContextHook(() => {
         displayName: authUser.name,
         shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
         ttsVoiceId: authUser.ttsVoiceId ?? null,
+        voicePreference: authUser.voicePreference ?? 'female',
       };
       setCurrentUserProfile(fallbackProfile);
       setFriendLinks([]);
@@ -291,6 +297,7 @@ const [UserContext, useUser] = createContextHook(() => {
           displayName: row.display_name,
           shareCookbookWithFriends: row.share_cookbook_with_friends,
           ttsVoiceId: row.tts_voice_id ?? null,
+          voicePreference: (row.voice_preference === 'male' || row.voice_preference === 'female') ? row.voice_preference : 'female',
         }));
 
       console.log('🔍 USER SEARCH results count:', results.length);

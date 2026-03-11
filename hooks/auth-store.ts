@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { User } from '@/types';
 import { router } from 'expo-router';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
+import type { VoicePreference } from '@/constants/voice';
 import * as Linking from 'expo-linking';
 
 const USER_STORAGE_KEY = 'meal-planner-user';
@@ -73,19 +74,18 @@ const result = createContextHook(() => {
         console.log('✅ Supabase user_profiles upserted:', { id: userToStore.id, username });
       }
 
-      if (userToStore.ttsVoiceId || !userToStore.ttsVoiceId) {
-        const voiceId = userToStore.ttsVoiceId || 'Cz0K1kOv9tD8l0b5Qu53';
-        const { error: voiceError } = await supabase
-          .from('user_profiles')
-          .update({ tts_voice_id: voiceId })
-          .eq('id', userToStore.id);
+      const voiceId = userToStore.ttsVoiceId || 'Cz0K1kOv9tD8l0b5Qu53';
+      const voicePref = userToStore.voicePreference || 'female';
+      const { error: voiceError } = await supabase
+        .from('user_profiles')
+        .update({ tts_voice_id: voiceId, voice_preference: voicePref })
+        .eq('id', userToStore.id);
 
-        if (voiceError) {
-          if (voiceError.code === 'PGRST204' || voiceError.message?.includes('tts_voice_id')) {
-            console.warn('⚠️ tts_voice_id column not found in user_profiles. Run the SUPABASE_ADD_TTS_VOICE_ID.sql migration.');
-          } else {
-            console.error('❌ Failed to update tts_voice_id:', voiceError.message || voiceError.code);
-          }
+      if (voiceError) {
+        if (voiceError.code === 'PGRST204' || voiceError.message?.includes('tts_voice_id') || voiceError.message?.includes('voice_preference')) {
+          console.warn('⚠️ voice columns not found in user_profiles. Ensure migrations are applied.');
+        } else {
+          console.error('❌ Failed to update voice settings:', voiceError.message || voiceError.code);
         }
       }
     } catch (error) {
@@ -180,6 +180,7 @@ const result = createContextHook(() => {
 
         let savedShareCookbook = false;
         let savedTtsVoiceId: string | null = null;
+        let savedVoicePreference: VoicePreference = 'female';
         try {
           const { data: profileData } = await supabase
             .from('user_profiles')
@@ -192,9 +193,12 @@ const result = createContextHook(() => {
           if (profileData?.tts_voice_id) {
             savedTtsVoiceId = profileData.tts_voice_id;
           }
-          console.log('🔐 Fetched shareCookbook from Supabase profile:', savedShareCookbook);
+          if (profileData?.voice_preference === 'male' || profileData?.voice_preference === 'female') {
+            savedVoicePreference = profileData.voice_preference;
+          }
+          console.log('🔐 Fetched profile from Supabase:', { savedShareCookbook, savedVoicePreference });
         } catch {
-          console.warn('⚠️ Could not fetch profile during login, defaulting shareCookbook to false');
+          console.warn('⚠️ Could not fetch profile during login, using defaults');
         }
 
         const newUser: User = {
@@ -204,6 +208,7 @@ const result = createContextHook(() => {
           username,
           shareCookbookWithFriends: savedShareCookbook,
           ttsVoiceId: savedTtsVoiceId,
+          voicePreference: savedVoicePreference,
         };
 
         await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));

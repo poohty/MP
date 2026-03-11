@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Alert, Platform } from 'react-native';
 import { Audio } from 'expo-av';
 import { getBackendBaseUrl } from '@/lib/trpc';
-const DEFAULT_VOICE_ID = 'Cz0K1kOv9tD8l0b5Qu53';
+import { resolveVoiceId, type VoicePreference } from '@/constants/voice';
 const RECORD_DURATION_MS = 3000;
 
 type VoiceCommand = 'STEP_COMPLETE' | 'REPEAT_STEP' | 'NONE';
@@ -165,7 +165,7 @@ async function listenForCommand(
   return { command: result.command, transcript: result.transcript };
 }
 
-export function useCookAlong(instructions: string[], userVoiceId?: string | null) {
+export function useCookAlong(instructions: string[], voicePreference?: VoicePreference | null) {
   const [state, setState] = useState<CookAlongState>({
     cookAlongActive: false,
     currentStepIndex: 0,
@@ -178,7 +178,7 @@ export function useCookAlong(instructions: string[], userVoiceId?: string | null
   const soundRef = useRef<Audio.Sound | null>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const loopRunningRef = useRef(false);
-  const resolvedVoiceId = userVoiceId || DEFAULT_VOICE_ID;
+  const resolvedVoiceId = resolveVoiceId(voicePreference);
 
   const cleanup = useCallback(async () => {
     activeRef.current = false;
