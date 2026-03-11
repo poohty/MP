@@ -4,7 +4,7 @@ import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import { useAuth } from '@/hooks/auth-store';
 import Colors from '@/constants/colors';
-import { ExternalLink, Trash2, CheckSquare, Square, Edit3, Camera, Link as LinkIcon, BookPlus, Mic, MicOff } from 'lucide-react-native';
+import { ExternalLink, CheckSquare, Square, Edit3, Camera, Link as LinkIcon, BookPlus, Mic, MicOff } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import GradientBackground from '@/components/GradientBackground';
 import { Recipe, RecipeCategory } from '@/types';
@@ -29,7 +29,7 @@ const RECIPE_DETAIL_WALKTHROUGH_STEPS: WalkthroughStep[] = [
 export default function RecipeDetailsScreen() {
   const { id, friendUserId } = useLocalSearchParams<{ id: string; friendUserId?: string }>();
   const { user } = useAuth();
-  const { recipes, deleteRecipe, updateRecipeStepProgress, changeRecipeCategory, updateRecipeImage, convertImageToBase64, importRecipeFromFriend, getRecipesForUser } = useRecipes();
+  const { recipes, updateRecipeStepProgress, changeRecipeCategory, updateRecipeImage, convertImageToBase64, importRecipeFromFriend, getRecipesForUser } = useRecipes();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [checkedSteps, setCheckedSteps] = useState<{ [stepIndex: number]: boolean }>({});
   const [isLoadingContent, setIsLoadingContent] = useState(false);
@@ -73,7 +73,7 @@ export default function RecipeDetailsScreen() {
         setRecipe(foundRecipe);
         setCheckedSteps(foundRecipe.stepProgress || {});
         if (!foundRecipe.content && foundRecipe.url) {
-          handleExtractRecipeContent(foundRecipe);
+          void handleExtractRecipeContent(foundRecipe);
         }
       } else {
         Alert.alert('Error', 'Recipe not found');
@@ -84,7 +84,7 @@ export default function RecipeDetailsScreen() {
 
   useEffect(() => {
     if (id) {
-      loadRecipe();
+      void loadRecipe();
     }
   }, [id, loadRecipe]);
 
@@ -123,6 +123,18 @@ export default function RecipeDetailsScreen() {
     }
   };
 
+  const clearAllChecks = useCallback(async () => {
+    if (!recipe) return;
+    const cleared: { [stepIndex: number]: boolean } = {};
+    setCheckedSteps(cleared);
+    try {
+      await updateRecipeStepProgress(recipe.id, cleared);
+      console.log('[RecipeDetails] All checks cleared for recipe:', recipe.id);
+    } catch (error) {
+      console.error('Failed to clear step progress:', error);
+    }
+  }, [recipe, updateRecipeStepProgress]);
+
   const toggleStepCheck = async (stepIndex: number) => {
     if (!recipe || friendUserId) return;
     
@@ -133,11 +145,32 @@ export default function RecipeDetailsScreen() {
     
     setCheckedSteps(newCheckedSteps);
     
-    // Save step progress to storage
     try {
       await updateRecipeStepProgress(recipe.id, newCheckedSteps);
     } catch (error) {
       console.error('Failed to save step progress:', error);
+    }
+
+    const totalSteps = parsedInstructions.length;
+    if (totalSteps > 0) {
+      const allChecked = Array.from({ length: totalSteps }, (_, i) => i).every(
+        (i) => !!newCheckedSteps[i]
+      );
+      if (allChecked) {
+        setTimeout(() => {
+          Alert.alert(
+            'All Steps Complete!',
+            'You finished all the instructions. Would you like to clear the checkmarks?',
+            [
+              { text: 'Keep Checks', style: 'cancel' },
+              {
+                text: 'Clear Checks',
+                onPress: () => void clearAllChecks(),
+              },
+            ]
+          );
+        }, 300);
+      }
     }
   };
 
@@ -401,28 +434,6 @@ export default function RecipeDetailsScreen() {
     }
   };
 
-  const handleDelete = () => {
-    Alert.alert(
-      'Delete Recipe',
-      'Are you sure you want to delete this recipe?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          onPress: async () => {
-            if (recipe) {
-              await deleteRecipe(recipe.id);
-              router.back();
-            }
-          },
-          style: 'destructive',
-        },
-      ]
-    );
-  };
 
   const handleCategoryChange = async (newCategory: RecipeCategory) => {
     if (!recipe) return;
@@ -557,7 +568,7 @@ export default function RecipeDetailsScreen() {
     return parsed.instructions;
   }, [recipe?.content]);
 
-  const cookAlong = useCookAlong(parsedInstructions, user?.voicePreference);
+  const cookAlong = useCookAlong(parsedInstructions, user?.voicePreference, clearAllChecks);
 
   useEffect(() => {
     if (cookAlong.cookAlongActive && cookAlong.currentStepIndex >= 0) {
@@ -600,17 +611,12 @@ export default function RecipeDetailsScreen() {
                   <BookPlus size={24} color={Colors.success} />
                 </TouchableOpacity>
               ) : (
-                <>
-                  <TouchableOpacity 
+                <TouchableOpacity 
                     onPress={() => setShowCategorySelector(!showCategorySelector)} 
                     style={styles.headerButton}
                   >
                     <Edit3 size={24} color={Colors.primary} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={handleDelete} style={styles.headerButton}>
-                    <Trash2 size={24} color={Colors.error} />
-                  </TouchableOpacity>
-                </>
               )}
             </View>
           ),

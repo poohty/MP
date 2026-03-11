@@ -165,7 +165,9 @@ async function listenForCommand(
   return { command: result.command, transcript: result.transcript };
 }
 
-export function useCookAlong(instructions: string[], voicePreference?: VoicePreference | null) {
+export function useCookAlong(instructions: string[], voicePreference?: VoicePreference | null, onAllStepsComplete?: () => void) {
+  const onAllStepsCompleteRef = useRef(onAllStepsComplete);
+  onAllStepsCompleteRef.current = onAllStepsComplete;
   const [state, setState] = useState<CookAlongState>({
     cookAlongActive: false,
     currentStepIndex: 0,
@@ -256,6 +258,7 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
 
     let stepIdx = startIndex;
     const reminderLine = "Say 'Step Complete' for the next step, or 'Repeat Step' to hear this step again.";
+    const finalStepReminder = "Say 'Step Complete' once you are done and I will clear the check marks of this recipe. Or say 'Repeat Step' to hear this step again.";
 
     try {
       const introText = "So you're ready to start making this recipe? Let's start with step one.";
@@ -315,12 +318,20 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
         if (command === 'REPEAT_STEP') {
           await safeSpeakText(instructions[stepIdx] || '');
           if (!activeRef.current) break;
-          await safeSpeakText(reminderLine);
+          if (stepIdx >= instructions.length - 1) {
+            await safeSpeakText(finalStepReminder);
+          } else {
+            await safeSpeakText(reminderLine);
+          }
         } else if (command === 'STEP_COMPLETE') {
           setState((prev) => ({ ...prev, currentStepIndex: stepIdx }));
 
           if (stepIdx >= instructions.length - 1) {
-            await safeSpeakText("Awesome, hope you enjoy your meal.");
+            console.log('[CookAlong] Final step complete, clearing checkmarks');
+            if (onAllStepsCompleteRef.current) {
+              onAllStepsCompleteRef.current();
+            }
+            await safeSpeakText("Awesome, all checkmarks cleared. Hope you enjoy your meal!");
             activeRef.current = false;
             setState((prev) => ({
               ...prev,
@@ -332,9 +343,15 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
           } else {
             stepIdx += 1;
             setState((prev) => ({ ...prev, currentStepIndex: stepIdx }));
-            await safeSpeakText(`Step ${stepIdx + 1}. ${instructions[stepIdx] || ''}`);
-            if (!activeRef.current) break;
-            await safeSpeakText(reminderLine);
+            if (stepIdx >= instructions.length - 1) {
+              await safeSpeakText(`Step ${stepIdx + 1}. ${instructions[stepIdx] || ''}`);
+              if (!activeRef.current) break;
+              await safeSpeakText(finalStepReminder);
+            } else {
+              await safeSpeakText(`Step ${stepIdx + 1}. ${instructions[stepIdx] || ''}`);
+              if (!activeRef.current) break;
+              await safeSpeakText(reminderLine);
+            }
           }
         } else {
           await safeSpeakText(

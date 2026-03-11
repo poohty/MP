@@ -67,18 +67,18 @@ export default function RecipeCard({ recipe, onPress, onDelete, onToggleFavorite
     if (!onDelete) return;
 
     Alert.alert(
-      'Delete Recipe?',
-      `Are you sure you want to delete "${recipe.name}"?`,
+      'Delete Recipe',
+      'Are you sure you want to delete this recipe from your cook book?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Delete From Cook Book',
           style: 'destructive',
           onPress: async () => {
             try {
               const success = await onDelete(recipe);
               if (success) {
-                Alert.alert('Recipe Deleted', `"${recipe.name}" has been deleted.`);
+                Alert.alert('Recipe deleted', undefined, [{ text: 'OK' }]);
               }
             } catch (err) {
               console.error('Error deleting recipe:', err);
