@@ -18,8 +18,8 @@ interface ButtonProps extends TouchableOpacityProps {
   variant?: 'primary' | 'secondary' | 'outline';
   size?: 'small' | 'medium' | 'large';
   isLoading?: boolean;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: ViewStyle | ViewStyle[];
+  textStyle?: TextStyle | TextStyle[];
   disabled?: boolean;
   icon?: React.ReactNode;
 }
@@ -94,7 +94,7 @@ export default function Button({
       <>
         {icon && icon}
         <Text 
-          style={[getTextStyle(), textStyle, icon && { marginLeft: 8 }]}
+          style={[getTextStyle(), textStyle, icon ? { marginLeft: 8 } : undefined]}
           numberOfLines={1}
           ellipsizeMode="tail"
         >
