@@ -20,20 +20,29 @@ interface CookAlongState {
 async function fetchTTSAudio(text: string, voiceId: string): Promise<string> {
   const apiBase = getBackendBaseUrl();
   if (!apiBase) {
-    console.log('[CookAlong] TTS: no API base URL found');
+    console.log('[CookAlong] TTS: no API base URL found. EXPO_PUBLIC_RORK_API_BASE_URL may not be set.');
     throw new Error('Backend not configured');
   }
 
-  console.log('[CookAlong] Calling TTS at:', `${apiBase}/api/voice/tts`);
-  const response = await fetch(`${apiBase}/api/voice/tts`, {
+  const ttsUrl = `${apiBase}/api/voice/tts`;
+  console.log('[CookAlong] TTS request ->', ttsUrl, '| voiceId:', voiceId, '| text length:', text.length);
+
+  const response = await fetch(ttsUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text, voiceId }),
   });
 
   if (!response.ok) {
+    const contentType = response.headers.get('content-type') || '';
     const errText = await response.text();
-    console.log('[CookAlong] TTS error:', response.status, errText);
+    const isHtml = contentType.includes('text/html') || errText.trimStart().startsWith('<');
+    if (isHtml) {
+      console.log('[CookAlong] TTS returned HTML (not JSON) - likely wrong URL or backend not deployed. Status:', response.status);
+      console.log('[CookAlong] TTS URL was:', ttsUrl);
+      throw new Error('Voice server unreachable. The backend URL may be incorrect.');
+    }
+    console.log('[CookAlong] TTS error:', response.status, errText.substring(0, 500));
     throw new Error(`TTS failed: ${response.status}`);
   }
 
@@ -396,9 +405,18 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
 
     console.log('[CookAlong] Starting parallel: health check + permissions + TTS fetch');
 
-    const healthPromise = fetch(`${apiBase}/api/voice/health`, { method: 'GET' })
-      .then(r => {
+    const healthUrl = `${apiBase}/api/voice/health`;
+    console.log('[CookAlong] Health check URL:', healthUrl);
+    const healthPromise = fetch(healthUrl, { method: 'GET' })
+      .then(async r => {
         console.log('[CookAlong] Health check done in', Date.now() - tapTime, 'ms, status:', r.status);
+        if (!r.ok) {
+          const body = await r.text().catch(() => '');
+          const isHtml = body.trimStart().startsWith('<');
+          if (isHtml) {
+            console.log('[CookAlong] Health check returned HTML - backend URL is likely wrong:', healthUrl);
+          }
+        }
         return r.ok;
       })
       .catch((e) => {
