@@ -110,8 +110,8 @@ voiceRoutes.post("/tts", async (c) => {
         },
         body: JSON.stringify({
           text,
-          model_id: "eleven_multilingual_v2",
-          output_format: "mp3_44100_128",
+          model_id: "eleven_turbo_v2_5",
+          output_format: "mp3_22050_32",
         }),
       }
     );
