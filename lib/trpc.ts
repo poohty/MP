@@ -15,8 +15,9 @@ function resolveNativeHostUrl(): string {
       null;
     if (debuggerHost) {
       const host = debuggerHost.split(':')[0];
-      console.log('[getBackendBaseUrl] Native: resolved debuggerHost ->', debuggerHost, '-> host:', host);
-      return `http://${host}:8081`;
+      const backendUrl = `https://${host}`;
+      console.log('[getBackendBaseUrl] Native: resolved backend from debuggerHost:', backendUrl);
+      return backendUrl;
     }
 
     const hostUri =
@@ -26,8 +27,9 @@ function resolveNativeHostUrl(): string {
       null;
     if (hostUri) {
       const host = hostUri.split(':')[0];
-      console.log('[getBackendBaseUrl] Native: resolved hostUri ->', hostUri, '-> host:', host);
-      return `http://${host}:8081`;
+      const backendUrl = `https://${host}`;
+      console.log('[getBackendBaseUrl] Native: resolved backend from hostUri:', backendUrl);
+      return backendUrl;
     }
   } catch (e) {
     console.warn('[getBackendBaseUrl] Error reading Expo Constants:', e);
