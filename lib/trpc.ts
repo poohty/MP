@@ -1,24 +1,25 @@
 import { createTRPCReact } from "@trpc/react-query";
 import { httpLink } from "@trpc/client";
+import { Platform } from "react-native";
 import type { AppRouter } from "@/backend/trpc/app-router";
 import superjson from "superjson";
 
 export const trpc = createTRPCReact<AppRouter>();
 
 export function getBackendBaseUrl(): string {
-  const envUrl = (process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '').trim();
-  if (envUrl) {
-    console.log('[getBackendBaseUrl] Using EXPO_PUBLIC_RORK_API_BASE_URL:', envUrl);
-    return envUrl;
-  }
-
-  if (typeof window !== 'undefined' && window.location?.origin) {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin) {
     const origin = window.location.origin;
-    console.log('[getBackendBaseUrl] Using window.location.origin:', origin);
+    console.log('[getBackendBaseUrl] Web: using window.location.origin:', origin);
     return origin;
   }
 
-  console.warn('[getBackendBaseUrl] No backend URL available from env or window');
+  const envUrl = (process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '').trim();
+  if (envUrl) {
+    console.log('[getBackendBaseUrl] Native: using EXPO_PUBLIC_RORK_API_BASE_URL:', envUrl);
+    return envUrl;
+  }
+
+  console.warn('[getBackendBaseUrl] No backend URL available');
   return '';
 }
 
@@ -52,9 +53,8 @@ export const trpcClient = trpc.createClient({
         }
 
         console.log('🌐 tRPC fetch request:', { 
-          url: String(url), 
+          url: typeof url === 'string' ? url : String(url as unknown as string), 
           method: options?.method,
-          body: options?.body ? String(options.body).substring(0, 200) : 'none'
         });
 
         try {

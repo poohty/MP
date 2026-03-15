@@ -409,18 +409,23 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
     console.log('[CookAlong] Health check URL:', healthUrl);
     const healthPromise = fetch(healthUrl, { method: 'GET' })
       .then(async r => {
-        console.log('[CookAlong] Health check done in', Date.now() - tapTime, 'ms, status:', r.status);
+        console.log('[CookAlong] Health check status:', r.status, 'in', Date.now() - tapTime, 'ms');
         if (!r.ok) {
           const body = await r.text().catch(() => '');
-          const isHtml = body.trimStart().startsWith('<');
-          if (isHtml) {
-            console.log('[CookAlong] Health check returned HTML - backend URL is likely wrong:', healthUrl);
+          if (body.trimStart().startsWith('<')) {
+            console.error('[CookAlong] Health check returned HTML — wrong backend URL:', healthUrl);
           }
+          return false;
         }
-        return r.ok;
+        const contentType = r.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          console.error('[CookAlong] Health check returned non-JSON content-type:', contentType, '— wrong backend URL:', healthUrl);
+          return false;
+        }
+        return true;
       })
       .catch((e) => {
-        console.log('[CookAlong] Health check failed:', e);
+        console.error('[CookAlong] Health check failed:', e);
         return false;
       });
 
@@ -461,7 +466,10 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
     console.log('[CookAlong] All parallel tasks done in', Date.now() - tapTime, 'ms');
 
     if (!healthOk) {
-      Alert.alert('Voice feature unavailable', 'Voice server is not responding. Please try again later.');
+      Alert.alert(
+        'Voice feature unavailable',
+        `Voice server not responding.\nBackend: ${apiBase}\nPlease try again later.`
+      );
       return;
     }
 
