@@ -24,7 +24,7 @@ async function fetchTTSAudio(text: string, voiceId: string): Promise<string> {
     throw new Error('Backend not configured');
   }
 
-  const ttsUrl = `${apiBase}/api/voice/tts`;
+  const ttsUrl = `${apiBase}/voice/tts`;
   console.log('[CookAlong] TTS request ->', ttsUrl, '| voiceId:', voiceId, '| text length:', text.length);
 
   const response = await fetch(ttsUrl, {
@@ -160,7 +160,7 @@ async function listenForCommand(
 
   formData.append('keyterms', 'step complete,repeat step');
 
-  const response = await fetch(`${apiBase}/api/voice/stt`, {
+  const response = await fetch(`${apiBase}/voice/stt`, {
     method: 'POST',
     body: formData,
   });
@@ -405,7 +405,7 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
 
     console.log('[CookAlong] Starting parallel: health check + permissions + TTS fetch');
 
-    const healthUrl = `${apiBase}/api/voice/health`;
+    const healthUrl = `${apiBase}/voice/health`;
     console.log('[CookAlong] Health check URL:', healthUrl);
     const healthPromise = fetch(healthUrl, { method: 'GET' })
       .then(async r => {
