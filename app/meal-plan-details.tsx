@@ -82,6 +82,7 @@ export default function MealPlanDetailsScreen() {
     getRecipeAssignedDate,
   } = useMealPlans();
   const [mealPlan, setMealPlan] = useState<MealPlan | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isGeneratingGroceryList, setIsGeneratingGroceryList] = useState(false);
   const hasMeals = mealPlan ? (
     (mealPlan.breakfast?.length ?? 0) +
@@ -98,16 +99,14 @@ export default function MealPlanDetailsScreen() {
   const [datePickerRecipe, setDatePickerRecipe] = useState<{ recipeId: string; recipeName: string; category: RecipeCategory } | null>(null);
 
   useEffect(() => {
+    if (isDeleting) return;
     if (id) {
       const foundMealPlan = mealPlans.find(p => p.id === id);
       if (foundMealPlan) {
         setMealPlan(foundMealPlan);
-      } else {
-        Alert.alert('Error', 'Meal plan not found');
-        router.back();
       }
     }
-  }, [id, mealPlans]);
+  }, [id, mealPlans, isDeleting]);
 
   const handleDelete = () => {
     Alert.alert(
@@ -119,8 +118,12 @@ export default function MealPlanDetailsScreen() {
           text: 'Delete',
           onPress: async () => {
             if (mealPlan) {
+              setIsDeleting(true);
               await deleteMealPlan(mealPlan.id);
               router.back();
+              setTimeout(() => {
+                Alert.alert('Meal Plan Deleted Successfully');
+              }, 500);
             }
           },
           style: 'destructive',
