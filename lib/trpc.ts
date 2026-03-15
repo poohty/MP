@@ -15,11 +15,15 @@ export function getBackendBaseUrl(): string {
 
   const envUrl = (process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '').trim();
   if (envUrl) {
-    console.log('[getBackendBaseUrl] Native: using EXPO_PUBLIC_RORK_API_BASE_URL:', envUrl);
-    return envUrl;
+    if (envUrl.includes('rorktest.dev')) {
+      console.warn('[getBackendBaseUrl] Rejecting stale rorktest.dev URL:', envUrl);
+    } else {
+      console.log('[getBackendBaseUrl] Native: using EXPO_PUBLIC_RORK_API_BASE_URL:', envUrl);
+      return envUrl;
+    }
   }
 
-  console.warn('[getBackendBaseUrl] No backend URL available');
+  console.warn('[getBackendBaseUrl] No valid backend URL available. EXPO_PUBLIC_RORK_API_BASE_URL:', envUrl || '(empty)');
   return '';
 }
 
