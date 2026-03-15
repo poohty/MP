@@ -1,66 +1,22 @@
 import { createTRPCReact } from "@trpc/react-query";
 import { httpLink } from "@trpc/client";
 import { Platform } from "react-native";
-import Constants from "expo-constants";
 import type { AppRouter } from "@/backend/trpc/app-router";
 import superjson from "superjson";
 
 export const trpc = createTRPCReact<AppRouter>();
 
-function resolveNativeHostUrl(): string {
-  try {
-    const debuggerHost =
-      Constants.expoGoConfig?.debuggerHost ??
-      (Constants as any).manifest?.debuggerHost ??
-      null;
-    if (debuggerHost) {
-      const host = debuggerHost.split(':')[0];
-      const backendUrl = `https://${host}`;
-      console.log('[getBackendBaseUrl] Native: resolved backend from debuggerHost:', backendUrl);
-      return backendUrl;
-    }
-
-    const hostUri =
-      (Constants as any).manifest2?.extra?.expoGo?.debuggerHost ??
-      (Constants as any).manifest2?.extra?.expoClient?.hostUri ??
-      (Constants.expoConfig as any)?.hostUri ??
-      null;
-    if (hostUri) {
-      const host = hostUri.split(':')[0];
-      const backendUrl = `https://${host}`;
-      console.log('[getBackendBaseUrl] Native: resolved backend from hostUri:', backendUrl);
-      return backendUrl;
-    }
-  } catch (e) {
-    console.warn('[getBackendBaseUrl] Error reading Expo Constants:', e);
-  }
-  return '';
-}
-
 export function getBackendBaseUrl(): string {
   if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin) {
-    const origin = window.location.origin;
-    console.log('[getBackendBaseUrl] Web: using window.location.origin:', origin);
-    return origin;
+    return window.location.origin;
   }
 
   const envUrl = (process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '').trim();
-  if (envUrl && !envUrl.includes('rorktest.dev')) {
-    console.log('[getBackendBaseUrl] Native: using EXPO_PUBLIC_RORK_API_BASE_URL:', envUrl);
+  if (envUrl) {
     return envUrl;
   }
 
-  if (envUrl) {
-    console.warn('[getBackendBaseUrl] Rejecting stale env URL:', envUrl);
-  }
-
-  const nativeHost = resolveNativeHostUrl();
-  if (nativeHost) {
-    console.log('[getBackendBaseUrl] Native: using Expo Constants host:', nativeHost);
-    return nativeHost;
-  }
-
-  console.warn('[getBackendBaseUrl] No valid backend URL available.');
+  console.warn('[getBackendBaseUrl] EXPO_PUBLIC_RORK_API_BASE_URL is not set');
   return '';
 }
 
