@@ -19,6 +19,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
 
   const validate = () => {
     const newErrors: { email?: string; password?: string } = {};
@@ -65,6 +66,42 @@ export default function LoginScreen() {
       setErrors({ email: 'An error occurred during login' });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    const trimmed = email.trim();
+    if (!/\S+@\S+\.\S+/.test(trimmed)) {
+      Alert.alert('Enter your email', 'Please enter a valid email address in the email field first.', [{ text: 'OK' }]);
+      return;
+    }
+
+    if (!isSupabaseEnabled) {
+      Alert.alert('Unavailable', 'Password reset is unavailable in offline mode.', [{ text: 'OK' }]);
+      return;
+    }
+
+    setIsSendingReset(true);
+    try {
+      console.log('🔑 Sending password reset email to:', trimmed);
+      const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
+        redirectTo: 'myapp://reset-password',
+      });
+      if (error) {
+        console.error('🔑 Password reset error:', error);
+        Alert.alert('Could not send reset email', error.message || 'Please try again.', [{ text: 'OK' }]);
+        return;
+      }
+      Alert.alert(
+        'Check your email',
+        'We sent a password reset link to your email. Tap the link to set a new password.',
+        [{ text: 'OK' }]
+      );
+    } catch (e) {
+      console.error('🔑 Password reset unexpected error:', e);
+      Alert.alert('Could not send reset email', 'Please try again.', [{ text: 'OK' }]);
+    } finally {
+      setIsSendingReset(false);
     }
   };
 
@@ -172,6 +209,17 @@ export default function LoginScreen() {
             isLoading={isLoading}
             style={styles.button}
           />
+
+          <TouchableOpacity
+            onPress={handleForgotPassword}
+            disabled={isSendingReset}
+            testID="forgotPasswordButton"
+            style={styles.forgotButton}
+          >
+            <Text style={[styles.forgotText, { color: themeColors.primary }]}>
+              {isSendingReset ? 'Sending...' : 'Forgot Password?'}
+            </Text>
+          </TouchableOpacity>
         </View>
         
         <View style={styles.footer}>
@@ -280,6 +328,15 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 8,
+  },
+  forgotButton: {
+    alignSelf: 'center',
+    paddingVertical: 10,
+    marginTop: 4,
+  },
+  forgotText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   footer: {
     flexDirection: 'row',
