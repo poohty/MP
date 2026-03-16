@@ -1,15 +1,16 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
 import { MealPlan } from '@/types';
 import Colors from '@/constants/colors';
-import { Calendar, ChevronRight } from 'lucide-react-native';
+import { Calendar, ChevronRight, Trash2 } from 'lucide-react-native';
 
 interface MealPlanCardProps {
   mealPlan: MealPlan;
   onPress: (mealPlan: MealPlan) => void;
+  onDelete?: (mealPlan: MealPlan) => void;
 }
 
-export default function MealPlanCard({ mealPlan, onPress }: MealPlanCardProps) {
+export default function MealPlanCard({ mealPlan, onPress, onDelete }: MealPlanCardProps) {
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
     return date.toLocaleDateString('en-US', { 
@@ -30,6 +31,27 @@ export default function MealPlanCard({ mealPlan, onPress }: MealPlanCardProps) {
           <Calendar size={16} color={Colors.primary} />
           <Text style={styles.date}>{formatDate(mealPlan.createdAt)}</Text>
         </View>
+        {onDelete && (
+          <TouchableOpacity
+            testID="delete-meal-plan"
+            style={styles.deleteButton}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              Alert.alert(
+                'Delete Meal Plan',
+                'Are you sure you want to delete this meal plan ?',
+                [
+                  { text: 'No', style: 'cancel' },
+                  { text: 'Yes', style: 'destructive', onPress: () => onDelete(mealPlan) },
+                ]
+              );
+            }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            activeOpacity={0.6}
+          >
+            <Trash2 size={18} color={Colors.error ?? '#E53935'} />
+          </TouchableOpacity>
+        )}
       </View>
       
       <View style={styles.content}>
@@ -83,6 +105,13 @@ const styles = StyleSheet.create({
   dateContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+  },
+  deleteButton: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(229, 57, 53, 0.1)',
+    marginLeft: 12,
   },
   date: {
     color: Colors.textSecondary,

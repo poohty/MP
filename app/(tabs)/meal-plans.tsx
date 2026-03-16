@@ -16,12 +16,12 @@ const MEAL_PLANS_STEPS: WalkthroughStep[] = [
 ];
 
 export default function MealPlansScreen() {
-  const { mealPlans, isLoading, refreshMealPlans } = useMealPlans();
+  const { mealPlans, refreshMealPlans, deleteMealPlan } = useMealPlans();
   const walkthrough = useWalkthrough('meal-plans', MEAL_PLANS_STEPS);
 
   useFocusEffect(
     useCallback(() => {
-      refreshMealPlans();
+      void refreshMealPlans();
     }, [refreshMealPlans])
   );
 
@@ -31,6 +31,10 @@ export default function MealPlansScreen() {
       params: { id: mealPlan.id }
     });
   };
+
+  const handleDeleteMealPlan = useCallback((mealPlan: MealPlan) => {
+    void deleteMealPlan(mealPlan.id);
+  }, [deleteMealPlan]);
 
   return (
     <GradientBackground>
@@ -59,6 +63,7 @@ export default function MealPlansScreen() {
             <MealPlanCard
               mealPlan={item}
               onPress={handleSelectMealPlan}
+              onDelete={handleDeleteMealPlan}
             />
           )}
           contentContainerStyle={styles.listContainer}
