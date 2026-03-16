@@ -48,6 +48,7 @@ export default function HelpSupportScreen() {
       icon: <Dices size={20} color={colors.primary} />,
       tips: [
         { title: 'Roulette changes', body: 'Tap the Roulette Wheel to swap a suggestion. You can spin as many times as you want.' },
+        { title: 'Scale a recipe', body: 'Tap the 1x control next to any recipe to multiply it by ½, 2, 3, 4, or 5 times. Set this before accepting the meal plan — it ensures the grocery list includes the correct ingredient amounts for your chosen serving size.' },
         { title: 'Schedule a meal', body: 'Tap the calendar icon next to any suggested recipe to pick a day for it. Choose a date and tap Save to add it to your calendar. You can skip this entirely and go straight to Create Grocery List if you prefer.' },
       ],
     },

@@ -21,6 +21,13 @@ const CALENDAR_TUTORIAL_STEPS: WalkthroughStep[] = [
     body: 'See the calendar icon next to each recipe? Tap it to pick a day for that meal. Hit Save to lock it in. If you\'d rather skip scheduling, just head straight to Create Grocery List — no calendar needed!',
   },
 ];
+
+const MULTIPLIER_TUTORIAL_STEPS: WalkthroughStep[] = [
+  {
+    title: 'Scale your recipes',
+    body: 'See the 1x next to each recipe? Tap it to multiply the recipe by ½, 2, 3, 4, or 5 times. Set this before accepting the meal plan — it ensures your grocery list includes the correct ingredient amounts for the serving size you need.',
+  },
+];
 import Svg, { Circle, Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 
 const RouletteWheelIcon = ({ size = 20 }: { size?: number }) => (
@@ -94,6 +101,7 @@ export default function MealPlanDetailsScreen() {
 
   const walkthrough = useWalkthrough('meal-plan-review', MEAL_PLAN_REVIEW_STEPS);
   const calendarTutorial = useWalkthrough('meal-plan-calendar', CALENDAR_TUTORIAL_STEPS, hasMeals && !walkthrough.isVisible);
+  const multiplierTutorial = useWalkthrough('meal-plan-multiplier', MULTIPLIER_TUTORIAL_STEPS, hasMeals && !walkthrough.isVisible && !calendarTutorial.isVisible);
 
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [datePickerRecipe, setDatePickerRecipe] = useState<{ recipeId: string; recipeName: string; category: RecipeCategory } | null>(null);
@@ -367,6 +375,15 @@ export default function MealPlanDetailsScreen() {
         totalSteps={calendarTutorial.totalSteps}
         onNext={calendarTutorial.next}
         onSkip={calendarTutorial.skip}
+      />
+
+      <WalkthroughModal
+        visible={multiplierTutorial.isVisible}
+        step={multiplierTutorial.currentStep}
+        stepIndex={multiplierTutorial.stepIndex}
+        totalSteps={multiplierTutorial.totalSteps}
+        onNext={multiplierTutorial.next}
+        onSkip={multiplierTutorial.skip}
       />
     </>
   );
