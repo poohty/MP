@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { StyleSheet, View, Text, Image, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, Text, Image, ScrollView, Alert, Platform } from 'react-native';
 import { router, Stack } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useRecipes } from '@/hooks/recipe-store';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
@@ -10,6 +11,9 @@ import Colors from '@/constants/colors';
 import { useTheme } from '@/hooks/theme-store';
 
 import { RecipeCategory } from '@/types';
+
+const MAX_IMAGE_DIMENSION = 1024;
+const AI_REQUEST_TIMEOUT_MS = 30000;
 
 export default function AddRecipePhotoScreen() {
   const { addRecipe } = useRecipes();
@@ -107,7 +111,7 @@ export default function AddRecipePhotoScreen() {
     
     if (!result.canceled) {
       setImageUri(result.assets[0].uri);
-      extractTextFromImage(result.assets[0].uri);
+      void extractTextFromImage(result.assets[0].uri);
     }
   };
 
@@ -127,192 +131,246 @@ export default function AddRecipePhotoScreen() {
     
     if (!result.canceled) {
       setImageUri(result.assets[0].uri);
-      extractTextFromImage(result.assets[0].uri);
+      void extractTextFromImage(result.assets[0].uri);
+    }
+  };
+
+  const resizeImageForExtraction = async (uri: string): Promise<string> => {
+    const startTime = Date.now();
+    console.log(`[Resize] Starting image resize for extraction...`);
+
+    try {
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        return new Promise<string>((resolve, reject) => {
+          const img = new (window as any).Image();
+          img.onload = () => {
+            let { width, height } = img;
+            if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
+              const scale = MAX_IMAGE_DIMENSION / Math.max(width, height);
+              width = Math.round(width * scale);
+              height = Math.round(height * scale);
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { reject(new Error('Canvas not supported')); return; }
+            ctx.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            const b64 = dataUrl.split(',')[1] || '';
+            console.log(`[Resize] Web resize done in ${Date.now() - startTime}ms, base64 length: ${b64.length}`);
+            resolve(b64);
+          };
+          img.onerror = () => reject(new Error('Failed to load image for resize'));
+          img.src = URL.createObjectURL(blob);
+        });
+      }
+
+      const manipulated = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: MAX_IMAGE_DIMENSION } }],
+        { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG }
+      );
+
+      const response = await fetch(manipulated.uri);
+      const blob = await response.blob();
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const b64 = (typeof reader.result === 'string' ? reader.result : '').split(',')[1] || '';
+          console.log(`[Resize] Native resize done in ${Date.now() - startTime}ms, base64 length: ${b64.length}`);
+          resolve(b64);
+        };
+        reader.onerror = () => reject(new Error('Failed to read resized image'));
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.warn(`[Resize] Resize failed, falling back to original:`, error);
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const b64 = (typeof reader.result === 'string' ? reader.result : '').split(',')[1] || '';
+          console.log(`[Resize] Fallback base64 length: ${b64.length}`);
+          resolve(b64);
+        };
+        reader.onerror = () => reject(new Error('Failed to read image'));
+        reader.readAsDataURL(blob);
+      });
     }
   };
 
   const extractTextFromImage = async (uri: string) => {
+    const totalStart = Date.now();
     try {
       setIsExtracting(true);
       setExtractionProgress('📸 Preparing image...');
-      console.log('🔍 Starting recipe photo extraction...');
-      
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const reader = new FileReader();
-      
-      reader.onload = async () => {
-        try {
-          setExtractionProgress('🔄 Converting image format...');
-          const base64data = reader.result?.toString().split(',')[1];
-          
-          if (!base64data) {
-            throw new Error('Failed to convert image to base64');
-          }
-          
-          console.log('✅ Image converted to base64');
-          setExtractionProgress('🤖 AI is reading the recipe text...');
-          
-          console.log('🤖 Sending to AI for extraction...');
-          const aiResponse = await fetch('https://toolkit.rork.com/text/llm/', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              messages: [
-                {
-                  role: 'system',
-                  content: `Extract the complete recipe from this image. Return the result in this EXACT format:
+      console.log('[PhotoExtraction] Starting recipe photo extraction...');
+
+      const base64data = await resizeImageForExtraction(uri);
+
+      if (!base64data || base64data.length < 100) {
+        throw new Error('Failed to convert image to base64');
+      }
+
+      const imageSizeKB = Math.round(base64data.length / 1024);
+      console.log(`[PhotoExtraction] Image payload size: ${imageSizeKB} KB`);
+
+      if (imageSizeKB > 4000) {
+        console.warn(`[PhotoExtraction] Image still large (${imageSizeKB} KB), may be slow`);
+      }
+
+      setExtractionProgress('🤖 AI is reading the recipe...');
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
+      const aiStart = Date.now();
+
+      console.log('[PhotoExtraction] Sending to AI for extraction...');
+      const aiResponse = await fetch('https://toolkit.rork.com/text/llm/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          messages: [
+            {
+              role: 'system',
+              content: `Extract the complete recipe from this image. Return EXACTLY this format:
 
 INGREDIENTS:
-- [each ingredient with measurement]
+- [ingredient with measurement]
 
 INSTRUCTIONS:
-1. [first step]
-2. [second step]
-3. [third step]
-(continue numbering ALL steps)
+1. [step]
+2. [step]
+(number ALL steps)
 
 CATEGORY: [Breakfast|Appetizer|Salads & Soups|Main Course|Desserts]
 
-CRITICAL RULES FOR INSTRUCTIONS:
-- You MUST extract EVERY instruction sentence. Do NOT skip or summarize ANY step.
-- If instructions are written as a paragraph, split them into numbered steps at sentence boundaries.
-- Each sentence that describes an action is its own numbered step.
-- Short steps like "Stir well.", "Let cool.", "Serve immediately." MUST be included as their own step.
-- The LAST sentence of the instructions MUST appear as the LAST numbered step. Never drop the final step.
-- Do NOT merge multiple actions into one step. One action = one step.
-- Preserve the original wording exactly. Do not paraphrase.
-
-For category: soup/stew/salad=Salads & Soups, sweet=Desserts, eggs/pancakes=Breakfast, small plates=Appetizer, else=Main Course`
-                },
-                {
-                  role: 'user',
-                  content: [
-                    {
-                      type: 'text',
-                      text: 'Extract ingredients, instructions, and suggest category from this recipe photo'
-                    },
-                    {
-                      type: 'image',
-                      image: base64data
-                    }
-                  ]
-                }
+Rules:
+- Extract EVERY instruction. Never skip or summarize.
+- Split paragraphs into numbered steps at sentence boundaries.
+- Keep short steps like "Stir well." or "Serve immediately." as their own step.
+- Never drop the last step. Preserve original wording.
+- Category: soup/stew/salad=Salads & Soups, sweet=Desserts, eggs/pancakes=Breakfast, small plates=Appetizer, else=Main Course`
+            },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Extract the recipe from this photo.' },
+                { type: 'image', image: base64data }
               ]
-            }),
-          });
-          
-          if (!aiResponse.ok) {
-            throw new Error(`AI API error: ${aiResponse.status}`);
-          }
-          
-          console.log('✅ Received AI response');
-          setExtractionProgress('📝 Organizing recipe data...');
-          
-          const data = await aiResponse.json();
-          const completion = data.completion || 'Failed to extract text from image';
-          console.log('📝 Extraction complete');
-          
-          setExtractionProgress('🎯 Categorizing recipe...');
-          
-          const categoryMatch = completion.match(/CATEGORY:\s*(Breakfast|Appetizer|Salads & Soups|Main Course|Desserts)/i);
-          if (categoryMatch) {
-            const suggestedCategory = categoryMatch[1] as RecipeCategory;
-            setCategory(suggestedCategory);
-            console.log(`🤖 AI suggested category: ${suggestedCategory}`);
-            
-            const recipeTextMatch = completion.match(/RECIPE TEXT:\s*([\s\S]*?)(?=\n\nCATEGORY:|$)/i);
-            const recipeText = recipeTextMatch ? recipeTextMatch[1].trim().toLowerCase() : '';
-            
-            const soupKeywords = ['soup', 'stew', 'chili', 'bisque', 'chowder', 'broth', 'pho', 'ramen', 'gazpacho', 'minestrone'];
-            const hasSoupKeyword = soupKeywords.some(keyword => recipeText.includes(keyword));
-            
-            if (hasSoupKeyword && suggestedCategory !== 'Salads & Soups') {
-              console.log(`🚨 SOUP OVERRIDE: Found soup keyword, forcing category to Salads & Soups`);
-              setCategory('Salads & Soups');
             }
-          }
-          
-          setExtractionProgress('✨ Finalizing...');
-          
-          const recipeTextMatch = completion.match(/RECIPE TEXT:\s*([\s\S]*?)(?=\n\nCATEGORY:|$)/i);
-          let recipeText = recipeTextMatch ? recipeTextMatch[1].trim() : completion;
-          
-          if (recipeText && !recipeText.includes('INGREDIENTS:') && !recipeText.includes('INSTRUCTIONS:')) {
-            const lines = recipeText.split('\n').filter((line: string) => line.trim());
-            let formattedText = '';
-            let inIngredients = false;
-            let inInstructions = false;
-            
-            for (const line of lines) {
-              const trimmedLine = line.trim();
-              if (trimmedLine.match(/^\d+\./)) {
-                if (!inInstructions) {
-                  formattedText += '\n\nINSTRUCTIONS:\n';
-                  inInstructions = true;
-                }
-                formattedText += trimmedLine + '\n';
-              } else if (trimmedLine.startsWith('-') || trimmedLine.startsWith('•')) {
-                if (!inIngredients && !inInstructions) {
-                  formattedText += 'INGREDIENTS:\n';
-                  inIngredients = true;
-                }
-                formattedText += trimmedLine + '\n';
-              } else {
-                formattedText += trimmedLine + '\n';
-              }
-            }
-            
-            if (formattedText.trim()) {
-              recipeText = formattedText.trim();
-            }
-          }
-          
-          const instructionMatch = recipeText.match(/INSTRUCTIONS:[\s\S]*/i);
-          const instructionBlock = instructionMatch ? instructionMatch[0] : '';
-          const instructionLineCount = (instructionBlock.match(/^\d+\./gm) || []).length;
-          console.log(`[PhotoExtraction] Raw extracted text length: ${recipeText.length}`);
-          console.log(`[PhotoExtraction] Instruction lines found: ${instructionLineCount}`);
-          console.log(`[PhotoExtraction] Instruction block preview: ${instructionBlock.substring(0, 300)}`);
-          
-          setExtractedText(recipeText);
-          setIsExtracting(false);
-          setExtractionProgress('');
-          
-          console.log(`✅ Successfully extracted recipe content (${recipeText.length} chars) and categorized as: ${category}`);
-          
-          Alert.alert(
-            '✅ Extraction Complete',
-            'Recipe text has been successfully extracted from the photo. Please review and save.',
-            [{ text: 'OK' }]
-          );
-        } catch (error) {
-          console.error('Error in extraction:', error);
-          setExtractedText('Failed to extract text from image. Please try again or enter the recipe manually.');
-          setIsExtracting(false);
-          setExtractionProgress('');
-          
-          Alert.alert(
-            '❌ Extraction Failed',
-            'Failed to extract text from image. Please try again with a clearer photo.',
-            [{ text: 'OK' }]
-          );
+          ]
+        }),
+      });
+
+      clearTimeout(timeoutId);
+      const aiElapsed = Date.now() - aiStart;
+      console.log(`[PhotoExtraction] AI response received in ${aiElapsed}ms, status: ${aiResponse.status}`);
+
+      if (!aiResponse.ok) {
+        throw new Error(`AI API error: ${aiResponse.status}`);
+      }
+
+      setExtractionProgress('📝 Organizing recipe data...');
+
+      const data = await aiResponse.json();
+      const completion = data.completion || 'Failed to extract text from image';
+
+      const categoryMatch = completion.match(/CATEGORY:\s*(Breakfast|Appetizer|Salads & Soups|Main Course|Desserts)/i);
+      if (categoryMatch) {
+        const suggestedCategory = categoryMatch[1] as RecipeCategory;
+        setCategory(suggestedCategory);
+        console.log(`[PhotoExtraction] AI suggested category: ${suggestedCategory}`);
+
+        const lowerCompletion = completion.toLowerCase();
+        const soupKeywords = ['soup', 'stew', 'chili', 'bisque', 'chowder', 'broth', 'pho', 'ramen', 'gazpacho', 'minestrone'];
+        if (soupKeywords.some(kw => lowerCompletion.includes(kw)) && suggestedCategory !== 'Salads & Soups') {
+          console.log('[PhotoExtraction] Soup keyword override applied');
+          setCategory('Salads & Soups');
         }
-      };
-      
-      reader.readAsDataURL(blob);
-    } catch (error) {
-      console.error('Error extracting text:', error);
-      setExtractedText('Failed to extract text from image. Please try again or enter the recipe manually.');
+      }
+
+      let recipeText = completion;
+      const recipeTextBlockMatch = completion.match(/RECIPE TEXT:\s*([\s\S]*?)(?=\n\nCATEGORY:|$)/i);
+      if (recipeTextBlockMatch) {
+        recipeText = recipeTextBlockMatch[1].trim();
+      }
+
+      if (recipeText && !recipeText.includes('INGREDIENTS:') && !recipeText.includes('INSTRUCTIONS:')) {
+        const lines = recipeText.split('\n').filter((line: string) => line.trim());
+        let formattedText = '';
+        let inIngredients = false;
+        let inInstructions = false;
+
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (trimmedLine.match(/^\d+\./)) {
+            if (!inInstructions) {
+              formattedText += '\n\nINSTRUCTIONS:\n';
+              inInstructions = true;
+            }
+            formattedText += trimmedLine + '\n';
+          } else if (trimmedLine.startsWith('-') || trimmedLine.startsWith('•')) {
+            if (!inIngredients && !inInstructions) {
+              formattedText += 'INGREDIENTS:\n';
+              inIngredients = true;
+            }
+            formattedText += trimmedLine + '\n';
+          } else {
+            formattedText += trimmedLine + '\n';
+          }
+        }
+
+        if (formattedText.trim()) {
+          recipeText = formattedText.trim();
+        }
+      }
+
+      const instructionMatch = recipeText.match(/INSTRUCTIONS:[\s\S]*/i);
+      const instructionBlock = instructionMatch ? instructionMatch[0] : '';
+      const instructionLineCount = (instructionBlock.match(/^\d+\./gm) || []).length;
+      console.log(`[PhotoExtraction] Extracted text length: ${recipeText.length}`);
+      console.log(`[PhotoExtraction] Instruction steps found: ${instructionLineCount}`);
+
+      setExtractedText(recipeText);
       setIsExtracting(false);
       setExtractionProgress('');
+
+      const totalElapsed = Date.now() - totalStart;
+      console.log(`[PhotoExtraction] Total extraction time: ${totalElapsed}ms`);
+
       Alert.alert(
-        '❌ Extraction Failed',
-        'Failed to extract text from image. Please try again.',
+        '✅ Extraction Complete',
+        'Recipe text has been extracted. Please review and save.',
         [{ text: 'OK' }]
       );
+    } catch (error: any) {
+      const totalElapsed = Date.now() - totalStart;
+      const isTimeout = error?.name === 'AbortError';
+      console.error(`[PhotoExtraction] Extraction failed after ${totalElapsed}ms:`, isTimeout ? 'Request timed out' : error);
+
+      setIsExtracting(false);
+      setExtractionProgress('');
+
+      if (isTimeout) {
+        Alert.alert(
+          '⏱️ Extraction Timed Out',
+          'The AI took too long to process the photo. Try again with a clearer or simpler photo.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        setExtractedText('Failed to extract text from image. Please try again or enter the recipe manually.');
+        Alert.alert(
+          '❌ Extraction Failed',
+          'Failed to extract text from image. Please try again with a clearer photo.',
+          [{ text: 'OK' }]
+        );
+      }
     }
   };
 
@@ -505,7 +563,7 @@ For category: soup/stew/salad=Salads & Soups, sweet=Desserts, eggs/pancakes=Brea
             {extractionProgress ? (
               <Text style={[styles.loadingProgress, themedStyles.loadingProgress]}>{extractionProgress}</Text>
             ) : null}
-            <Text style={[styles.loadingSubtext, themedStyles.loadingSubtext]}>Please wait, this may take 15-30 seconds</Text>
+            <Text style={[styles.loadingSubtext, themedStyles.loadingSubtext]}>Please wait, this usually takes 5-15 seconds</Text>
           </View>
         ) : extractedText ? (
           <View style={styles.textContainer}>
