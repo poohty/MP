@@ -30,12 +30,21 @@ export default function RecipeBookScreen() {
   const isSearching = trimmedSearch.length > 0;
 
   const filteredRecipes = useMemo(() => {
+    const sortAlpha = (list: Recipe[]) =>
+      [...list].sort((a, b) => {
+        const nameA = (a.name ?? '').trim().toLowerCase();
+        const nameB = (b.name ?? '').trim().toLowerCase();
+        if (!nameA && nameB) return 1;
+        if (nameA && !nameB) return -1;
+        return nameA.localeCompare(nameB);
+      });
+
     if (!isSearching) {
-      return recipes.filter((recipe) => recipe.category === selectedCategory);
+      return sortAlpha(recipes.filter((recipe) => recipe.category === selectedCategory));
     }
 
     const q = trimmedSearch.toLowerCase();
-    return recipes.filter((recipe) => (recipe.name ?? '').toLowerCase().includes(q));
+    return sortAlpha(recipes.filter((recipe) => (recipe.name ?? '').toLowerCase().includes(q)));
   }, [isSearching, recipes, selectedCategory, trimmedSearch]);
 
   const emptyMessage = isSearching
