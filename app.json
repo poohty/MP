@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Meal Planning Roulette",
-    "slug": "meal-planning-roulette",
+    "name": "Meal Planner Roulette",
+    "slug": "meal-planner-roulette",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
