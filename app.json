@@ -88,6 +88,9 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "backendUrl": "https://dev-7g0mm8duw925pow1e3hiw.rorktest.dev"
     }
   }
 }

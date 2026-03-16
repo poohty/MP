@@ -1,22 +1,32 @@
 import { createTRPCReact } from "@trpc/react-query";
 import { httpLink } from "@trpc/client";
 import { Platform } from "react-native";
+import Constants from "expo-constants";
 import type { AppRouter } from "@/backend/trpc/app-router";
 import superjson from "superjson";
 
 export const trpc = createTRPCReact<AppRouter>();
 
 export function getBackendBaseUrl(): string {
+  const envUrl = (process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '').trim();
+  if (envUrl) {
+    console.log('[getBackendBaseUrl] Using EXPO_PUBLIC_RORK_API_BASE_URL:', envUrl);
+    return envUrl;
+  }
+
+  if (Platform.OS !== 'web') {
+    const extraUrl = (Constants.expoConfig?.extra?.backendUrl as string | undefined ?? '').trim();
+    if (extraUrl) {
+      console.log('[getBackendBaseUrl] Using Constants.expoConfig.extra.backendUrl:', extraUrl);
+      return extraUrl;
+    }
+  }
+
   if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin) {
     return window.location.origin;
   }
 
-  const envUrl = (process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '').trim();
-  if (envUrl) {
-    return envUrl;
-  }
-
-  console.warn('[getBackendBaseUrl] EXPO_PUBLIC_RORK_API_BASE_URL is not set');
+  console.warn('[getBackendBaseUrl] No backend URL source found');
   return '';
 }
 
