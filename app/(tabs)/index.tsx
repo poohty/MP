@@ -50,7 +50,7 @@ export default function HomeScreen() {
     <GradientBackground>
       <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={[styles.name, { color: themeColors.text }]}>Meal Planning Roulette</Text>
+          <Text style={[styles.name, { color: themeColors.text }]}>Meal Planner Roulette</Text>
         </View>
         
         <View style={styles.heroContainer}>
@@ -65,7 +65,7 @@ export default function HomeScreen() {
             style={styles.heroGradient}
           />
           <View style={styles.heroContent}>
-            <Text style={styles.heroTitle}>Meal Planning Roulette</Text>
+            <Text style={styles.heroTitle}>Meal Planner Roulette</Text>
             <Text style={styles.heroSubtitle}>
               Create random meal plans from your recipe collection
             </Text>
@@ -275,7 +275,7 @@ function WelcomeScreen() {
         </View>
         
         <View style={welcomeStyles.textContainer}>
-          <Text style={welcomeStyles.title}>Meal Planning Roulette</Text>
+          <Text style={welcomeStyles.title}>Meal Planner Roulette</Text>
           <Text style={welcomeStyles.subtitle}>
             Organize your recipes and create meal plans with a spin of randomness
           </Text>
