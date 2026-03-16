@@ -10,7 +10,7 @@ const RECIPES_STORAGE_KEY = 'meal-planner-recipes';
 const DEFAULT_THUMBNAIL_DATA_URI =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=";
 
-const [RecipeContext, useRecipes] = createContextHook(() => {
+const [RecipeContext, useRecipes] = createContextHook(() => { // eslint-disable-line rork/general-context-optimization
   const { user } = useAuth();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -109,14 +109,47 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
         return;
       }
 
+      const deletedKey = `deleted-recipes-${user.id}`;
+      let pendingDeletedIds: string[] = [];
+      try {
+        const deletedRaw = await AsyncStorage.getItem(deletedKey);
+        if (deletedRaw) {
+          pendingDeletedIds = JSON.parse(deletedRaw);
+          console.log(`🗑️ Found ${pendingDeletedIds.length} pending Supabase deletes`);
+        }
+      } catch (e) {
+        console.warn('⚠️ Failed to read pending deletes:', e);
+      }
+
+      if (pendingDeletedIds.length > 0 && isSupabaseEnabled) {
+        for (const deletedId of pendingDeletedIds) {
+          try {
+            const { error } = await supabase
+              .from('recipes')
+              .delete()
+              .eq('id', deletedId)
+              .eq('owner_user_id', user.id);
+            if (!error) {
+              console.log(`✅ Retried Supabase delete for ${deletedId}`);
+            }
+          } catch (e) {
+            console.warn(`⚠️ Retry delete failed for ${deletedId}:`, e);
+          }
+        }
+        await AsyncStorage.removeItem(deletedKey);
+      }
+
       const supabaseRecipes = await loadRecipesFromSupabase(user.id);
       
       if (supabaseRecipes.length > 0) {
-        console.log(`📊 Loaded ${supabaseRecipes.length} recipes from Supabase`);
-        setRecipes(supabaseRecipes);
+        const filteredSupabaseRecipes = supabaseRecipes.filter(
+          (r) => !pendingDeletedIds.includes(r.id)
+        );
+        console.log(`📊 Loaded ${supabaseRecipes.length} recipes from Supabase (${filteredSupabaseRecipes.length} after filtering deleted)`);
+        setRecipes(filteredSupabaseRecipes);
         
         const storageKey = `${RECIPES_STORAGE_KEY}-${user.id}`;
-        await AsyncStorage.setItem(storageKey, JSON.stringify(supabaseRecipes));
+        await AsyncStorage.setItem(storageKey, JSON.stringify(filteredSupabaseRecipes));
       } else {
         console.log('📦 No recipes in Supabase, checking AsyncStorage for legacy data...');
         const storageKey = `${RECIPES_STORAGE_KEY}-${user.id}`;
@@ -132,9 +165,13 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
             setRecipes([]);
             return;
           }
-          console.log(`📊 Loaded ${parsedRecipes.length} recipes from local storage, syncing to Supabase...`);
+
+          const filteredLocal = parsedRecipes.filter(
+            (r: Recipe) => !pendingDeletedIds.includes(r.id)
+          );
+          console.log(`📊 Loaded ${filteredLocal.length} recipes from local storage, syncing to Supabase...`);
           
-          const recipesWithOwner = parsedRecipes.map((recipe: Recipe) => ({
+          const recipesWithOwner = filteredLocal.map((recipe: Recipe) => ({
             ...recipe,
             ownerUserId: user.id
           }));
@@ -157,7 +194,7 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
 
   useEffect(() => {
     if (user) {
-      loadRecipes();
+      void loadRecipes();
     } else {
       setRecipes([]);
       setIsLoading(false);
@@ -327,7 +364,7 @@ const [RecipeContext, useRecipes] = createContextHook(() => {
     }
   }, [generateAiThumbnail]);
 
-  const extractRecipeImage = useCallback(async (recipeName: string, recipeUrl: string, retryCount: number = 1): Promise<string | undefined> => {
+  const extractRecipeImage = useCallback(async (recipeName: string, recipeUrl: string, _retryCount: number = 1): Promise<string | undefined> => {
     console.log(`🖼️ Starting image extraction for "${recipeName}"`);
     
     try {
@@ -920,21 +957,21 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
       }
       
       if (!extractedData.prepTime && extractedData.times) {
-        const prepMatch = extractedData.times.match(/prep\s*(?:time)?\s*[:\-]?\s*([^\n,]+)/i);
+        const prepMatch = extractedData.times.match(/prep\s*(?:time)?\s*[:-]?\s*([^\n,]+)/i);
         if (prepMatch && prepMatch[1]) {
           extractedData.prepTime = prepMatch[1].trim();
         }
       }
       
       if (!extractedData.cookTime && extractedData.times) {
-        const cookMatch = extractedData.times.match(/cook\s*(?:time)?\s*[:\-]?\s*([^\n,]+)/i);
+        const cookMatch = extractedData.times.match(/cook\s*(?:time)?\s*[:-]?\s*([^\n,]+)/i);
         if (cookMatch && cookMatch[1]) {
           extractedData.cookTime = cookMatch[1].trim();
         }
       }
       
       if (!extractedData.totalTime && extractedData.times) {
-        const totalMatch = extractedData.times.match(/total\s*(?:time)?\s*[:\-]?\s*([^\n,]+)/i);
+        const totalMatch = extractedData.times.match(/total\s*(?:time)?\s*[:-]?\s*([^\n,]+)/i);
         if (totalMatch && totalMatch[1]) {
           extractedData.totalTime = totalMatch[1].trim();
         }
@@ -942,7 +979,7 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
       
       if (!extractedData.calories && extractedData.nutritionalFacts) {
         const caloriesMatch =
-          extractedData.nutritionalFacts.match(/calories?\s*[:\-]?\s*([^\n,]+)/i) ||
+          extractedData.nutritionalFacts.match(/calories?\s*[:-]?\s*([^\n,]+)/i) ||
           extractedData.nutritionalFacts.match(/(\d+)\s*calories\b/i);
         
         if (caloriesMatch && caloriesMatch[1]) {
@@ -1116,6 +1153,22 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
           return false;
         }
       }
+
+      const newName = newRecipe.name?.trim().toLowerCase();
+      const newCategory = newRecipe.category;
+      if (newName && !newUrl) {
+        const duplicateByName = currentRecipes.find((r: Recipe) => {
+          return (
+            r.name?.trim().toLowerCase() === newName &&
+            r.category === newCategory &&
+            !r.url
+          );
+        });
+        if (duplicateByName) {
+          console.log(`⚠️ Recipe already exists (duplicate name+category without URL): "${newName}" in ${newCategory}, skipping`);
+          return false;
+        }
+      }
       
       const updatedRecipes = [...currentRecipes, newRecipe];
       await saveRecipes(updatedRecipes);
@@ -1158,21 +1211,84 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     }
   }, [recipes, saveRecipes]);
 
+  const deleteRecipeFromSupabase = useCallback(async (recipeId: string, ownerUserId: string) => {
+    if (!isSupabaseEnabled) {
+      console.log('📴 Supabase disabled, skipping remote delete');
+      return true;
+    }
+
+    try {
+      console.log(`🗑️ Deleting recipe ${recipeId} from Supabase for user ${ownerUserId}`);
+      const { error } = await supabase
+        .from('recipes')
+        .delete()
+        .eq('id', recipeId)
+        .eq('owner_user_id', ownerUserId);
+
+      if (error) {
+        if (error.message?.includes('Failed to fetch')) {
+          console.warn('⚠️ Network error during Supabase delete, will retry on next sync');
+          return false;
+        }
+        console.error('❌ Supabase deleteRecipe error:', JSON.stringify(error, null, 2));
+        return false;
+      }
+
+      console.log(`✅ Successfully deleted recipe ${recipeId} from Supabase`);
+      return true;
+    } catch (error) {
+      if (error instanceof TypeError && (error as TypeError).message.includes('Failed to fetch')) {
+        console.warn('⚠️ Network error during Supabase delete');
+        return false;
+      }
+      console.error('❌ Failed to delete recipe from Supabase:', error);
+      return false;
+    }
+  }, []);
+
   const deleteRecipe = useCallback(async (recipeId: string) => {
     try {
       const recipeToDelete = recipes.find(recipe => recipe.id === recipeId);
       if (!recipeToDelete) {
+        console.warn(`⚠️ deleteRecipe: recipe ${recipeId} not found in local state`);
         return false;
       }
-      
+
+      console.log(`🗑️ Deleting recipe: "${recipeToDelete.name}" (${recipeId})`);
+
       const updatedRecipes = recipes.filter(recipe => recipe.id !== recipeId);
-      await saveRecipes(updatedRecipes);
+
+      setRecipes(updatedRecipes);
+
+      const storageKey = `${RECIPES_STORAGE_KEY}-${user?.id}`;
+      await AsyncStorage.setItem(storageKey, JSON.stringify(updatedRecipes));
+      console.log(`✅ Removed recipe ${recipeId} from AsyncStorage`);
+
+      if (user?.id) {
+        const supabaseDeleted = await deleteRecipeFromSupabase(recipeId, user.id);
+        if (!supabaseDeleted) {
+          console.warn(`⚠️ Supabase delete failed for recipe ${recipeId}, tracking for retry`);
+          try {
+            const deletedKey = `deleted-recipes-${user.id}`;
+            const existing = await AsyncStorage.getItem(deletedKey);
+            const deletedIds: string[] = existing ? JSON.parse(existing) : [];
+            if (!deletedIds.includes(recipeId)) {
+              deletedIds.push(recipeId);
+              await AsyncStorage.setItem(deletedKey, JSON.stringify(deletedIds));
+            }
+          } catch (trackError) {
+            console.error('❌ Failed to track deleted recipe id:', trackError);
+          }
+        }
+      }
+
+      console.log(`✅ Recipe "${recipeToDelete.name}" deleted permanently. Remaining: ${updatedRecipes.length}`);
       return true;
     } catch (error) {
       console.error('Failed to delete recipe:', error);
       return false;
     }
-  }, [recipes, saveRecipes]);
+  }, [recipes, user?.id, deleteRecipeFromSupabase]);
 
   const toggleFavorite = useCallback(async (recipeId: string) => {
     try {
