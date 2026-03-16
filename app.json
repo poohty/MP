@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.rork.meal-planning-roulette",
+      "bundleIdentifier": "app.rork.meal-planner-roulette",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos",
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera",
@@ -35,7 +35,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.meal-planning-roulette",
+      "package": "app.rork.meal-planner-roulette",
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
