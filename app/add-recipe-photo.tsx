@@ -163,7 +163,29 @@ export default function AddRecipePhotoScreen() {
               messages: [
                 {
                   role: 'system',
-                  content: 'Extract recipe from image. Return:\nINGREDIENTS:\n- [each ingredient]\n\nINSTRUCTIONS:\n1. [each step]\n\nCATEGORY: [Breakfast|Appetizer|Salads & Soups|Main Course|Desserts]\n\nFor category: soup/stew/salad=Salads & Soups, sweet=Desserts, eggs/pancakes=Breakfast, small plates=Appetizer, else=Main Course'
+                  content: `Extract the complete recipe from this image. Return the result in this EXACT format:
+
+INGREDIENTS:
+- [each ingredient with measurement]
+
+INSTRUCTIONS:
+1. [first step]
+2. [second step]
+3. [third step]
+(continue numbering ALL steps)
+
+CATEGORY: [Breakfast|Appetizer|Salads & Soups|Main Course|Desserts]
+
+CRITICAL RULES FOR INSTRUCTIONS:
+- You MUST extract EVERY instruction sentence. Do NOT skip or summarize ANY step.
+- If instructions are written as a paragraph, split them into numbered steps at sentence boundaries.
+- Each sentence that describes an action is its own numbered step.
+- Short steps like "Stir well.", "Let cool.", "Serve immediately." MUST be included as their own step.
+- The LAST sentence of the instructions MUST appear as the LAST numbered step. Never drop the final step.
+- Do NOT merge multiple actions into one step. One action = one step.
+- Preserve the original wording exactly. Do not paraphrase.
+
+For category: soup/stew/salad=Salads & Soups, sweet=Desserts, eggs/pancakes=Breakfast, small plates=Appetizer, else=Main Course`
                 },
                 {
                   role: 'user',
@@ -247,6 +269,13 @@ export default function AddRecipePhotoScreen() {
               recipeText = formattedText.trim();
             }
           }
+          
+          const instructionMatch = recipeText.match(/INSTRUCTIONS:[\s\S]*/i);
+          const instructionBlock = instructionMatch ? instructionMatch[0] : '';
+          const instructionLineCount = (instructionBlock.match(/^\d+\./gm) || []).length;
+          console.log(`[PhotoExtraction] Raw extracted text length: ${recipeText.length}`);
+          console.log(`[PhotoExtraction] Instruction lines found: ${instructionLineCount}`);
+          console.log(`[PhotoExtraction] Instruction block preview: ${instructionBlock.substring(0, 300)}`);
           
           setExtractedText(recipeText);
           setIsExtracting(false);
@@ -334,11 +363,25 @@ export default function AddRecipePhotoScreen() {
     
     setIsLoading(true);
     try {
+      const contentToSave = extractedText.trim();
+
+      const instructionMatch = contentToSave.match(/INSTRUCTIONS:[\s\S]*/i);
+      if (instructionMatch) {
+        const block = instructionMatch[0];
+        const stepCount = (block.match(/^\d+\./gm) || []).length;
+        const sentenceCount = (block.match(/[.!?]\s/g) || []).length + 1;
+        console.log(`[SaveValidation] Content length: ${contentToSave.length}`);
+        console.log(`[SaveValidation] Instruction block length: ${block.length}`);
+        console.log(`[SaveValidation] Numbered steps: ${stepCount}, Approx sentences: ${sentenceCount}`);
+      } else {
+        console.log(`[SaveValidation] No INSTRUCTIONS header found, saving full content (${contentToSave.length} chars)`);
+      }
+
       const saved = await addRecipe({
         name: name.trim(),
         category,
         imageUri: thumbnailUri || imageUri || undefined,
-        content: extractedText,
+        content: contentToSave,
       });
 
       if (!saved) {
@@ -349,6 +392,7 @@ export default function AddRecipePhotoScreen() {
         return;
       }
       
+      console.log(`[SaveValidation] Recipe saved successfully with ${contentToSave.length} chars of content`);
       Alert.alert('Success', 'Recipe added successfully', [
         { text: 'OK', onPress: () => router.back() }
       ]);

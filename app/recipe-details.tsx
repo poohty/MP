@@ -188,13 +188,12 @@ export default function RecipeDetailsScreen() {
     
     const lines = content.split('\n').map(line => line.trim()).filter(line => line.length > 0);
     let currentSection = '';
+    const rawInstructionLines: string[] = [];
     
-    // Enhanced parsing logic with better section detection
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const upperLine = line.toUpperCase();
       
-      // Section headers - more precise detection
       if (upperLine.startsWith('**INGREDIENTS:**') || upperLine.startsWith('INGREDIENTS:') || upperLine === 'INGREDIENTS' || upperLine.includes('INGREDIENTS LIST')) {
         currentSection = 'ingredients';
         continue;
@@ -216,211 +215,144 @@ export default function RecipeDetailsScreen() {
         continue;
       }
       
-      // Auto-detect sections based on content patterns
       if (!currentSection) {
-        // Numbered steps or checkboxes = instructions
-        if ((/^\d+\./.test(line) || line.startsWith('☐')) && line.length > 10) {
+        if ((/^\d+\./.test(line) || line.startsWith('☐')) && line.length > 3) {
           currentSection = 'instructions';
-        }
-        // Bullet points with measurements = ingredients
-        else if ((line.startsWith('-') || line.startsWith('•')) && 
+        } else if ((line.startsWith('-') || line.startsWith('•')) && 
                  (line.match(/\d+\s*(cup|tbsp|tsp|tablespoon|teaspoon|oz|ounce|lb|pound|gram|ml|liter|clove|slice)/i))) {
           currentSection = 'ingredients';
-        }
-        // Lines with cooking verbs = instructions
-        else if (line.length > 15) {
-          const cookingVerbs = ['heat', 'cook', 'bake', 'boil', 'simmer', 'fry', 'sauté', 'mix', 'stir', 'add', 'combine', 'whisk', 'blend', 'preheat', 'season', 'garnish', 'serve'];
-          const hasCookingVerb = cookingVerbs.some(verb => line.toLowerCase().includes(verb));
-          if (hasCookingVerb) {
-            currentSection = 'instructions';
-          }
-        }
-        // Nutrition-related lines
-        else if (line.toLowerCase().includes('calories:') || line.toLowerCase().includes('protein:') || line.toLowerCase().includes('carbs:') || line.toLowerCase().includes('fat:')) {
+        } else if (line.toLowerCase().includes('calories:') || line.toLowerCase().includes('protein:') || line.toLowerCase().includes('carbs:') || line.toLowerCase().includes('fat:')) {
           currentSection = 'nutritionalFacts';
-        }
-        // Time-related lines
-        else if (line.toLowerCase().includes('prep time:') || line.toLowerCase().includes('cook time:') || line.toLowerCase().includes('total time:')) {
-          // Process time info inline instead of changing section
         }
       }
       
-      // Parse content based on current section
       if (currentSection === 'ingredients') {
-        // Only add lines that look like ingredients (with measurements or typical ingredient patterns)
         if (line.startsWith('-') || line.startsWith('•') || 
             line.match(/^\d+\s*(cup|tbsp|tsp|tablespoon|teaspoon|oz|ounce|lb|pound|gram|ml|liter|clove|slice)/i) ||
             line.match(/\d+\s*(cup|tbsp|tsp|tablespoon|teaspoon|oz|ounce|lb|pound|gram|ml|liter|clove|slice)/i) ||
             line.match(/\b(cup|tbsp|tsp|tablespoon|teaspoon|oz|ounce|lb|pound|gram|ml|liter|clove|slice)s?\b/i)) {
-          const cleanedLine = line
-            .replace(/^[-•☐]\s*/, '')
-            .trim();
+          const cleanedLine = line.replace(/^[-•☐]\s*/, '').trim();
           if (cleanedLine.length > 2) {
             sections.ingredients.push(cleanedLine);
           }
         }
       } else if (currentSection === 'instructions') {
-        // Only add lines that look like cooking instructions (NOT ingredients)
-        const looksLikeIngredient = line.match(/\d+\s*(cup|tbsp|tsp|tablespoon|teaspoon|oz|ounce|lb|pound|gram|ml|liter|clove|slice)/i) ||
-                                   line.match(/\b(cup|tbsp|tsp|tablespoon|teaspoon|oz|ounce|lb|pound|gram|ml|liter|clove|slice)s?\b/i);
-        
-        if (!looksLikeIngredient && (
-            /^\d+\./.test(line) || line.startsWith('☐') ||
-            (line.length > 15 && (line.includes('cook') || line.includes('heat') || line.includes('add') || 
-                                  line.includes('mix') || line.includes('stir') || line.includes('bake') || 
-                                  line.includes('boil') || line.includes('simmer') || line.includes('serve') ||
-                                  line.includes('preheat') || line.includes('season') || line.includes('combine') ||
-                                  line.includes('place') || line.includes('remove') || line.includes('cover') ||
-                                  line.includes('reduce') || line.includes('increase') || line.includes('let') ||
-                                  line.includes('allow') || line.includes('until') || line.includes('for') ||
-                                  line.includes('minutes') || line.includes('hours'))))) {
-          const cleanedLine = line.replace(/^\d+\.\s*/, '').replace(/^[-•☐]\s*/, '');
-          if (cleanedLine.length > 5) {
-            sections.instructions.push(cleanedLine);
-          }
-        }
+        rawInstructionLines.push(line);
       } else if (currentSection === 'nutritionalFacts') {
         sections.nutritionalFacts += (sections.nutritionalFacts ? '\n' : '') + line;
-        
-        // Try to extract a specific Calories value if present
-        const caloriesMatch =
-          line.match(/calories\s*[:\-]?\s*([^,;]+)/i) ||
-          line.match(/(\d+)\s*calories\b/i);
-        
+        const caloriesMatch = line.match(/calories\s*[:\-]?\s*([^,;]+)/i) || line.match(/(\d+)\s*calories\b/i);
         if (caloriesMatch && !sections.calories) {
-          const caloriesText = caloriesMatch[0].trim();
-          sections.calories = caloriesText;
+          sections.calories = caloriesMatch[0].trim();
         }
       } else if (currentSection === 'notes') {
         sections.notes += (sections.notes ? ' ' : '') + line;
       }
     }
     
-    // Fallback: if no clear sections found, try to extract from raw content
+    sections.instructions = parseInstructionLines(rawInstructionLines);
+    console.log(`[parseRecipeContent] Parsed ${sections.instructions.length} instruction steps from ${rawInstructionLines.length} raw lines`);
+    
     if (sections.instructions.length === 0 && sections.ingredients.length === 0 && content.length > 50) {
-      const allLines = content.split('\n').map(l => l.trim()).filter(l => l.length > 5);
+      const allLines = content.split('\n').map(l => l.trim()).filter(l => l.length > 3);
+      const fallbackInstructionLines: string[] = [];
       
       allLines.forEach(line => {
-        // Check if it's an ingredient (has measurements)
         if (line.match(/\d+\s*(cup|tbsp|tsp|tablespoon|teaspoon|oz|ounce|lb|pound|gram|ml|liter|clove|slice)/i) ||
             line.match(/\b(cup|tbsp|tsp|tablespoon|teaspoon|oz|ounce|lb|pound|gram|ml|liter|clove|slice)s?\b/i)) {
           sections.ingredients.push(line.replace(/^[-•]\s*/, ''));
-        }
-        // Check if it's an instruction (has cooking verbs and is long enough, but NOT an ingredient)
-        else if (line.length > 15) {
-          const cookingVerbs = ['heat', 'cook', 'bake', 'boil', 'simmer', 'fry', 'sauté', 'mix', 'stir', 'add', 'combine', 'whisk', 'blend', 'preheat', 'season', 'serve', 'place', 'remove', 'cover', 'reduce', 'increase', 'let', 'allow', 'until', 'minutes', 'hours'];
-          const hasCookingVerb = cookingVerbs.some(verb => line.toLowerCase().includes(verb));
-          const looksLikeIngredient = line.match(/\d+\s*(cup|tbsp|tsp|tablespoon|teaspoon|oz|ounce|lb|pound|gram|ml|liter|clove|slice)/i) ||
-                                     line.match(/\b(cup|tbsp|tsp|tablespoon|teaspoon|oz|ounce|lb|pound|gram|ml|liter|clove|slice)s?\b/i);
-          
-          if (hasCookingVerb && !looksLikeIngredient) {
-            sections.instructions.push(line.replace(/^\d+\.\s*/, '').replace(/^[-•☐]\s*/, ''));
-          }
-        }
-        // Check for nutrition info
-        else if (line.toLowerCase().includes('calories:') || line.toLowerCase().includes('protein:') || line.toLowerCase().includes('carbs:') || line.toLowerCase().includes('fat:')) {
+        } else if (/^\d+\./.test(line) || line.startsWith('☐') || line.length > 10) {
+          fallbackInstructionLines.push(line);
+        } else if (line.toLowerCase().includes('calories:') || line.toLowerCase().includes('protein:') || line.toLowerCase().includes('carbs:') || line.toLowerCase().includes('fat:')) {
           sections.nutritionalFacts += (sections.nutritionalFacts ? '\n' : '') + line;
-          
-          // Try to extract a specific Calories value if present
-          const caloriesMatch =
-            line.match(/calories\s*[:\-]?\s*([^,;]+)/i) ||
-            line.match(/(\d+)\s*calories\b/i);
-          
+          const caloriesMatch = line.match(/calories\s*[:\-]?\s*([^,;]+)/i) || line.match(/(\d+)\s*calories\b/i);
           if (caloriesMatch && !sections.calories) {
-            const caloriesText = caloriesMatch[0].trim();
-            sections.calories = caloriesText;
-          }
-        }
-        // Check for time info
-        else if (line.toLowerCase().includes('prep time:') || line.toLowerCase().includes('cook time:') || line.toLowerCase().includes('total time:')) {
-          const lower = line.toLowerCase();
-          
-          // Extract prep time
-          if (lower.includes('prep time')) {
-            const match = line.match(/prep time\s*[:\-]?\s*(.+)$/i);
-            if (match && !sections.prepTime) {
-              sections.prepTime = match[1].trim();
-            }
-          }
-          
-          // Extract cook time
-          if (lower.includes('cook time')) {
-            const match = line.match(/cook time\s*[:\-]?\s*(.+)$/i);
-            if (match && !sections.cookTime) {
-              sections.cookTime = match[1].trim();
-            }
-          }
-          
-          // Extract total time
-          if (lower.includes('total time')) {
-            const match = line.match(/total time\s*[:\-]?\s*(.+)$/i);
-            if (match && !sections.totalTime) {
-              sections.totalTime = match[1].trim();
-            }
+            sections.calories = caloriesMatch[0].trim();
           }
         }
       });
+      
+      if (fallbackInstructionLines.length > 0) {
+        sections.instructions = parseInstructionLines(fallbackInstructionLines);
+        console.log(`[parseRecipeContent] Fallback parsed ${sections.instructions.length} instruction steps`);
+      }
     }
     
-    // ---------------------------
-    // Fallback parsing from full content
-    // ---------------------------
     try {
       const fullText = content;
 
-      // Prep time (e.g., "Prep Time: 15 minutes" or "Prep: 15 mins")
       if (!sections.prepTime) {
-        const prepMatch =
-          fullText.match(/prep(?:\s+time)?\s*[:\-]?\s*([^\n]+)/i);
-        if (prepMatch && prepMatch[1]) {
-          sections.prepTime = prepMatch[1].trim();
-        }
+        const prepMatch = fullText.match(/prep(?:\s+time)?\s*[:\-]?\s*([^\n]+)/i);
+        if (prepMatch && prepMatch[1]) sections.prepTime = prepMatch[1].trim();
       }
-
-      // Cook time (e.g., "Cook Time: 30 minutes" or "Cook: 30 mins")
       if (!sections.cookTime) {
-        const cookMatch =
-          fullText.match(/cook(?:\s+time)?\s*[:\-]?\s*([^\n]+)/i);
-        if (cookMatch && cookMatch[1]) {
-          sections.cookTime = cookMatch[1].trim();
-        }
+        const cookMatch = fullText.match(/cook(?:\s+time)?\s*[:\-]?\s*([^\n]+)/i);
+        if (cookMatch && cookMatch[1]) sections.cookTime = cookMatch[1].trim();
       }
-
-      // Total time (e.g., "Total Time: 45 minutes" or "Total: 45 mins")
       if (!sections.totalTime) {
-        const totalMatch =
-          fullText.match(/total(?:\s+time)?\s*[:\-]?\s*([^\n]+)/i);
-        if (totalMatch && totalMatch[1]) {
-          sections.totalTime = totalMatch[1].trim();
-        }
+        const totalMatch = fullText.match(/total(?:\s+time)?\s*[:\-]?\s*([^\n]+)/i);
+        if (totalMatch && totalMatch[1]) sections.totalTime = totalMatch[1].trim();
       }
-
-      // Calories (e.g., "Calories: 320 kcal" or "320 calories")
       if (!sections.calories) {
-        const caloriesMatch =
-          fullText.match(/calories?\s*[:\-]?\s*([^\n]+)/i) ||
-          fullText.match(/(\d+)\s*calories\b/i);
-
-        if (caloriesMatch && caloriesMatch[1]) {
-          sections.calories = caloriesMatch[1].trim();
-        }
+        const caloriesMatch = fullText.match(/calories?\s*[:\-]?\s*([^\n]+)/i) || fullText.match(/(\d+)\s*calories\b/i);
+        if (caloriesMatch && caloriesMatch[1]) sections.calories = caloriesMatch[1].trim();
       }
-
-      // Nutritional Facts block (from the AI-generated section)
-      // Look for the "**Nutritional Facts:**" heading and capture everything until the next bold heading or end
       if (!sections.nutritionalFacts) {
-        const nutritionBlockMatch = fullText.match(
-          /\*\*Nutritional Facts:\*\*\s*([\s\S]+?)(\n\*\*|$)/i
-        );
-        if (nutritionBlockMatch && nutritionBlockMatch[1]) {
-          sections.nutritionalFacts = nutritionBlockMatch[1].trim();
-        }
+        const nutritionBlockMatch = fullText.match(/\*\*Nutritional Facts:\*\*\s*([\s\S]+?)(\n\*\*|$)/i);
+        if (nutritionBlockMatch && nutritionBlockMatch[1]) sections.nutritionalFacts = nutritionBlockMatch[1].trim();
       }
     } catch (e) {
       console.log('⚠️ Fallback time/nutrition parsing error:', e);
     }
     
     return sections;
+  };
+
+  const parseInstructionLines = (rawLines: string[]): string[] => {
+    if (rawLines.length === 0) return [];
+
+    const hasNumberedSteps = rawLines.some(l => /^\d+\./.test(l) || l.startsWith('☐'));
+
+    if (hasNumberedSteps) {
+      const steps: string[] = [];
+      let currentStep = '';
+
+      for (const line of rawLines) {
+        const isNewStep = /^\d+\./.test(line) || /^☐\s*\d+\./.test(line) || line.startsWith('☐');
+        if (isNewStep) {
+          if (currentStep.trim()) {
+            steps.push(currentStep.trim());
+          }
+          currentStep = line.replace(/^☐\s*/, '').replace(/^\d+\.\s*/, '').trim();
+        } else {
+          currentStep += ' ' + line;
+        }
+      }
+      if (currentStep.trim()) {
+        steps.push(currentStep.trim());
+      }
+
+      const filtered = steps.filter(s => s.length > 0);
+      if (filtered.length > 0) {
+        console.log(`[parseInstructionLines] Extracted ${filtered.length} numbered steps`);
+        return filtered;
+      }
+    }
+
+    const joined = rawLines.join(' ').trim();
+    if (!joined) return [];
+
+    const sentenceSplit = joined
+      .split(/(?<=[.!?])\s+(?=[A-Z])/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    if (sentenceSplit.length > 1) {
+      console.log(`[parseInstructionLines] Split paragraph into ${sentenceSplit.length} sentence-based steps`);
+      return sentenceSplit;
+    }
+
+    console.log(`[parseInstructionLines] Preserving entire instruction block as single step`);
+    return [joined];
   };
 
   const handleOpenUrl = async () => {
