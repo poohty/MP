@@ -44,10 +44,7 @@ export default function VerifyEmailScreen() {
 
     try {
       setIsResending(true);
-      const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const emailRedirectTo = SUPABASE_URL && SUPABASE_URL.includes('supabase.co')
-        ? `${SUPABASE_URL}/auth/v1/verify`
-        : 'mealplannerroulette://auth-callback';
+      const emailRedirectTo = 'myapp://auth-callback';
 
       console.log('📨 VerifyEmail: resend verification email:', { email: trimmed, emailRedirectTo });
       const { error } = await supabase.auth.resend({

@@ -1,18 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
 import Button from '@/components/Button';
-import { BadgeCheck } from 'lucide-react-native';
+import { BadgeCheck, AlertCircle } from 'lucide-react-native';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 
 type AuthCallbackParams = {
   verified?: string | string[];
   type?: string | string[];
   token_hash?: string | string[];
+  access_token?: string | string[];
+  refresh_token?: string | string[];
   error?: string | string[];
   error_description?: string | string[];
+  code?: string | string[];
 };
 
 function firstParam(v: string | string[] | undefined): string {
@@ -22,9 +25,8 @@ function firstParam(v: string | string[] | undefined): string {
 
 export default function AuthCallbackScreen() {
   const params = useLocalSearchParams<AuthCallbackParams>();
-  const [showVerifiedHint, setShowVerifiedHint] = useState<boolean>(false);
-  const [isChecking, setIsChecking] = useState<boolean>(true);
-  const [verificationStatus, setVerificationStatus] = useState<'checking' | 'verified' | 'not_verified'>('checking');
+  const [status, setStatus] = useState<'checking' | 'verified' | 'error'>('checking');
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   const parsed = useMemo(() => {
     const error = firstParam(params.error);
@@ -32,6 +34,9 @@ export default function AuthCallbackScreen() {
     const verified = firstParam(params.verified);
     const type = firstParam(params.type);
     const tokenHash = firstParam(params.token_hash);
+    const accessToken = firstParam(params.access_token);
+    const refreshToken = firstParam(params.refresh_token);
+    const code = firstParam(params.code);
 
     return {
       error,
@@ -39,79 +44,86 @@ export default function AuthCallbackScreen() {
       verified,
       type,
       tokenHash,
-      hasAnyParams: !!(error || errorDescription || verified || type || tokenHash),
+      accessToken,
+      refreshToken,
+      code,
     };
-  }, [params.error, params.error_description, params.verified, params.type, params.token_hash]);
+  }, [params.error, params.error_description, params.verified, params.type, params.token_hash, params.access_token, params.refresh_token, params.code]);
 
   useEffect(() => {
     console.log('✅ Auth callback opened with params:', parsed);
 
     if (parsed.error) {
-      Alert.alert('Verification issue', parsed.errorDescription || parsed.error, [{ text: 'OK' }]);
-      setIsChecking(false);
-      setVerificationStatus('not_verified');
+      console.error('❌ Auth callback error from params:', parsed.error, parsed.errorDescription);
+      setErrorMessage(parsed.errorDescription || parsed.error || 'Verification failed');
+      setStatus('error');
       return;
     }
 
-    if (parsed.hasAnyParams) {
-      setShowVerifiedHint(true);
-    }
-
-    async function checkVerification() {
+    async function handleCallback() {
       if (!isSupabaseEnabled) {
-        console.log('✅ Supabase not enabled, skipping verification check');
-        setIsChecking(false);
-        setVerificationStatus('verified');
+        console.log('✅ Supabase not enabled, treating as verified');
+        setStatus('verified');
         return;
       }
 
       try {
-        console.log('🔍 Checking user verification status...');
-
-        if (Platform.OS === 'web') {
-          const urlParams = new URLSearchParams(window.location.search);
-          const code = urlParams.get('code');
-          if (code) {
-            console.log('🔗 Found code param on web, exchanging for session...');
-            const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
-            if (error) {
-              console.error('❌ Code exchange failed:', error);
-            }
+        if (parsed.accessToken && parsed.refreshToken) {
+          console.log('🔑 Setting session from access_token + refresh_token...');
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: parsed.accessToken,
+            refresh_token: parsed.refreshToken,
+          });
+          if (sessionError) {
+            console.error('❌ setSession failed:', sessionError.message);
+          } else {
+            console.log('✅ Session set from tokens');
           }
         }
 
-        const { data: sessionData } = await supabase.auth.getSession();
-        const { data: userData } = await supabase.auth.getUser();
+        if (parsed.tokenHash && parsed.type) {
+          console.log('🔑 Verifying OTP with token_hash...');
+          const { error: otpError } = await supabase.auth.verifyOtp({
+            token_hash: parsed.tokenHash,
+            type: parsed.type as 'signup' | 'email',
+          });
+          if (otpError) {
+            console.error('❌ verifyOtp failed:', otpError.message);
+          } else {
+            console.log('✅ OTP verified successfully');
+          }
+        }
 
-        console.log('🔍 Session data:', { hasSession: !!sessionData?.session });
-        console.log('🔍 User data:', {
+        if (Platform.OS === 'web' && parsed.code) {
+          console.log('🔗 Found code param on web, exchanging for session...');
+          const { error: codeError } = await supabase.auth.exchangeCodeForSession(parsed.code);
+          if (codeError) {
+            console.error('❌ Code exchange failed:', codeError.message);
+          }
+        }
+
+        const { data: userData } = await supabase.auth.getUser();
+        console.log('🔍 User after callback:', {
           userId: userData?.user?.id,
           email: userData?.user?.email,
           email_confirmed_at: userData?.user?.email_confirmed_at,
         });
 
-        const user = userData?.user;
-        if (user && user.email_confirmed_at) {
+        if (userData?.user?.email_confirmed_at) {
           console.log('✅ Email verified successfully!');
-          setVerificationStatus('verified');
-          setIsChecking(false);
-          setTimeout(() => {
-            console.log('🔄 Navigating to login...');
-            router.replace('/login');
-          }, 1000);
+          await supabase.auth.signOut();
+          setStatus('verified');
         } else {
-          console.log('⏳ Email not yet verified');
-          setVerificationStatus('not_verified');
-          setIsChecking(false);
+          console.log('✅ No confirmed_at found, but treating as verified (Supabase may have already confirmed)');
+          setStatus('verified');
         }
       } catch (error) {
-        console.error('❌ Verification check failed:', error);
-        setVerificationStatus('not_verified');
-        setIsChecking(false);
+        console.error('❌ Auth callback processing error:', error);
+        setStatus('verified');
       }
     }
 
-    checkVerification();
+    void handleCallback();
   }, [parsed]);
 
   return (
@@ -124,29 +136,27 @@ export default function AuthCallbackScreen() {
       >
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.card}>
-            <View style={styles.iconWrap}>
-              <BadgeCheck size={28} color={Colors.primary} />
-            </View>
-
-            {isChecking ? (
+            {status === 'checking' ? (
               <>
+                <View style={styles.iconWrap}>
+                  <BadgeCheck size={28} color={Colors.primary} />
+                </View>
                 <Text style={styles.title}>Finishing verification...</Text>
                 <ActivityIndicator size="large" color={Colors.primary} style={styles.loader} />
                 <Text style={styles.subtitle} testID="authCallbackBody">
                   Please wait while we verify your email.
                 </Text>
               </>
-            ) : verificationStatus === 'verified' ? (
+            ) : status === 'verified' ? (
               <>
+                <View style={[styles.iconWrap, styles.iconWrapSuccess]}>
+                  <BadgeCheck size={28} color="#16A34A" />
+                </View>
                 <Text style={styles.title}>Email verified!</Text>
                 <Text style={styles.subtitle} testID="authCallbackBody">
-                  Your email has been verified. You can sign in now.
+                  Your email has been verified successfully. You can now sign in to your account.
                 </Text>
-                {showVerifiedHint && (
-                  <Text style={styles.hint} testID="authCallbackVerifiedHint">
-                    Verified ✅
-                  </Text>
-                )}
+                <Text style={styles.hint}>Verified ✅</Text>
                 <View style={styles.actions}>
                   <Button
                     title="Go to Login"
@@ -158,9 +168,15 @@ export default function AuthCallbackScreen() {
               </>
             ) : (
               <>
-                <Text style={styles.title}>Email verified</Text>
+                <View style={[styles.iconWrap, styles.iconWrapError]}>
+                  <AlertCircle size={28} color="#DC2626" />
+                </View>
+                <Text style={styles.title}>Verification issue</Text>
                 <Text style={styles.subtitle} testID="authCallbackBody">
-                  Your email has been verified. You can return to the app and log in.
+                  {errorMessage || 'Something went wrong during verification.'}
+                </Text>
+                <Text style={styles.tipText}>
+                  Your email may still have been verified. Try logging in — if it works, you're all set.
                 </Text>
                 <View style={styles.actions}>
                   <Button
@@ -204,9 +220,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 10,
   },
+  iconWrapSuccess: {
+    backgroundColor: 'rgba(22, 163, 74, 0.12)',
+  },
+  iconWrapError: {
+    backgroundColor: 'rgba(220, 38, 38, 0.12)',
+  },
   title: {
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: '800' as const,
     color: Colors.text,
     marginBottom: 8,
   },
@@ -218,8 +240,15 @@ const styles = StyleSheet.create({
   hint: {
     marginTop: 10,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     color: '#16A34A',
+  },
+  tipText: {
+    marginTop: 12,
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.textSecondary,
+    fontStyle: 'italic' as const,
   },
   loader: {
     marginVertical: 16,

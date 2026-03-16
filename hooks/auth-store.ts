@@ -1,11 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { User } from '@/types';
 import { router } from 'expo-router';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 import type { VoicePreference } from '@/constants/voice';
-import * as Linking from 'expo-linking';
+
 
 const USER_STORAGE_KEY = 'meal-planner-user';
 
@@ -17,16 +17,14 @@ type SignupResult =
   | { ok: true; reason?: 'VERIFY_EMAIL_REQUIRED' }
   | { ok: false; reason: 'SIGNUP_FAILED' };
 
-function getEmailRedirectTo(): string {
-  const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
-  if (!SUPABASE_URL || !SUPABASE_URL.includes('supabase.co')) {
-    console.warn('⚠️ Supabase URL not configured properly');
-    return 'mealplannerroulette://auth-callback';
-  }
+// IMPORTANT: This redirect URL must be allow-listed in Supabase Dashboard:
+//   Authentication > URL Configuration > Redirect URLs
+//   Add: myapp://auth-callback
+const EMAIL_REDIRECT_URL = 'myapp://auth-callback';
 
-  const redirectUrl = `${SUPABASE_URL}/auth/v1/verify`;
-  console.log('🔗 Email redirect URL:', redirectUrl);
-  return redirectUrl;
+function getEmailRedirectTo(): string {
+  console.log('🔗 Email redirect URL:', EMAIL_REDIRECT_URL);
+  return EMAIL_REDIRECT_URL;
 }
 
 const result = createContextHook(() => {
@@ -123,7 +121,7 @@ const result = createContextHook(() => {
   }, [upsertUserProfileToSupabase]);
 
   useEffect(() => {
-    loadUser();
+    void loadUser();
   }, [loadUser]);
 
   const login = useCallback(
@@ -345,7 +343,7 @@ const result = createContextHook(() => {
     }
   }, []);
 
-  return {
+  return useMemo(() => ({
     user,
     isLoading,
     login,
@@ -353,7 +351,7 @@ const result = createContextHook(() => {
     logout,
     updateProfile,
     isAuthenticated: !!user,
-  };
+  }), [user, isLoading, login, signup, logout, updateProfile]);
 });
 
 const AuthContext = result[0];
