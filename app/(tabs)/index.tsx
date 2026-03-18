@@ -17,6 +17,7 @@ const HOME_WALKTHROUGH_STEPS: WalkthroughStep[] = [
   { title: 'Upload a photo', body: 'Use the Photo option to scan a recipe from an image.' },
   { title: 'Paste a link', body: 'Use the Link option to paste any recipe URL and import it.' },
   { title: 'Import a folder', body: 'Use Folder/Bookmark import to upload multiple recipe links at once.' },
+  { title: 'Fastest way to start', body: 'If you already have a lot of recipe URLs saved, place them all into a folder and upload the whole folder at once. This is much quicker than adding recipes one by one and is the best way to build a large cookbook when you\'re first starting.' },
 ];
 
 export default function HomeScreen() {
