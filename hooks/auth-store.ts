@@ -257,19 +257,23 @@ const result = createContextHook(() => {
 
         const safeEmail = data.user.email ?? email;
         const baseUsername = safeEmail.split('@')[0].toLowerCase();
+        const metadataName = data.user.user_metadata?.name as string | undefined;
+        const metadataUsername = data.user.user_metadata?.username as string | undefined;
 
+        let profileDisplayName: string | null = null;
+        let profileUsername: string | null = null;
         let savedShareCookbook = false;
         let savedTtsVoiceId: string | null = null;
         let savedVoicePreference: VoicePreference = 'female';
-        let existingUsername: string | null = null;
         try {
           const { data: profileData } = await supabase
             .from('user_profiles')
-            .select('*')
+            .select('display_name, username, share_cookbook_with_friends, tts_voice_id, voice_preference')
             .eq('id', data.user.id)
             .maybeSingle();
           if (profileData) {
-            existingUsername = profileData.username;
+            profileDisplayName = profileData.display_name || null;
+            profileUsername = profileData.username || null;
             if (profileData.share_cookbook_with_friends != null) {
               savedShareCookbook = !!profileData.share_cookbook_with_friends;
             }
@@ -280,18 +284,19 @@ const result = createContextHook(() => {
               savedVoicePreference = profileData.voice_preference;
             }
           }
-          console.log('🔐 Fetched profile from Supabase:', { existingUsername, savedShareCookbook, savedVoicePreference });
+          console.log('🔐 Fetched profile from Supabase:', { profileDisplayName, profileUsername, savedShareCookbook, savedVoicePreference });
         } catch {
           console.warn('⚠️ Could not fetch profile during login, using defaults');
         }
 
-        const username = existingUsername || await generateUniqueUsername(baseUsername, data.user.id);
+        const resolvedName = profileDisplayName || metadataName || safeEmail.split('@')[0];
+        const resolvedUsername = profileUsername || metadataUsername || await generateUniqueUsername(baseUsername, data.user.id);
 
         const newUser: User = {
           id: data.user.id,
           email: safeEmail,
-          name: safeEmail.split('@')[0],
-          username,
+          name: resolvedName,
+          username: resolvedUsername,
           shareCookbookWithFriends: savedShareCookbook,
           ttsVoiceId: savedTtsVoiceId,
           voicePreference: savedVoicePreference,
@@ -362,6 +367,7 @@ const result = createContextHook(() => {
             data: {
               name,
               username: normalizedUsername,
+              locationPermission: !!locationPermission,
             },
           },
         });
