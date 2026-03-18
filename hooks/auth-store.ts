@@ -17,9 +17,38 @@ type SignupResult =
   | { ok: true; reason?: 'VERIFY_EMAIL_REQUIRED' }
   | { ok: false; reason: 'SIGNUP_FAILED' };
 
-// IMPORTANT: This redirect URL must be allow-listed in Supabase Dashboard:
-//   Authentication > URL Configuration > Redirect URLs
-//   Add: myapp://auth-callback
+// ============================================================================
+// SUPABASE EMAIL VERIFICATION SETUP
+// ============================================================================
+//
+// 1. Allow-list the redirect URL in Supabase Dashboard:
+//    Authentication > URL Configuration > Redirect URLs
+//    Add: myapp://auth-callback
+//
+// 2. CRITICAL: Update the Supabase email templates to use DIRECT deep links.
+//    Go to: Authentication > Email Templates
+//
+//    For "Confirm signup" template, replace the default link with:
+//      <a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=signup">Confirm your email</a>
+//
+//    For "Magic Link" template (if used):
+//      <a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=magiclink">Log in</a>
+//
+//    WHY: The default {{ .ConfirmationURL }} goes through Supabase's server
+//    (https://xyz.supabase.co/auth/v1/verify?...) which then does a 302 redirect
+//    to myapp://auth-callback. Safari BLOCKS this server-to-custom-scheme redirect,
+//    showing "Safari cannot open the page because the address is invalid."
+//
+//    By using {{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=signup directly,
+//    the email link becomes myapp://auth-callback?token_hash=xxx&type=signup,
+//    which the email client opens DIRECTLY in the app (no Safari involved).
+//    The app then calls supabase.auth.verifyOtp() to complete verification.
+//
+// 3. For password reset emails, the template should use:
+//      <a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=recovery">Reset password</a>
+//    (The redirectTo for reset is 'myapp://reset-password')
+//
+// ============================================================================
 const EMAIL_REDIRECT_URL = 'myapp://auth-callback';
 
 function getEmailRedirectTo(): string {

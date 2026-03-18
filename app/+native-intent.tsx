@@ -49,11 +49,11 @@ export function redirectSystemPath({
     const code = params.get('code') || '';
 
     const queryParts: string[] = [];
-    if (access_token) queryParts.push(`access_token=${access_token}`);
-    if (refresh_token) queryParts.push(`refresh_token=${refresh_token}`);
-    if (token_hash) queryParts.push(`token_hash=${token_hash}`);
-    if (type) queryParts.push(`type=${type}`);
-    if (code) queryParts.push(`code=${code}`);
+    if (token_hash) queryParts.push(`token_hash=${encodeURIComponent(token_hash)}`);
+    if (type) queryParts.push(`type=${encodeURIComponent(type)}`);
+    if (access_token) queryParts.push(`access_token=${encodeURIComponent(access_token)}`);
+    if (refresh_token) queryParts.push(`refresh_token=${encodeURIComponent(refresh_token)}`);
+    if (code) queryParts.push(`code=${encodeURIComponent(code)}`);
     if (error) queryParts.push(`error=${encodeURIComponent(error)}`);
     if (error_description) queryParts.push(`error_description=${encodeURIComponent(error_description)}`);
 
@@ -67,11 +67,15 @@ export function redirectSystemPath({
     const access_token = params.get('access_token') || '';
     const refresh_token = params.get('refresh_token') || '';
     const code = params.get('code') || '';
+    const token_hash = params.get('token_hash') || '';
+    const type = params.get('type') || '';
 
     const queryParts: string[] = [];
-    if (access_token) queryParts.push(`access_token=${access_token}`);
-    if (refresh_token) queryParts.push(`refresh_token=${refresh_token}`);
-    if (code) queryParts.push(`code=${code}`);
+    if (token_hash) queryParts.push(`token_hash=${encodeURIComponent(token_hash)}`);
+    if (type) queryParts.push(`type=${encodeURIComponent(type)}`);
+    if (access_token) queryParts.push(`access_token=${encodeURIComponent(access_token)}`);
+    if (refresh_token) queryParts.push(`refresh_token=${encodeURIComponent(refresh_token)}`);
+    if (code) queryParts.push(`code=${encodeURIComponent(code)}`);
 
     const query = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
     console.log('🔗 native-intent routing to /reset-password', query);

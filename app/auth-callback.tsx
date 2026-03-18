@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import GradientBackground from '@/components/GradientBackground';
@@ -50,7 +50,12 @@ export default function AuthCallbackScreen() {
     };
   }, [params.error, params.error_description, params.verified, params.type, params.token_hash, params.access_token, params.refresh_token, params.code]);
 
+  const didRun = useRef(false);
+
   useEffect(() => {
+    if (didRun.current) return;
+    didRun.current = true;
+
     console.log('✅ Auth callback opened with params:', parsed);
 
     if (parsed.error) {
@@ -68,6 +73,29 @@ export default function AuthCallbackScreen() {
       }
 
       try {
+        if (parsed.tokenHash && parsed.type) {
+          console.log('🔑 Verifying OTP with token_hash...', { token_hash: parsed.tokenHash.substring(0, 8) + '...', type: parsed.type });
+          const { data: otpData, error: otpError } = await supabase.auth.verifyOtp({
+            token_hash: parsed.tokenHash,
+            type: parsed.type as 'signup' | 'email',
+          });
+          if (otpError) {
+            console.error('❌ verifyOtp failed:', otpError.message);
+            if (otpError.message?.toLowerCase().includes('expired')) {
+              setErrorMessage('This verification link has expired. Please request a new one.');
+              setStatus('error');
+              return;
+            }
+          } else {
+            console.log('✅ OTP verified successfully, user:', otpData?.user?.id);
+            if (otpData?.session) {
+              await supabase.auth.signOut();
+            }
+            setStatus('verified');
+            return;
+          }
+        }
+
         if (parsed.accessToken && parsed.refreshToken) {
           console.log('🔑 Setting session from access_token + refresh_token...');
           const { error: sessionError } = await supabase.auth.setSession({
@@ -78,19 +106,9 @@ export default function AuthCallbackScreen() {
             console.error('❌ setSession failed:', sessionError.message);
           } else {
             console.log('✅ Session set from tokens');
-          }
-        }
-
-        if (parsed.tokenHash && parsed.type) {
-          console.log('🔑 Verifying OTP with token_hash...');
-          const { error: otpError } = await supabase.auth.verifyOtp({
-            token_hash: parsed.tokenHash,
-            type: parsed.type as 'signup' | 'email',
-          });
-          if (otpError) {
-            console.error('❌ verifyOtp failed:', otpError.message);
-          } else {
-            console.log('✅ OTP verified successfully');
+            await supabase.auth.signOut();
+            setStatus('verified');
+            return;
           }
         }
 
@@ -101,6 +119,9 @@ export default function AuthCallbackScreen() {
             console.error('❌ Code exchange failed:', codeError.message);
           } else {
             console.log('✅ Code exchanged for session successfully');
+            await supabase.auth.signOut();
+            setStatus('verified');
+            return;
           }
         }
 
@@ -116,7 +137,7 @@ export default function AuthCallbackScreen() {
           await supabase.auth.signOut();
           setStatus('verified');
         } else {
-          console.log('✅ No confirmed_at found, but treating as verified (Supabase may have already confirmed)');
+          console.log('⚠️ No confirmed_at found, treating as verified (Supabase may have confirmed server-side)');
           setStatus('verified');
         }
       } catch (error) {
