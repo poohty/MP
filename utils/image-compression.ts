@@ -12,9 +12,19 @@ export async function compressImageUri(uri: string): Promise<string> {
       return await compressImageUriWeb(uri);
     }
 
+    const info = await ImageManipulator.manipulateAsync(uri, [], {});
+    const actions: ImageManipulator.Action[] = [];
+    if (info.width > MAX_DIMENSION || info.height > MAX_DIMENSION) {
+      const scale = MAX_DIMENSION / Math.max(info.width, info.height);
+      actions.push({ resize: { width: Math.round(info.width * scale), height: Math.round(info.height * scale) } });
+      console.log(`[ImageCompress] Native resizing from ${info.width}x${info.height} to ${Math.round(info.width * scale)}x${Math.round(info.height * scale)}`);
+    } else {
+      console.log(`[ImageCompress] Native image ${info.width}x${info.height} within bounds, skipping resize`);
+    }
+
     const manipulated = await ImageManipulator.manipulateAsync(
       uri,
-      [{ resize: { width: MAX_DIMENSION } }],
+      actions,
       { compress: JPEG_QUALITY, format: ImageManipulator.SaveFormat.JPEG }
     );
 
@@ -81,9 +91,19 @@ export async function compressBase64Image(base64DataUri: string): Promise<string
       return await compressBase64Web(base64DataUri);
     }
 
+    const info = await ImageManipulator.manipulateAsync(base64DataUri, [], {});
+    const actions: ImageManipulator.Action[] = [];
+    if (info.width > MAX_DIMENSION || info.height > MAX_DIMENSION) {
+      const scale = MAX_DIMENSION / Math.max(info.width, info.height);
+      actions.push({ resize: { width: Math.round(info.width * scale), height: Math.round(info.height * scale) } });
+      console.log(`[ImageCompress] Native base64 resizing from ${info.width}x${info.height}`);
+    } else {
+      console.log(`[ImageCompress] Native base64 ${info.width}x${info.height} within bounds, skipping resize`);
+    }
+
     const manipulated = await ImageManipulator.manipulateAsync(
       base64DataUri,
-      [{ resize: { width: MAX_DIMENSION } }],
+      actions,
       { compress: JPEG_QUALITY, format: ImageManipulator.SaveFormat.JPEG }
     );
 
