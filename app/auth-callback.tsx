@@ -1,11 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
 import Button from '@/components/Button';
 import { BadgeCheck, AlertCircle } from 'lucide-react-native';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
+
+const USER_STORAGE_KEY = 'meal-planner-user';
+const CALLBACK_TIMEOUT_MS = 20000;
 
 type AuthCallbackParams = {
   verified?: string | string[];
@@ -65,6 +69,33 @@ export default function AuthCallbackScreen() {
       return;
     }
 
+    const timeoutId = setTimeout(() => {
+      setStatus((current) => {
+        if (current === 'checking') {
+          console.warn('⏰ Auth callback timed out after', CALLBACK_TIMEOUT_MS, 'ms');
+          setErrorMessage('Verification is taking too long. Please try logging in — your email may already be verified.');
+          return 'error';
+        }
+        return current;
+      });
+    }, CALLBACK_TIMEOUT_MS);
+
+    async function cleanupAndMarkVerified() {
+      try {
+        await AsyncStorage.removeItem(USER_STORAGE_KEY);
+        console.log('🧹 Cleared stale local user after verification');
+      } catch (e) {
+        console.warn('⚠️ Could not clear local user storage:', e);
+      }
+      try {
+        await supabase.auth.signOut();
+        console.log('🧹 Signed out Supabase session after verification');
+      } catch (e) {
+        console.warn('⚠️ Could not sign out after verification:', e);
+      }
+      setStatus('verified');
+    }
+
     async function handleCallback() {
       if (!isSupabaseEnabled) {
         console.log('✅ Supabase not enabled, treating as verified');
@@ -82,9 +113,14 @@ export default function AuthCallbackScreen() {
           });
           if (otpError) {
             console.error('❌ verifyOtp failed:', otpError.message);
-            if (otpError.message?.toLowerCase().includes('expired')) {
+            if (otpError.message?.toLowerCase().includes('expired') || otpError.message?.toLowerCase().includes('otp_expired')) {
               setErrorMessage('This verification link has expired. Please request a new one from the login screen.');
               setStatus('error');
+              return;
+            }
+            if (otpError.message?.toLowerCase().includes('already') || otpError.message?.toLowerCase().includes('confirmed')) {
+              console.log('✅ Email was already verified');
+              await cleanupAndMarkVerified();
               return;
             }
             setErrorMessage(otpError.message || 'Verification failed. Please try again.');
@@ -94,8 +130,7 @@ export default function AuthCallbackScreen() {
 
           console.log('✅ OTP verified successfully, user:', otpData?.user?.id);
           console.log('✅ email_confirmed_at:', otpData?.user?.email_confirmed_at);
-          await supabase.auth.signOut();
-          setStatus('verified');
+          await cleanupAndMarkVerified();
           return;
         }
 
@@ -113,8 +148,7 @@ export default function AuthCallbackScreen() {
           }
 
           console.log('✅ Session set, email_confirmed_at:', sessionData?.user?.email_confirmed_at);
-          await supabase.auth.signOut();
-          setStatus('verified');
+          await cleanupAndMarkVerified();
           return;
         }
 
@@ -129,8 +163,14 @@ export default function AuthCallbackScreen() {
           }
 
           console.log('✅ Code exchanged, email_confirmed_at:', codeData?.user?.email_confirmed_at);
-          await supabase.auth.signOut();
-          setStatus('verified');
+          await cleanupAndMarkVerified();
+          return;
+        }
+
+        const { data: existingSession } = await supabase.auth.getSession();
+        if (existingSession?.session?.user?.email_confirmed_at) {
+          console.log('✅ Existing verified session found, treating as verified');
+          await cleanupAndMarkVerified();
           return;
         }
 
@@ -145,6 +185,8 @@ export default function AuthCallbackScreen() {
     }
 
     void handleCallback();
+
+    return () => clearTimeout(timeoutId);
   }, [parsed]);
 
   return (

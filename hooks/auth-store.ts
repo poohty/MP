@@ -206,6 +206,35 @@ const result = createContextHook(() => {
     void loadUser();
   }, [loadUser]);
 
+  useEffect(() => {
+    if (!isSupabaseEnabled) return;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('🔐 onAuthStateChange:', event, session?.user?.id ?? 'no-user');
+
+      if (event === 'SIGNED_OUT') {
+        console.log('🔐 Session signed out externally, clearing local user');
+        await AsyncStorage.removeItem(USER_STORAGE_KEY);
+        setUser(null);
+        lastUpsertIdRef.current = null;
+      }
+
+      if (event === 'TOKEN_REFRESHED' && session?.user) {
+        const confirmedAt = session.user.email_confirmed_at ?? null;
+        if (!confirmedAt) {
+          console.warn('🔐 Token refreshed but email still not verified, signing out');
+          await supabase.auth.signOut();
+          await AsyncStorage.removeItem(USER_STORAGE_KEY);
+          setUser(null);
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   const login = useCallback(
     async (email: string, password: string): Promise<LoginResult> => {
       if (!isSupabaseEnabled) {
