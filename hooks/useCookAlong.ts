@@ -6,6 +6,8 @@ import { resolveVoiceId, type VoicePreference } from '@/constants/voice';
 
 const RECORD_DURATION_MS = 3000;
 const INTRO_TEXT = "Let's start with step one.";
+const TTS_MAX_RETRIES = 2;
+const TTS_RETRY_DELAY_MS = 600;
 
 type VoiceCommand = 'STEP_COMPLETE' | 'REPEAT_STEP' | 'NONE';
 
@@ -17,38 +19,77 @@ interface CookAlongState {
   lastTranscript: string;
 }
 
-async function fetchTTSAudio(text: string, voiceId: string): Promise<string> {
+async function fetchTTSAudioOnce(text: string, voiceId: string, requestId: string): Promise<{ ok: true; uri: string } | { ok: false; retryable: boolean; error: string }> {
   const apiBase = getBackendBaseUrl();
   if (!apiBase) {
-    console.log('[CookAlong] TTS: no API base URL found. EXPO_PUBLIC_RORK_API_BASE_URL may not be set.');
-    throw new Error('Backend not configured');
+    console.log(`[CookAlong] TTS[${requestId}]: no API base URL found.`);
+    return { ok: false, retryable: false, error: 'Backend not configured' };
   }
 
   const ttsUrl = `${apiBase}/api/voice/tts`;
-  console.log('[CookAlong] TTS request ->', ttsUrl, '| voiceId:', voiceId, '| text length:', text.length);
+  console.log(`[CookAlong] TTS[${requestId}] request -> ${ttsUrl} | voiceId: ${voiceId} | text length: ${text.length}`);
 
-  const response = await fetch(ttsUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, voiceId }),
-  });
+  try {
+    const response = await fetch(ttsUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'audio/mpeg, application/json',
+      },
+      body: JSON.stringify({ text, voiceId }),
+    });
 
-  if (!response.ok) {
-    const contentType = response.headers.get('content-type') || '';
-    const errText = await response.text();
-    const isHtml = contentType.includes('text/html') || errText.trimStart().startsWith('<');
-    if (isHtml) {
-      console.log('[CookAlong] TTS returned HTML (not JSON) - likely wrong URL or backend not deployed. Status:', response.status);
-      console.log('[CookAlong] TTS URL was:', ttsUrl);
-      throw new Error('Voice server unreachable. The backend URL may be incorrect.');
+    if (!response.ok) {
+      const contentType = response.headers.get('content-type') || '';
+      const errText = await response.text();
+      const isHtml = contentType.includes('text/html') || errText.trimStart().startsWith('<');
+
+      if (isHtml) {
+        const isGatewayError = response.status === 403 || response.status === 429 || response.status >= 500;
+        console.log(`[CookAlong] TTS[${requestId}] returned HTML, status: ${response.status}, gateway/transient: ${isGatewayError}`);
+        return { ok: false, retryable: isGatewayError, error: `Gateway HTML response (${response.status})` };
+      }
+
+      const isServerError = response.status >= 500 || response.status === 429;
+      console.log(`[CookAlong] TTS[${requestId}] error: ${response.status} ${errText.substring(0, 300)}`);
+      return { ok: false, retryable: isServerError, error: `TTS failed: ${response.status}` };
     }
-    console.log('[CookAlong] TTS error:', response.status, errText.substring(0, 500));
-    throw new Error(`TTS failed: ${response.status}`);
+
+    const arrayBuffer = await response.arrayBuffer();
+    const base64 = arrayBufferToBase64(arrayBuffer);
+    console.log(`[CookAlong] TTS[${requestId}] success, audio size: ${arrayBuffer.byteLength} bytes`);
+    return { ok: true, uri: `data:audio/mpeg;base64,${base64}` };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.log(`[CookAlong] TTS[${requestId}] network error: ${msg}`);
+    return { ok: false, retryable: true, error: msg };
+  }
+}
+
+async function fetchTTSAudio(text: string, voiceId: string, requestId?: string): Promise<string> {
+  const id = requestId || Math.random().toString(36).slice(2, 6);
+
+  for (let attempt = 0; attempt <= TTS_MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      const delay = TTS_RETRY_DELAY_MS * attempt;
+      console.log(`[CookAlong] TTS[${id}] retry ${attempt}/${TTS_MAX_RETRIES} after ${delay}ms`);
+      await new Promise<void>(r => setTimeout(r, delay));
+    }
+
+    const result = await fetchTTSAudioOnce(text, voiceId, `${id}:${attempt}`);
+
+    if (result.ok) {
+      return result.uri;
+    }
+
+    if (!result.retryable) {
+      throw new Error(result.error);
+    }
+
+    console.log(`[CookAlong] TTS[${id}] attempt ${attempt} failed (retryable): ${result.error}`);
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  const base64 = arrayBufferToBase64(arrayBuffer);
-  return `data:audio/mpeg;base64,${base64}`;
+  throw new Error('TTS failed after retries. The voice server may be temporarily overloaded.');
 }
 
 async function playAudioUri(uri: string, soundRef: React.MutableRefObject<Audio.Sound | null>): Promise<void> {
@@ -280,8 +321,8 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
         console.log('[CookAlong] Loop: fetching missing audio (intro:', !introUri, 'step1:', !step1Uri, ')');
         const fetches: Promise<string>[] = [];
         const fetchKeys: string[] = [];
-        if (!introUri) { fetches.push(fetchTTSAudio(INTRO_TEXT, resolvedVoiceId)); fetchKeys.push('intro'); }
-        if (!step1Uri) { fetches.push(fetchTTSAudio(instructions[stepIdx] || 'No instruction available.', resolvedVoiceId)); fetchKeys.push('step1'); }
+        if (!introUri) { fetches.push(fetchTTSAudio(INTRO_TEXT, resolvedVoiceId, 'intro-retry')); fetchKeys.push('intro'); }
+        if (!step1Uri) { fetches.push(fetchTTSAudio(instructions[stepIdx] || 'No instruction available.', resolvedVoiceId, 'step1-retry')); fetchKeys.push('step1'); }
         const results = await Promise.all(fetches);
         fetchKeys.forEach((key, i) => {
           if (key === 'intro') introUri = results[i];
@@ -403,11 +444,14 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
 
     const step1Text = instructions[0] || 'No instruction available.';
 
-    console.log('[CookAlong] Starting parallel: health check + permissions + TTS fetch');
+    console.log('[CookAlong] Starting startup: health check + permissions + TTS fetch');
 
     const healthUrl = `${apiBase}/api/voice/health`;
     console.log('[CookAlong] Health check URL:', healthUrl);
-    const healthPromise = fetch(healthUrl, { method: 'GET' })
+    const healthPromise = fetch(healthUrl, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+    })
       .then(async r => {
         console.log('[CookAlong] Health check status:', r.status, 'in', Date.now() - tapTime, 'ms');
         if (!r.ok) {
@@ -436,23 +480,23 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
         })
       : Promise.resolve(true);
 
-    const introTTSPromise = fetchTTSAudio(INTRO_TEXT, resolvedVoiceId)
+    const introTTSPromise = fetchTTSAudio(INTRO_TEXT, resolvedVoiceId, 'intro')
       .then(uri => {
         console.log('[CookAlong] Intro TTS done in', Date.now() - tapTime, 'ms');
         return uri;
       })
       .catch((e) => {
-        console.log('[CookAlong] Intro TTS failed:', e);
+        console.log('[CookAlong] Intro TTS failed after retries:', e);
         return null;
       });
 
-    const step1TTSPromise = fetchTTSAudio(step1Text, resolvedVoiceId)
+    const step1TTSPromise = fetchTTSAudio(step1Text, resolvedVoiceId, 'step1')
       .then(uri => {
         console.log('[CookAlong] Step1 TTS done in', Date.now() - tapTime, 'ms');
         return uri;
       })
       .catch((e) => {
-        console.log('[CookAlong] Step1 TTS failed:', e);
+        console.log('[CookAlong] Step1 TTS failed after retries:', e);
         return null;
       });
 
@@ -464,6 +508,7 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
     ]);
 
     console.log('[CookAlong] All parallel tasks done in', Date.now() - tapTime, 'ms');
+    console.log('[CookAlong] Results — health:', healthOk, 'perm:', permGranted, 'intro:', !!introUri, 'step1:', !!step1Uri);
 
     if (!healthOk) {
       Alert.alert(
@@ -478,7 +523,7 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
       return;
     }
 
-    if (!introUri || !step1Uri) {
+    if (!introUri && !step1Uri) {
       Alert.alert('Voice feature unavailable', 'Could not generate speech audio. Please try again.');
       return;
     }
@@ -493,7 +538,7 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
     });
 
     console.log('[CookAlong] Launching loop with preloaded audio, total setup:', Date.now() - tapTime, 'ms');
-    void runCookAlongLoop(0, introUri, step1Uri);
+    void runCookAlongLoop(0, introUri ?? undefined, step1Uri ?? undefined);
   }, [instructions, resolvedVoiceId, runCookAlongLoop]);
 
   const stopCookAlong = useCallback(async () => {

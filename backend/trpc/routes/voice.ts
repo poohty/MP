@@ -86,6 +86,7 @@ voiceRoutes.post("/stt", async (c) => {
 voiceRoutes.post("/tts", async (c) => {
   const apiKey = ELEVENLABS_API_KEY();
   if (!apiKey) {
+    console.error("[voice/tts] ELEVENLABS_API_KEY not set");
     return c.json({ error: "ELEVENLABS_API_KEY not set" }, 500);
   }
 
@@ -94,10 +95,11 @@ voiceRoutes.post("/tts", async (c) => {
     const { text, voiceId } = body;
 
     if (!text || !voiceId) {
+      console.log("[voice/tts] Missing fields - text:", !!text, "voiceId:", !!voiceId);
       return c.json({ error: "Missing 'text' or 'voiceId' in request body" }, 400);
     }
 
-    console.log("[voice/tts] Calling ElevenLabs TTS for voice:", voiceId);
+    console.log("[voice/tts] Calling ElevenLabs TTS for voice:", voiceId, "| text length:", text.length);
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
