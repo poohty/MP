@@ -94,11 +94,13 @@ export default function AuthCallbackScreen() {
           }
         }
 
-        if (Platform.OS === 'web' && parsed.code) {
-          console.log('🔗 Found code param on web, exchanging for session...');
+        if (parsed.code) {
+          console.log('🔗 Found code param, exchanging for session...');
           const { error: codeError } = await supabase.auth.exchangeCodeForSession(parsed.code);
           if (codeError) {
             console.error('❌ Code exchange failed:', codeError.message);
+          } else {
+            console.log('✅ Code exchanged for session successfully');
           }
         }
 

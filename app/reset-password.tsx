@@ -12,7 +12,7 @@ import { ArrowLeft, Lock, ShieldCheck } from 'lucide-react-native';
 export default function ResetPasswordScreen() {
   const { isDark } = useTheme();
   const themeColors = isDark ? Colors.dark : Colors.light;
-  const params = useLocalSearchParams<{ access_token?: string; refresh_token?: string }>();
+  const params = useLocalSearchParams<{ access_token?: string; refresh_token?: string; code?: string }>();
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -54,7 +54,15 @@ export default function ResetPasswordScreen() {
           }
         }
 
-        if (params.access_token && params.refresh_token) {
+        if (params.code) {
+          console.log('🔑 Native: exchanging code for session (PKCE)');
+          const { error } = await supabase.auth.exchangeCodeForSession(params.code as string);
+          if (error) {
+            console.error('🔑 Code exchange error:', error);
+          } else {
+            console.log('🔑 Code exchanged for session successfully');
+          }
+        } else if (params.access_token && params.refresh_token) {
           console.log('🔑 Native: restoring session from deep link params');
           const { error } = await supabase.auth.setSession({
             access_token: params.access_token as string,
