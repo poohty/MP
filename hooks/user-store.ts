@@ -160,67 +160,16 @@ const [UserContext, useUser] = createContextHook(() => {
       }
 
       if (!data) {
-        const fallbackEmail = authUser.email;
-        const baseUsername = (authUser.username || fallbackEmail.split('@')[0]).toLowerCase();
-        const fallbackDisplayName = authUser.name || authUser.username || fallbackEmail;
-        const fallbackShareCookbook = !!authUser.shareCookbookWithFriends;
-
-        let finalUsername = baseUsername;
-        try {
-          const { data: usernameCheck } = await supabase
-            .from('user_profiles')
-            .select('id')
-            .eq('username', baseUsername)
-            .maybeSingle();
-          if (usernameCheck && usernameCheck.id !== authUser.id) {
-            finalUsername = `${baseUsername}_${authUser.id.replace(/-/g, '').substring(0, 6)}`;
-            console.log('⚠️ user-store: username taken, using fallback:', finalUsername);
-          }
-        } catch {
-          console.warn('⚠️ user-store: could not check username uniqueness');
-        }
-
-        const fallbackProfileRow = {
-          id: authUser.id,
-          email: fallbackEmail,
-          username: finalUsername,
-          display_name: fallbackDisplayName,
-          share_cookbook_with_friends: fallbackShareCookbook,
-          tts_voice_id: authUser.ttsVoiceId || 'Cz0K1kOv9tD8l0b5Qu53',
-          updated_at: new Date().toISOString(),
-        };
-
-        const { error: upsertError } = await supabase
-          .from('user_profiles')
-          .upsert(fallbackProfileRow, { onConflict: 'id' });
-
-        if (upsertError) {
-          if (upsertError.message?.includes('user_profiles_username_unique_idx') || upsertError.code === '23505') {
-            console.warn('⚠️ user-store: username conflict on fallback upsert, retrying with longer suffix');
-            fallbackProfileRow.username = `${baseUsername}_${authUser.id.replace(/-/g, '').substring(0, 10)}`;
-            const { error: retryErr } = await supabase
-              .from('user_profiles')
-              .upsert(fallbackProfileRow, { onConflict: 'id' });
-            if (retryErr) {
-              console.error('❌ Supabase fallback upsert retry failed:', retryErr.message || retryErr.code);
-            } else {
-              finalUsername = fallbackProfileRow.username;
-            }
-          } else {
-            console.error('❌ Supabase upsert fallback profile error:', upsertError.message || upsertError.code);
-          }
-        }
-
+        console.warn('⚠️ user-store: No profile row found for user', authUser.id, '— using local fallback for display only. Profile should be created by auth-store.');
         const fallbackProfile: UserProfile = {
           id: authUser.id,
-          email: fallbackEmail,
-          username: finalUsername,
-          displayName: fallbackDisplayName,
-          shareCookbookWithFriends: fallbackShareCookbook,
+          email: authUser.email,
+          username: authUser.username || authUser.email.split('@')[0],
+          displayName: authUser.name || authUser.username || authUser.email,
+          shareCookbookWithFriends: authUser.shareCookbookWithFriends || false,
           ttsVoiceId: authUser.ttsVoiceId ?? null,
           voicePreference: authUser.voicePreference ?? 'female',
         };
-
         setCurrentUserProfile(fallbackProfile);
         setFriendLinks([]);
         return;

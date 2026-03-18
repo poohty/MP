@@ -12,11 +12,13 @@ import * as Location from 'expo-location';
 export default function SignupScreen() {
   const { signup } = useAuth();
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState<{
     name?: string;
+    username?: string;
     email?: string;
     password?: string;
     confirmPassword?: string;
@@ -27,6 +29,7 @@ export default function SignupScreen() {
   const validate = () => {
     const newErrors: {
       name?: string;
+      username?: string;
       email?: string;
       password?: string;
       confirmPassword?: string;
@@ -34,6 +37,17 @@ export default function SignupScreen() {
     
     if (!name) {
       newErrors.name = 'Name is required';
+    }
+
+    const trimmedUsername = username.trim().toLowerCase();
+    if (!trimmedUsername) {
+      newErrors.username = 'Username is required';
+    } else if (trimmedUsername.length < 3) {
+      newErrors.username = 'Username must be at least 3 characters';
+    } else if (trimmedUsername.length > 20) {
+      newErrors.username = 'Username must be 20 characters or less';
+    } else if (!/^[a-z0-9._-]+$/.test(trimmedUsername)) {
+      newErrors.username = 'Username can only contain letters, numbers, ., _, and -';
     }
     
     if (!email) {
@@ -92,7 +106,7 @@ export default function SignupScreen() {
         locationGranted = locationPermission;
       }
       
-      const result = await signup(name, email.trim(), password, locationGranted);
+      const result = await signup(name.trim(), username.trim().toLowerCase(), email.trim(), password, locationGranted);
 
       if (result.ok && result.reason === 'VERIFY_EMAIL_REQUIRED') {
         router.push({ pathname: '/verify-email', params: { email: email.trim() } });
@@ -100,7 +114,11 @@ export default function SignupScreen() {
       }
 
       if (!result.ok) {
-        setErrors({ email: 'Failed to create account' });
+        if (result.reason === 'USERNAME_TAKEN') {
+          setErrors({ username: 'That username is already taken' });
+        } else {
+          setErrors({ email: 'Failed to create account' });
+        }
       }
     } catch (error) {
       console.error('Signup error:', error);
@@ -136,6 +154,16 @@ export default function SignupScreen() {
             value={name}
             onChangeText={setName}
             error={errors.name}
+          />
+          
+          <Input
+            label="Username"
+            placeholder="Choose a username"
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="none"
+            autoCorrect={false}
+            error={errors.username}
           />
           
           <Input

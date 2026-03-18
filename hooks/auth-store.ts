@@ -313,16 +313,17 @@ const result = createContextHook(() => {
   );
 
   const signup = useCallback(
-    async (name: string, email: string, password: string, locationPermission?: boolean): Promise<SignupResult> => {
+    async (name: string, username: string, email: string, password: string, locationPermission?: boolean): Promise<SignupResult> => {
+      const normalizedUsername = username.trim().toLowerCase();
+
       if (!isSupabaseEnabled) {
         try {
           const userId = email.toLowerCase().replace(/[^a-z0-9]/g, '');
-          const username = email.split('@')[0].toLowerCase();
           const newUser: User = {
             id: userId,
             email,
             name,
-            username,
+            username: normalizedUsername,
             locationPermission,
             shareCookbookWithFriends: false,
           };
@@ -340,13 +341,28 @@ const result = createContextHook(() => {
       }
 
       try {
+        const { data: existingUsername } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('username', normalizedUsername)
+          .maybeSingle();
+
+        if (existingUsername) {
+          console.warn('🧾 Username already taken:', normalizedUsername);
+          return { ok: false, reason: 'USERNAME_TAKEN' };
+        }
+
         const emailRedirectTo = getEmailRedirectTo();
-        console.log('🧾 Supabase signUp attempt:', { email, emailRedirectTo });
+        console.log('🧾 Supabase signUp attempt:', { email, username: normalizedUsername, emailRedirectTo });
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo,
+            data: {
+              name,
+              username: normalizedUsername,
+            },
           },
         });
 
@@ -380,15 +396,11 @@ const result = createContextHook(() => {
           return { ok: true, reason: 'VERIFY_EMAIL_REQUIRED' };
         }
 
-        const safeEmail = supaUser.email ?? email;
-        const baseUsername = safeEmail.split('@')[0].toLowerCase();
-        const username = await generateUniqueUsername(baseUsername, supaUser.id);
-
         const newUser: User = {
           id: supaUser.id,
-          email: safeEmail,
+          email: supaUser.email ?? email,
           name,
-          username,
+          username: normalizedUsername,
           locationPermission,
           shareCookbookWithFriends: false,
         };
