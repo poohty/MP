@@ -9,6 +9,7 @@ import Input from '@/components/Input';
 import DropdownSelect from '@/components/DropdownSelect';
 import Colors from '@/constants/colors';
 import { useTheme } from '@/hooks/theme-store';
+import { compressImageUri } from '@/utils/image-compression';
 
 import { RecipeCategory } from '@/types';
 
@@ -386,11 +387,12 @@ Rules:
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
-      quality: 1,
+      quality: 0.7,
     });
     
     if (!result.canceled) {
-      setThumbnailUri(result.assets[0].uri);
+      const compressed = await compressImageUri(result.assets[0].uri);
+      setThumbnailUri(compressed);
     }
   };
 
@@ -405,11 +407,12 @@ Rules:
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       aspect: [4, 3],
-      quality: 1,
+      quality: 0.7,
     });
     
     if (!result.canceled) {
-      setThumbnailUri(result.assets[0].uri);
+      const compressed = await compressImageUri(result.assets[0].uri);
+      setThumbnailUri(compressed);
     }
   };
 

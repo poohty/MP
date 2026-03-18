@@ -10,6 +10,7 @@ import GradientBackground from '@/components/GradientBackground';
 import { Recipe, RecipeCategory } from '@/types';
 import DropdownSelect from '@/components/DropdownSelect';
 import * as ImagePicker from 'expo-image-picker';
+import { compressImageUri, compressBase64Image } from '@/utils/image-compression';
 import { useCookAlong } from '@/hooks/useCookAlong';
 import { useWalkthrough, WalkthroughStep } from '@/hooks/useWalkthrough';
 import WalkthroughModal from '@/components/WalkthroughModal';
@@ -399,15 +400,15 @@ export default function RecipeDetailsScreen() {
         mediaTypes: ['images' as any],
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
+        quality: 0.7,
       });
 
       if (!result.canceled && result.assets[0]) {
-        const imageUri = result.assets[0].uri;
+        const compressedUri = await compressImageUri(result.assets[0].uri);
         
-        const reader = new FileReader();
-        const response = await fetch(imageUri);
+        const response = await fetch(compressedUri);
         const blob = await response.blob();
+        const reader = new FileReader();
         
         reader.onloadend = async () => {
           const base64String = reader.result as string;
@@ -452,9 +453,10 @@ export default function RecipeDetailsScreen() {
     try {
       setIsUploadingImage(true);
       
-      const base64Image = await convertImageToBase64(url);
+      let base64Image = await convertImageToBase64(url);
       
       if (base64Image && base64Image.startsWith('data:')) {
+        base64Image = await compressBase64Image(base64Image);
         const success = await updateRecipeImage(recipe.id, base64Image);
         if (success) {
           setRecipe({ ...recipe, imageUri: base64Image });

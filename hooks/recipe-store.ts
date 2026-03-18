@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Recipe, RecipeCategory } from '@/types';
 import { useAuth } from './auth-store';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
+import { compressBase64Image } from '@/utils/image-compression';
 
 const RECIPES_STORAGE_KEY = 'meal-planner-recipes';
 
@@ -259,10 +260,11 @@ const [RecipeContext, useRecipes] = createContextHook(() => { // eslint-disable-
         const mimeType = data?.image?.mimeType || "image/png";
 
         if (b64 && typeof b64 === "string" && b64.length > 100) {
-          const dataUri = b64.startsWith("data:")
+          const rawDataUri = b64.startsWith("data:")
             ? b64
             : `data:${mimeType};base64,${b64}`;
-          console.log(`✅ AI-generated thumbnail created (${dataUri.length} chars)`);
+          const dataUri = await compressBase64Image(rawDataUri);
+          console.log(`✅ AI-generated thumbnail created & compressed (${dataUri.length} chars)`);
           return dataUri;
         } else {
           console.warn("⚠️ AI response did not contain a usable base64 image");
@@ -339,10 +341,15 @@ const [RecipeContext, useRecipes] = createContextHook(() => { // eslint-disable-
       
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64String = reader.result as string;
-          console.log(`✅ Successfully converted image to base64 (${base64String.length} chars)`);
-          resolve(base64String);
+        reader.onloadend = async () => {
+          try {
+            const rawBase64 = reader.result as string;
+            const compressed = await compressBase64Image(rawBase64);
+            console.log(`✅ Converted & compressed image (${rawBase64.length} -> ${compressed.length} chars)`);
+            resolve(compressed);
+          } catch {
+            resolve(reader.result as string);
+          }
         };
         reader.onerror = () => {
           console.log(`❌ Failed to convert blob to base64`);
