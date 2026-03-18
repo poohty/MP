@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { User } from '@/types';
 import { router } from 'expo-router';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
@@ -15,7 +15,7 @@ type LoginResult =
 
 type SignupResult =
   | { ok: true; reason?: 'VERIFY_EMAIL_REQUIRED' }
-  | { ok: false; reason: 'SIGNUP_FAILED' };
+  | { ok: false; reason: 'SIGNUP_FAILED' | 'USERNAME_TAKEN' };
 
 // ============================================================================
 // SUPABASE EMAIL VERIFICATION SETUP
@@ -56,9 +56,34 @@ function getEmailRedirectTo(): string {
   return EMAIL_REDIRECT_URL;
 }
 
+async function generateUniqueUsername(baseUsername: string, userId: string): Promise<string> {
+  if (!isSupabaseEnabled) return baseUsername;
+
+  try {
+    const { data: existing } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('username', baseUsername)
+      .maybeSingle();
+
+    if (!existing || existing.id === userId) {
+      return baseUsername;
+    }
+
+    const shortId = userId.replace(/-/g, '').substring(0, 6);
+    const candidate = `${baseUsername}_${shortId}`;
+    console.log('⚠️ Username taken, using fallback:', candidate);
+    return candidate;
+  } catch {
+    return baseUsername;
+  }
+}
+
 const result = createContextHook(() => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const isUpsertingRef = useRef(false);
+  const lastUpsertIdRef = useRef<string | null>(null);
 
   const upsertUserProfileToSupabase = useCallback(async (userToStore: User) => {
     if (!isSupabaseEnabled) {
@@ -70,19 +95,34 @@ const result = createContextHook(() => {
       return;
     }
 
+    if (isUpsertingRef.current && lastUpsertIdRef.current === userToStore.id) {
+      console.log('⏳ Skipping duplicate upsert for user:', userToStore.id);
+      return;
+    }
+
+    isUpsertingRef.current = true;
+    lastUpsertIdRef.current = userToStore.id;
+
     try {
-      const username = (userToStore.username || userToStore.email.split('@')[0] || '').toLowerCase();
+      const { data: existingProfile } = await supabase
+        .from('user_profiles')
+        .select('id, username')
+        .eq('id', userToStore.id)
+        .maybeSingle();
+
+      let username: string;
+      if (existingProfile) {
+        username = existingProfile.username;
+        console.log('📤 Profile exists, updating (keeping username):', { id: userToStore.id, username });
+      } else {
+        const baseUsername = (userToStore.username || userToStore.email.split('@')[0] || '').toLowerCase();
+        username = await generateUniqueUsername(baseUsername, userToStore.id);
+        console.log('📤 Creating new profile:', { id: userToStore.id, username });
+      }
+
       const displayName = userToStore.name || userToStore.username || userToStore.email;
 
-      console.log('📤 Upserting user to Supabase:', {
-        id: userToStore.id,
-        email: userToStore.email,
-        username,
-        displayName,
-        shareCookbookWithFriends: !!userToStore.shareCookbookWithFriends,
-      });
-
-      const upsertData: Record<string, any> = {
+      const upsertData: Record<string, unknown> = {
         id: userToStore.id,
         email: userToStore.email,
         username,
@@ -96,7 +136,21 @@ const result = createContextHook(() => {
         .upsert(upsertData, { onConflict: 'id' });
 
       if (error) {
-        console.error('❌ Supabase upsertUserProfile error:', error.message || error.code);
+        if (error.message?.includes('user_profiles_username_unique_idx') || error.code === '23505') {
+          console.warn('⚠️ Username conflict during upsert, retrying with unique suffix...');
+          const fallbackUsername = `${username}_${userToStore.id.replace(/-/g, '').substring(0, 8)}`;
+          upsertData.username = fallbackUsername;
+          const { error: retryError } = await supabase
+            .from('user_profiles')
+            .upsert(upsertData, { onConflict: 'id' });
+          if (retryError) {
+            console.error('❌ Supabase upsert retry failed:', retryError.message || retryError.code);
+          } else {
+            console.log('✅ Supabase user_profiles upserted with fallback username:', fallbackUsername);
+          }
+        } else {
+          console.error('❌ Supabase upsertUserProfile error:', error.message || error.code);
+        }
       } else {
         console.log('✅ Supabase user_profiles upserted:', { id: userToStore.id, username });
       }
@@ -117,6 +171,8 @@ const result = createContextHook(() => {
       }
     } catch (error) {
       console.error('❌ Failed to upsert user to Supabase:', error);
+    } finally {
+      isUpsertingRef.current = false;
     }
   }, []);
 
@@ -124,21 +180,47 @@ const result = createContextHook(() => {
     try {
       setIsLoading(true);
       const storedUser = await AsyncStorage.getItem(USER_STORAGE_KEY);
-      console.log('Loading user from storage:', storedUser);
+      console.log('Loading user from storage:', storedUser ? 'found' : 'none');
       if (storedUser) {
         let parsedUser: User;
         try {
           parsedUser = JSON.parse(storedUser) as User;
         } catch (parseError) {
           console.error('❌ Failed to parse user data, clearing corrupted data:', parseError);
-          console.error('❌ Corrupted value:', storedUser.substring(0, 200));
           await AsyncStorage.removeItem(USER_STORAGE_KEY);
           return;
         }
-        console.log('Parsed user:', parsedUser);
-        setUser(parsedUser);
 
-        await upsertUserProfileToSupabase(parsedUser);
+        if (isSupabaseEnabled) {
+          try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const session = sessionData?.session;
+
+            if (session?.user) {
+              const confirmedAt = session.user.email_confirmed_at ?? null;
+              console.log('🔐 Hydration: session found, email_confirmed_at:', confirmedAt);
+
+              if (!confirmedAt) {
+                console.warn('🔐 Hydration: email NOT verified, clearing stored user');
+                await supabase.auth.signOut();
+                await AsyncStorage.removeItem(USER_STORAGE_KEY);
+                setUser(null);
+                return;
+              }
+
+              setUser(parsedUser);
+              await upsertUserProfileToSupabase(parsedUser);
+            } else {
+              console.log('🔐 Hydration: no active Supabase session, using stored user (offline/session expired)');
+              setUser(parsedUser);
+            }
+          } catch (sessionError) {
+            console.warn('⚠️ Could not check session during hydration, using stored user:', sessionError);
+            setUser(parsedUser);
+          }
+        } else {
+          setUser(parsedUser);
+        }
       } else {
         console.log('No user found in storage');
       }
@@ -203,30 +285,36 @@ const result = createContextHook(() => {
         }
 
         const safeEmail = data.user.email ?? email;
-        const username = safeEmail.split('@')[0].toLowerCase();
+        const baseUsername = safeEmail.split('@')[0].toLowerCase();
 
         let savedShareCookbook = false;
         let savedTtsVoiceId: string | null = null;
         let savedVoicePreference: VoicePreference = 'female';
+        let existingUsername: string | null = null;
         try {
           const { data: profileData } = await supabase
             .from('user_profiles')
             .select('*')
             .eq('id', data.user.id)
             .maybeSingle();
-          if (profileData?.share_cookbook_with_friends != null) {
-            savedShareCookbook = !!profileData.share_cookbook_with_friends;
+          if (profileData) {
+            existingUsername = profileData.username;
+            if (profileData.share_cookbook_with_friends != null) {
+              savedShareCookbook = !!profileData.share_cookbook_with_friends;
+            }
+            if (profileData.tts_voice_id) {
+              savedTtsVoiceId = profileData.tts_voice_id;
+            }
+            if (profileData.voice_preference === 'male' || profileData.voice_preference === 'female') {
+              savedVoicePreference = profileData.voice_preference;
+            }
           }
-          if (profileData?.tts_voice_id) {
-            savedTtsVoiceId = profileData.tts_voice_id;
-          }
-          if (profileData?.voice_preference === 'male' || profileData?.voice_preference === 'female') {
-            savedVoicePreference = profileData.voice_preference;
-          }
-          console.log('🔐 Fetched profile from Supabase:', { savedShareCookbook, savedVoicePreference });
+          console.log('🔐 Fetched profile from Supabase:', { existingUsername, savedShareCookbook, savedVoicePreference });
         } catch {
           console.warn('⚠️ Could not fetch profile during login, using defaults');
         }
+
+        const username = existingUsername || await generateUniqueUsername(baseUsername, data.user.id);
 
         const newUser: User = {
           id: data.user.id,
@@ -306,6 +394,7 @@ const result = createContextHook(() => {
         });
 
         if (supaUser && !session) {
+          console.log('🧾 Email verification required. NOT storing user locally yet.');
           return { ok: true, reason: 'VERIFY_EMAIL_REQUIRED' };
         }
 
@@ -313,8 +402,17 @@ const result = createContextHook(() => {
           return { ok: false, reason: 'SIGNUP_FAILED' };
         }
 
+        const confirmedAt = supaUser.email_confirmed_at ?? null;
+        if (!confirmedAt) {
+          console.log('🧾 User created with session but email not confirmed. Signing out.');
+          await supabase.auth.signOut();
+          return { ok: true, reason: 'VERIFY_EMAIL_REQUIRED' };
+        }
+
         const safeEmail = supaUser.email ?? email;
-        const username = safeEmail.split('@')[0].toLowerCase();
+        const baseUsername = safeEmail.split('@')[0].toLowerCase();
+        const username = await generateUniqueUsername(baseUsername, supaUser.id);
+
         const newUser: User = {
           id: supaUser.id,
           email: safeEmail,
@@ -324,7 +422,7 @@ const result = createContextHook(() => {
           shareCookbookWithFriends: false,
         };
 
-        console.log('Signing up user (session present):', newUser);
+        console.log('Signing up user (session present, verified):', newUser);
         await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
         setUser(newUser);
 
@@ -366,6 +464,7 @@ const result = createContextHook(() => {
       }
       await AsyncStorage.removeItem(USER_STORAGE_KEY);
       setUser(null);
+      lastUpsertIdRef.current = null;
       router.replace('../login');
     } catch (error) {
       console.error('Logout failed:', error);

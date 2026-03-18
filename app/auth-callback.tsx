@@ -56,7 +56,7 @@ export default function AuthCallbackScreen() {
     if (didRun.current) return;
     didRun.current = true;
 
-    console.log('✅ Auth callback opened with params:', parsed);
+    console.log('✅ Auth callback opened with params:', JSON.stringify(parsed));
 
     if (parsed.error) {
       console.error('❌ Auth callback error from params:', parsed.error, parsed.errorDescription);
@@ -75,74 +75,72 @@ export default function AuthCallbackScreen() {
       try {
         if (parsed.tokenHash && parsed.type) {
           console.log('🔑 Verifying OTP with token_hash...', { token_hash: parsed.tokenHash.substring(0, 8) + '...', type: parsed.type });
+          const otpType = parsed.type as 'signup' | 'email' | 'recovery';
           const { data: otpData, error: otpError } = await supabase.auth.verifyOtp({
             token_hash: parsed.tokenHash,
-            type: parsed.type as 'signup' | 'email',
+            type: otpType,
           });
           if (otpError) {
             console.error('❌ verifyOtp failed:', otpError.message);
             if (otpError.message?.toLowerCase().includes('expired')) {
-              setErrorMessage('This verification link has expired. Please request a new one.');
+              setErrorMessage('This verification link has expired. Please request a new one from the login screen.');
               setStatus('error');
               return;
             }
-          } else {
-            console.log('✅ OTP verified successfully, user:', otpData?.user?.id);
-            if (otpData?.session) {
-              await supabase.auth.signOut();
-            }
-            setStatus('verified');
+            setErrorMessage(otpError.message || 'Verification failed. Please try again.');
+            setStatus('error');
             return;
           }
+
+          console.log('✅ OTP verified successfully, user:', otpData?.user?.id);
+          console.log('✅ email_confirmed_at:', otpData?.user?.email_confirmed_at);
+          await supabase.auth.signOut();
+          setStatus('verified');
+          return;
         }
 
         if (parsed.accessToken && parsed.refreshToken) {
           console.log('🔑 Setting session from access_token + refresh_token...');
-          const { error: sessionError } = await supabase.auth.setSession({
+          const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
             access_token: parsed.accessToken,
             refresh_token: parsed.refreshToken,
           });
           if (sessionError) {
             console.error('❌ setSession failed:', sessionError.message);
-          } else {
-            console.log('✅ Session set from tokens');
-            await supabase.auth.signOut();
-            setStatus('verified');
+            setErrorMessage(sessionError.message || 'Could not complete verification.');
+            setStatus('error');
             return;
           }
+
+          console.log('✅ Session set, email_confirmed_at:', sessionData?.user?.email_confirmed_at);
+          await supabase.auth.signOut();
+          setStatus('verified');
+          return;
         }
 
         if (parsed.code) {
           console.log('🔗 Found code param, exchanging for session...');
-          const { error: codeError } = await supabase.auth.exchangeCodeForSession(parsed.code);
+          const { data: codeData, error: codeError } = await supabase.auth.exchangeCodeForSession(parsed.code);
           if (codeError) {
             console.error('❌ Code exchange failed:', codeError.message);
-          } else {
-            console.log('✅ Code exchanged for session successfully');
-            await supabase.auth.signOut();
-            setStatus('verified');
+            setErrorMessage(codeError.message || 'Could not complete verification.');
+            setStatus('error');
             return;
           }
-        }
 
-        const { data: userData } = await supabase.auth.getUser();
-        console.log('🔍 User after callback:', {
-          userId: userData?.user?.id,
-          email: userData?.user?.email,
-          email_confirmed_at: userData?.user?.email_confirmed_at,
-        });
-
-        if (userData?.user?.email_confirmed_at) {
-          console.log('✅ Email verified successfully!');
+          console.log('✅ Code exchanged, email_confirmed_at:', codeData?.user?.email_confirmed_at);
           await supabase.auth.signOut();
           setStatus('verified');
-        } else {
-          console.log('⚠️ No confirmed_at found, treating as verified (Supabase may have confirmed server-side)');
-          setStatus('verified');
+          return;
         }
+
+        console.warn('⚠️ Auth callback opened without token_hash, access_token, or code params');
+        setErrorMessage('No verification data found. Please use the link from your email.');
+        setStatus('error');
       } catch (error) {
         console.error('❌ Auth callback processing error:', error);
-        setStatus('verified');
+        setErrorMessage('Something went wrong during verification. Please try logging in — your email may already be verified.');
+        setStatus('error');
       }
     }
 
@@ -179,7 +177,6 @@ export default function AuthCallbackScreen() {
                 <Text style={styles.subtitle} testID="authCallbackBody">
                   Your email has been verified successfully. You can now sign in to your account.
                 </Text>
-                <Text style={styles.hint}>Verified ✅</Text>
                 <View style={styles.actions}>
                   <Button
                     title="Go to Login"
@@ -199,7 +196,7 @@ export default function AuthCallbackScreen() {
                   {errorMessage || 'Something went wrong during verification.'}
                 </Text>
                 <Text style={styles.tipText}>
-                  Your email may still have been verified. Try logging in — if it works, you're all set.
+                  Try logging in — if your email was already verified, it will work. Otherwise, use "Resend verification email" on the login screen.
                 </Text>
                 <View style={styles.actions}>
                   <Button
@@ -259,12 +256,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: Colors.textSecondary,
-  },
-  hint: {
-    marginTop: 10,
-    fontSize: 13,
-    fontWeight: '700' as const,
-    color: '#16A34A',
   },
   tipText: {
     marginTop: 12,

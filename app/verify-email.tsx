@@ -5,7 +5,7 @@ import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
 import Button from '@/components/Button';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
-import { MailCheck, CheckCircle } from 'lucide-react-native';
+import { MailCheck, Info } from 'lucide-react-native';
 
 type VerifyEmailParams = {
   email?: string | string[];
@@ -22,7 +22,6 @@ export default function VerifyEmailScreen() {
   const params = useLocalSearchParams<VerifyEmailParams>();
   const email = useMemo(() => normalizeEmailParam(params.email), [params.email]);
   const [isResending, setIsResending] = useState<boolean>(false);
-  const [isChecking, setIsChecking] = useState<boolean>(false);
 
   const handleResend = useCallback(async () => {
     const trimmed = email.trim();
@@ -67,43 +66,6 @@ export default function VerifyEmailScreen() {
     }
   }, [email]);
 
-  const handleCheckVerification = useCallback(async () => {
-    const trimmed = email.trim();
-    if (!trimmed || !isSupabaseEnabled) {
-      Alert.alert('Info', 'Please return to the login screen and log in with your credentials.', [{ text: 'OK', onPress: () => router.replace('/login') }]);
-      return;
-    }
-
-    setIsChecking(true);
-    try {
-      const { data, error } = await supabase.auth.getUser();
-      console.log('🔍 Check verification result:', { data: data?.user?.email_confirmed_at, error: error?.message });
-
-      if (data?.user?.email_confirmed_at) {
-        await supabase.auth.signOut();
-        Alert.alert('Verified!', 'Your email has been verified. Please log in.', [
-          { text: 'OK', onPress: () => router.replace('/login') },
-        ]);
-      } else {
-        Alert.alert(
-          'Not verified yet',
-          'Your email is not verified yet. Check your inbox and click the verification link, then try again. You can also go back to the login screen and log in directly.',
-          [
-            { text: 'Go to Login', onPress: () => router.replace('/login') },
-            { text: 'Stay Here' },
-          ]
-        );
-      }
-    } catch (e) {
-      console.error('🔍 Check verification error:', e);
-      Alert.alert('Info', 'Could not check verification status. Please go to the login screen and try logging in.', [
-        { text: 'OK', onPress: () => router.replace('/login') },
-      ]);
-    } finally {
-      setIsChecking(false);
-    }
-  }, [email]);
-
   return (
     <GradientBackground>
       <KeyboardAvoidingView
@@ -121,13 +83,13 @@ export default function VerifyEmailScreen() {
             <Text style={styles.title}>Verify your email</Text>
             <Text style={styles.subtitle} testID="verifyEmailBody">
               We sent a verification link to: {email || 'your email'}.
-              {'\n\n'}Open your email and tap the link to verify.
+              {'\n\n'}Open your email and tap the link to verify. The link will open the app and confirm your email automatically.
             </Text>
 
             <View style={styles.tipBox}>
-              <CheckCircle size={18} color={Colors.primary} />
+              <Info size={18} color={Colors.primary} />
               <Text style={styles.tipText}>
-                If the link opens Safari and shows an error page, your email may still be verified. Return to the app and tap "I clicked the link" below, or go back to the login screen.
+                After tapping the verification link, return here and go to the login screen to sign in. You must verify your email before you can log in.
               </Text>
             </View>
 
@@ -142,16 +104,7 @@ export default function VerifyEmailScreen() {
               />
 
               <Button
-                title={isChecking ? 'Checking…' : 'I clicked the link'}
-                onPress={handleCheckVerification}
-                isLoading={isChecking}
-                disabled={isChecking}
-                variant="primary"
-                testID="alreadyVerifiedButton"
-              />
-
-              <Button
-                title="Back to Login"
+                title="Go to Login"
                 onPress={() => router.replace('/login')}
                 variant="primary"
                 testID="backToLoginButton"
@@ -191,7 +144,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: '800' as const,
     color: Colors.text,
     marginBottom: 8,
   },

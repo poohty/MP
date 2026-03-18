@@ -1,5 +1,5 @@
 import createContextHook from '@nkzw/create-context-hook';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { UserProfile, FriendLink } from '@/types';
 import { useAuth } from './auth-store';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
@@ -11,6 +11,7 @@ const [UserContext, useUser] = createContextHook(() => {
   const [friendLinks, setFriendLinks] = useState<FriendLink[]>([]);
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const loadingUserIdRef = useRef<string | null>(null);
 
   const loadUserProfileFromSupabase = useCallback(async (userId: string): Promise<UserProfile | null> => {
     if (!isSupabaseEnabled) {
@@ -99,8 +100,15 @@ const [UserContext, useUser] = createContextHook(() => {
       setCurrentUserProfile(null);
       setFriendLinks([]);
       setIsLoading(false);
+      loadingUserIdRef.current = null;
       return;
     }
+
+    if (loadingUserIdRef.current === authUser.id) {
+      console.log('⏳ user-store: already loading profile for', authUser.id);
+      return;
+    }
+    loadingUserIdRef.current = authUser.id;
 
     if (!isSupabaseEnabled) {
       const fallbackProfile: UserProfile = {
@@ -153,14 +161,29 @@ const [UserContext, useUser] = createContextHook(() => {
 
       if (!data) {
         const fallbackEmail = authUser.email;
-        const fallbackUsername = (authUser.username || fallbackEmail.split('@')[0]).toLowerCase();
+        const baseUsername = (authUser.username || fallbackEmail.split('@')[0]).toLowerCase();
         const fallbackDisplayName = authUser.name || authUser.username || fallbackEmail;
         const fallbackShareCookbook = !!authUser.shareCookbookWithFriends;
+
+        let finalUsername = baseUsername;
+        try {
+          const { data: usernameCheck } = await supabase
+            .from('user_profiles')
+            .select('id')
+            .eq('username', baseUsername)
+            .maybeSingle();
+          if (usernameCheck && usernameCheck.id !== authUser.id) {
+            finalUsername = `${baseUsername}_${authUser.id.replace(/-/g, '').substring(0, 6)}`;
+            console.log('⚠️ user-store: username taken, using fallback:', finalUsername);
+          }
+        } catch {
+          console.warn('⚠️ user-store: could not check username uniqueness');
+        }
 
         const fallbackProfileRow = {
           id: authUser.id,
           email: fallbackEmail,
-          username: fallbackUsername,
+          username: finalUsername,
           display_name: fallbackDisplayName,
           share_cookbook_with_friends: fallbackShareCookbook,
           tts_voice_id: authUser.ttsVoiceId || 'Cz0K1kOv9tD8l0b5Qu53',
@@ -172,13 +195,26 @@ const [UserContext, useUser] = createContextHook(() => {
           .upsert(fallbackProfileRow, { onConflict: 'id' });
 
         if (upsertError) {
-          console.error('❌ Supabase upsert fallback profile error:', upsertError.message || upsertError.code);
+          if (upsertError.message?.includes('user_profiles_username_unique_idx') || upsertError.code === '23505') {
+            console.warn('⚠️ user-store: username conflict on fallback upsert, retrying with longer suffix');
+            fallbackProfileRow.username = `${baseUsername}_${authUser.id.replace(/-/g, '').substring(0, 10)}`;
+            const { error: retryErr } = await supabase
+              .from('user_profiles')
+              .upsert(fallbackProfileRow, { onConflict: 'id' });
+            if (retryErr) {
+              console.error('❌ Supabase fallback upsert retry failed:', retryErr.message || retryErr.code);
+            } else {
+              finalUsername = fallbackProfileRow.username;
+            }
+          } else {
+            console.error('❌ Supabase upsert fallback profile error:', upsertError.message || upsertError.code);
+          }
         }
 
         const fallbackProfile: UserProfile = {
           id: authUser.id,
           email: fallbackEmail,
-          username: fallbackUsername,
+          username: finalUsername,
           displayName: fallbackDisplayName,
           shareCookbookWithFriends: fallbackShareCookbook,
           ttsVoiceId: authUser.ttsVoiceId ?? null,
@@ -207,7 +243,7 @@ const [UserContext, useUser] = createContextHook(() => {
       }
 
       await loadFriendLinks(data.id);
-    } catch (error) {
+    } catch {
       const fallbackProfile: UserProfile = {
         id: authUser.id,
         email: authUser.email,
@@ -222,10 +258,10 @@ const [UserContext, useUser] = createContextHook(() => {
     } finally {
       setIsLoading(false);
     }
-  }, [authUser, loadFriendLinks]);
+  }, [authUser, loadFriendLinks, updateAuthProfile]);
 
   useEffect(() => {
-    loadCurrentUser();
+    void loadCurrentUser();
   }, [loadCurrentUser]);
 
   const updateShareCookbook = useCallback(async (shareCookbook: boolean) => {
@@ -492,7 +528,7 @@ const [UserContext, useUser] = createContextHook(() => {
     );
   }, [currentUserProfile, friendLinks]);
 
-  return {
+  return useMemo(() => ({
     currentUserProfile,
     isLoading,
     updateShareCookbook,
@@ -509,7 +545,24 @@ const [UserContext, useUser] = createContextHook(() => {
     getFriendProfiles,
     isFriend,
     hasPendingRequest,
-  };
+  }), [
+    currentUserProfile,
+    isLoading,
+    updateShareCookbook,
+    searchUsersByUsername,
+    searchResults,
+    sendFriendRequest,
+    acceptFriendRequest,
+    rejectFriendRequest,
+    removeFriend,
+    getUserProfile,
+    getMyFriendLinks,
+    getIncomingRequests,
+    getOutgoingRequests,
+    getFriendProfiles,
+    isFriend,
+    hasPendingRequest,
+  ]);
 });
 
 export { UserContext, useUser };
