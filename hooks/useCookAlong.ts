@@ -11,8 +11,11 @@ const TTS_RETRY_DELAY_MS = 600;
 
 type VoiceCommand = 'STEP_COMPLETE' | 'REPEAT_STEP' | 'NONE';
 
+type CookAlongPhase = 'idle' | 'starting' | 'active' | 'failed';
+
 interface CookAlongState {
   cookAlongActive: boolean;
+  phase: CookAlongPhase;
   currentStepIndex: number;
   isListening: boolean;
   isSpeaking: boolean;
@@ -267,6 +270,7 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
   onAllStepsCompleteRef.current = onAllStepsComplete;
   const [state, setState] = useState<CookAlongState>({
     cookAlongActive: false,
+    phase: 'idle',
     currentStepIndex: 0,
     isListening: false,
     isSpeaking: false,
@@ -301,6 +305,7 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
     setState((prev) => ({
       ...prev,
       cookAlongActive: false,
+      phase: 'idle',
       isListening: false,
       isSpeaking: false,
     }));
@@ -349,7 +354,7 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
     }
   }, []);
 
-  const runCookAlongLoop = useCallback(async (startIndex: number, preloadedIntroUri?: string, preloadedStep1Uri?: string) => {
+  const runCookAlongLoop = useCallback(async (startIndex: number, preloadedIntroUri?: string, step1Promise?: Promise<string | null>) => {
     if (loopRunningRef.current) return;
     loopRunningRef.current = true;
 
@@ -359,30 +364,29 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
 
     try {
       const loopStartTime = Date.now();
+
       let introUri = preloadedIntroUri;
-      let step1Uri = preloadedStep1Uri;
-
-      if (!introUri || !step1Uri) {
-        console.log('[CookAlong] Loop: fetching missing audio (intro:', !introUri, 'step1:', !step1Uri, ')');
-        const fetches: Promise<string>[] = [];
-        const fetchKeys: string[] = [];
-        if (!introUri) { fetches.push(fetchTTSAudio(INTRO_TEXT, resolvedVoiceId, 'intro-retry')); fetchKeys.push('intro'); }
-        if (!step1Uri) { fetches.push(fetchTTSAudio(instructions[stepIdx] || 'No instruction available.', resolvedVoiceId, 'step1-retry')); fetchKeys.push('step1'); }
-        const results = await Promise.all(fetches);
-        fetchKeys.forEach((key, i) => {
-          if (key === 'intro') introUri = results[i];
-          if (key === 'step1') step1Uri = results[i];
-        });
+      if (!introUri) {
+        console.log('[CookAlong] Loop: fetching intro audio');
+        try {
+          introUri = await fetchTTSAudio(INTRO_TEXT, resolvedVoiceId, 'intro-loop');
+        } catch (e) {
+          console.log('[CookAlong] Loop: intro fetch failed:', e);
+        }
       }
-
-      console.log('[CookAlong] Audio ready, time since loop start:', Date.now() - loopStartTime, 'ms');
 
       if (!activeRef.current) return;
 
-      setState((prev) => ({ ...prev, isSpeaking: true }));
+      if (!introUri) {
+        console.log('[CookAlong] No intro audio available, failing startup');
+        setState((prev) => ({ ...prev, cookAlongActive: false, phase: 'failed' }));
+        return;
+      }
+
+      setState((prev) => ({ ...prev, cookAlongActive: true, phase: 'active', isSpeaking: true }));
       console.log('[CookAlong] Starting intro playback at', Date.now() - loopStartTime, 'ms');
       try {
-        await playAudioUri(introUri!, soundRef);
+        await playAudioUri(introUri, soundRef);
       } catch (e) {
         console.log('[CookAlong] Intro speak error:', e);
       }
@@ -390,21 +394,45 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
 
       if (!activeRef.current) return;
 
-      console.log('[CookAlong] Intro finished, starting step 1 after brief pause');
+      console.log('[CookAlong] Intro finished, resolving step 1 audio');
 
-      await new Promise<void>((resolve) => setTimeout(resolve, 500));
+      let step1Uri: string | null = null;
+      if (step1Promise) {
+        try {
+          step1Uri = await step1Promise;
+        } catch (e) {
+          console.log('[CookAlong] Step1 promise rejected:', e);
+        }
+      }
+
+      if (!step1Uri) {
+        console.log('[CookAlong] Step1 not ready from promise, fetching now');
+        try {
+          step1Uri = await fetchTTSAudio(instructions[stepIdx] || 'No instruction available.', resolvedVoiceId, 'step1-late');
+        } catch (e) {
+          console.log('[CookAlong] Step1 late fetch also failed:', e);
+        }
+      }
 
       if (!activeRef.current) return;
 
-      setState((prev) => ({ ...prev, isSpeaking: true }));
-      try {
-        await playAudioUri(step1Uri!, soundRef);
-      } catch (e) {
-        console.log('[CookAlong] Step 1 speak error:', e);
-      }
-      setState((prev) => ({ ...prev, isSpeaking: false }));
+      await new Promise<void>((resolve) => setTimeout(resolve, 300));
 
-      console.log('[CookAlong] Step 1 playback done, total from loop start:', Date.now() - loopStartTime, 'ms');
+      if (!activeRef.current) return;
+
+      if (step1Uri) {
+        setState((prev) => ({ ...prev, isSpeaking: true }));
+        try {
+          await playAudioUri(step1Uri, soundRef);
+        } catch (e) {
+          console.log('[CookAlong] Step 1 speak error:', e);
+        }
+        setState((prev) => ({ ...prev, isSpeaking: false }));
+        console.log('[CookAlong] Step 1 playback done, total from loop start:', Date.now() - loopStartTime, 'ms');
+      } else {
+        console.log('[CookAlong] Step 1 audio unavailable, speaking fallback');
+        await safeSpeakText(`Step one. ${instructions[stepIdx] || 'No instruction available.'}`);
+      }
 
       if (!activeRef.current) return;
 
@@ -438,6 +466,7 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
             setState((prev) => ({
               ...prev,
               cookAlongActive: false,
+              phase: 'idle',
               isListening: false,
               isSpeaking: false,
             }));
@@ -489,7 +518,8 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
 
     const step1Text = instructions[0] || 'No instruction available.';
 
-    console.log('[CookAlong] Starting startup: health check + permissions + TTS fetch');
+    setState((prev) => ({ ...prev, phase: 'starting' }));
+    console.log('[CookAlong] Phase: starting — health check + permissions + intro TTS');
 
     const healthUrl = `${apiBase}/api/voice/health`;
     console.log('[CookAlong] Health check URL:', healthUrl);
@@ -541,21 +571,21 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
         return uri;
       })
       .catch((e) => {
-        console.log('[CookAlong] Step1 TTS failed after retries:', e);
+        console.log('[CookAlong] Step1 TTS failed (will retry later):', e);
         return null;
       });
 
-    const [healthOk, permGranted, introUri, step1Uri] = await Promise.all([
+    const [healthOk, permGranted, introUri] = await Promise.all([
       healthPromise,
       permPromise,
       introTTSPromise,
-      step1TTSPromise,
     ]);
 
-    console.log('[CookAlong] All parallel tasks done in', Date.now() - tapTime, 'ms');
-    console.log('[CookAlong] Results — health:', healthOk, 'perm:', permGranted, 'intro:', !!introUri, 'step1:', !!step1Uri);
+    console.log('[CookAlong] Startup gates done in', Date.now() - tapTime, 'ms');
+    console.log('[CookAlong] Results — health:', healthOk, 'perm:', permGranted, 'intro:', !!introUri);
 
     if (!healthOk) {
+      setState((prev) => ({ ...prev, phase: 'idle' }));
       Alert.alert(
         'Voice feature unavailable',
         `Voice server not responding.\nBackend: ${apiBase}\nPlease try again later.`
@@ -564,26 +594,29 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
     }
 
     if (!permGranted) {
+      setState((prev) => ({ ...prev, phase: 'idle' }));
       Alert.alert('Permission Required', 'Microphone access is needed for hands-free cooking.');
       return;
     }
 
-    if (!introUri && !step1Uri) {
+    if (!introUri) {
+      setState((prev) => ({ ...prev, phase: 'failed' }));
       Alert.alert('Voice feature unavailable', 'Could not generate speech audio. Please try again.');
       return;
     }
 
     activeRef.current = true;
     setState({
-      cookAlongActive: true,
+      cookAlongActive: false,
+      phase: 'starting',
       currentStepIndex: 0,
       isListening: false,
       isSpeaking: false,
       lastTranscript: '',
     });
 
-    console.log('[CookAlong] Launching loop with preloaded audio, total setup:', Date.now() - tapTime, 'ms');
-    void runCookAlongLoop(0, introUri ?? undefined, step1Uri ?? undefined);
+    console.log('[CookAlong] Launching loop with intro ready, step1 fetching in background. Total setup:', Date.now() - tapTime, 'ms');
+    void runCookAlongLoop(0, introUri, step1TTSPromise);
   }, [instructions, resolvedVoiceId, runCookAlongLoop]);
 
   const stopCookAlong = useCallback(async () => {

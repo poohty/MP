@@ -683,13 +683,13 @@ export default function RecipeDetailsScreen() {
                         <TouchableOpacity
                           style={[
                             styles.micButton,
-                            cookAlong.cookAlongActive && styles.micButtonActive,
+                            (cookAlong.cookAlongActive || cookAlong.phase === 'starting') && styles.micButtonActive,
                           ]}
-                          onPress={cookAlong.cookAlongActive ? cookAlong.stopCookAlong : cookAlong.startCookAlong}
+                          onPress={(cookAlong.cookAlongActive || cookAlong.phase === 'starting') ? cookAlong.stopCookAlong : cookAlong.startCookAlong}
                           activeOpacity={0.7}
                           testID="cook-along-mic-button"
                         >
-                          {cookAlong.cookAlongActive ? (
+                          {(cookAlong.cookAlongActive || cookAlong.phase === 'starting') ? (
                             <MicOff size={18} color="#FFFFFF" />
                           ) : (
                             <Mic size={18} color={Colors.primary} />
@@ -697,8 +697,14 @@ export default function RecipeDetailsScreen() {
                         </TouchableOpacity>
                       )}
                     </View>
-                    {cookAlong.cookAlongActive && (
+                    {(cookAlong.cookAlongActive || cookAlong.phase === 'starting') && (
                       <View style={styles.cookAlongStatus}>
+                        {cookAlong.phase === 'starting' && !cookAlong.isSpeaking && (
+                          <View style={styles.statusRow}>
+                            <ActivityIndicator size="small" color={Colors.primary} />
+                            <Text style={styles.statusText}>Starting cook-along...</Text>
+                          </View>
+                        )}
                         {cookAlong.isSpeaking && (
                           <View style={styles.statusRow}>
                             <ActivityIndicator size="small" color={Colors.primary} />
@@ -711,12 +717,14 @@ export default function RecipeDetailsScreen() {
                             <Text style={styles.statusText}>Listening...</Text>
                           </View>
                         )}
-                        {!cookAlong.isSpeaking && !cookAlong.isListening && (
+                        {cookAlong.phase === 'active' && !cookAlong.isSpeaking && !cookAlong.isListening && (
                           <Text style={styles.statusText}>Cook-along active - Step {cookAlong.currentStepIndex + 1}</Text>
                         )}
                       </View>
                     )}
-                    <Text style={styles.instructionsSubtitle}>Tap each step to check it off as you cook!</Text>
+                    {!cookAlong.cookAlongActive && cookAlong.phase !== 'starting' && (
+                      <Text style={styles.instructionsSubtitle}>Tap each step to check it off as you cook!</Text>
+                    )}
                     {parsedContent.instructions.map((instruction, index) => {
                       // Clean up instruction text and handle checkboxes
                       const cleanInstruction = instruction.replace(/^☐\s*/, '').replace(/^\d+\.\s*/, '');
