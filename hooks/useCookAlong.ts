@@ -6,105 +6,51 @@ import { resolveVoiceId, type VoicePreference } from '@/constants/voice';
 
 const RECORD_DURATION_MS = 3000;
 const INTRO_TEXT = "Let's start with step one.";
-const TTS_MAX_RETRIES = 1;
-const TTS_RETRY_DELAY_MS = 400;
-const TTS_SHORT_TEXT_LIMIT = 80;
-const TTS_REQUEST_STAGGER_MS = 350;
+const TTS_MAX_RETRIES = 2;
+const TTS_RETRY_DELAY_MS = 500;
+const TTS_SINGLE_SHOT_LIMIT = 250;
+const TTS_REQUEST_STAGGER_MS = 400;
 
 const ttsAudioCache = new Map<string, string>();
 
 function normalizeStepText(text: string): string {
-  return text
+  let result = text
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-function safeTruncate(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text;
-  let cutPoint = maxLen;
-  if (isInsideParentheses(text, cutPoint)) {
-    let depth = 0;
-    for (let i = cutPoint - 1; i >= 0; i--) {
-      if (text[i] === ')') depth++;
-      else if (text[i] === '(') {
-        if (depth === 0) {
-          cutPoint = i;
-          break;
-        }
-        depth--;
-      }
-    }
-  }
-  let result = text.substring(0, cutPoint).replace(/\s+$/, '');
-  result = result.replace(/\s+\S*$/, '');
-  if (result.length < 15 && text.length > 15) {
-    result = text.substring(0, maxLen).replace(/\s+\S*$/, '');
-  }
+  result = result.replace(/\(([^)]+)\)/g, ', $1,');
+  result = result.replace(/:\s*/g, ', ');
+  result = result.replace(/\s*,\s*,/g, ',');
+  result = result.replace(/,\s*\./g, '.');
+  result = result.replace(/\s+/g, ' ').trim();
   return result;
 }
 
-function shortenStepText(text: string): string {
-  let shortened = normalizeStepText(text);
-  if (shortened.length > TTS_SHORT_TEXT_LIMIT) {
-    const sentenceEnd = shortened.indexOf('. ', 40);
-    if (sentenceEnd > 0 && sentenceEnd < shortened.length - 5 && !isInsideParentheses(shortened, sentenceEnd)) {
-      shortened = shortened.substring(0, sentenceEnd + 1);
+function safeSplitLongText(text: string): string[] {
+  const sentenceEnds: number[] = [];
+  const regex = /[.!?]\s+/g;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(text)) !== null) {
+    sentenceEnds.push(m.index + 1);
+  }
+  if (sentenceEnds.length >= 1) {
+    const mid = sentenceEnds[Math.floor(sentenceEnds.length / 2)];
+    const p1 = text.substring(0, mid).trim();
+    const p2 = text.substring(mid).trim();
+    if (p1.length > 10 && p2.length > 10) {
+      return [p1, p2];
     }
   }
-  if (shortened.length > TTS_SHORT_TEXT_LIMIT) {
-    let commaIdx = shortened.lastIndexOf(',', TTS_SHORT_TEXT_LIMIT);
-    while (commaIdx > 30 && isInsideParentheses(shortened, commaIdx)) {
-      commaIdx = shortened.lastIndexOf(',', commaIdx - 1);
-    }
-    if (commaIdx > 30) {
-      shortened = shortened.substring(0, commaIdx) + '.';
-    } else {
-      shortened = safeTruncate(shortened, TTS_SHORT_TEXT_LIMIT) + '.';
-    }
-  }
-  return shortened;
-}
-
-function isInsideParentheses(text: string, index: number): boolean {
-  let depth = 0;
-  for (let i = 0; i < index; i++) {
-    if (text[i] === '(') depth++;
-    else if (text[i] === ')') depth = Math.max(0, depth - 1);
-  }
-  return depth > 0;
-}
-
-function splitStepText(text: string): string[] {
-  const normalized = normalizeStepText(text);
-  const splitPoints: number[] = [];
-  const sentenceEndRegex = /[.!?]\s+/g;
-  let match: RegExpExecArray | null;
-  while ((match = sentenceEndRegex.exec(normalized)) !== null) {
-    const idx = match.index + 1;
-    if (!isInsideParentheses(normalized, idx)) {
-      splitPoints.push(idx);
-    }
-  }
-
-  if (splitPoints.length >= 1) {
-    const mid = splitPoints[Math.floor(splitPoints.length / 2)];
-    const part1 = normalized.substring(0, mid).trim();
-    const part2 = normalized.substring(mid).trim();
-    if (part1.length > 0 && part2.length > 0) {
-      console.log(`[CookAlong] splitStepText: split at ${mid}, part1=${part1.length}, part2=${part2.length}`);
-      return [part1, part2];
-    }
-  }
-
-  const commaIdx = normalized.indexOf(',', Math.floor(normalized.length / 3));
-  if (commaIdx > 0 && commaIdx < normalized.length - 10 && !isInsideParentheses(normalized, commaIdx)) {
+  const commaIdx = text.indexOf(',', Math.floor(text.length / 3));
+  if (commaIdx > 20 && commaIdx < text.length - 20) {
     return [
-      normalized.substring(0, commaIdx + 1).trim(),
-      normalized.substring(commaIdx + 1).trim(),
+      text.substring(0, commaIdx + 1).trim(),
+      text.substring(commaIdx + 1).trim(),
     ];
   }
-  return [normalized];
+  return [text];
 }
+
+
 
 type VoiceCommand = 'STEP_COMPLETE' | 'REPEAT_STEP' | 'NONE';
 
@@ -199,71 +145,77 @@ async function fetchTTSAudio(text: string, voiceId: string, requestId?: string):
   throw new Error('TTS failed after retries. The voice server may be temporarily overloaded.');
 }
 
-async function fetchStepTTSWithFallbackLadder(
+async function fetchStepTTS(
   fullStepText: string,
   voiceId: string,
   stepLabel: string
-): Promise<{ uri: string; variant: string }> {
-  const normalizedFull = normalizeStepText(fullStepText);
-  console.log(`[CookAlong] FallbackLadder[${stepLabel}] original length: ${fullStepText.length}, normalized length: ${normalizedFull.length}`);
-  console.log(`[CookAlong] FallbackLadder[${stepLabel}] normalized text: "${normalizedFull}"`);
-  const shortenedPreview = shortenStepText(normalizedFull);
-  console.log(`[CookAlong] FallbackLadder[${stepLabel}] shortened preview: "${shortenedPreview}" (${shortenedPreview.length} chars)`);
+): Promise<{ uri: string; variant: string; parts?: string[] }> {
+  const normalized = normalizeStepText(fullStepText);
+  console.log(`[CookAlong] StepTTS[${stepLabel}] original: "${fullStepText}" (${fullStepText.length} chars)`);
+  console.log(`[CookAlong] StepTTS[${stepLabel}] normalized: "${normalized}" (${normalized.length} chars)`);
+  console.log(`[CookAlong] StepTTS[${stepLabel}] mode: ${normalized.length <= TTS_SINGLE_SHOT_LIMIT ? 'single' : 'chunked'}`);
 
+  if (normalized.length <= TTS_SINGLE_SHOT_LIMIT) {
+    console.log(`[CookAlong] StepTTS[${stepLabel}] sending full text as single request`);
+    try {
+      const uri = await fetchTTSAudio(normalized, voiceId, `${stepLabel}-full`);
+      console.log(`[CookAlong] StepTTS[${stepLabel}] full text succeeded`);
+      return { uri, variant: 'full' };
+    } catch (e) {
+      console.log(`[CookAlong] StepTTS[${stepLabel}] full text failed, retrying after stagger:`, e);
+    }
+
+    await new Promise<void>(r => setTimeout(r, TTS_REQUEST_STAGGER_MS * 2));
+
+    try {
+      const uri = await fetchTTSAudio(normalized, voiceId, `${stepLabel}-full-retry`);
+      console.log(`[CookAlong] StepTTS[${stepLabel}] full text retry succeeded`);
+      return { uri, variant: 'full' };
+    } catch (e) {
+      console.log(`[CookAlong] StepTTS[${stepLabel}] full text retry also failed:`, e);
+    }
+
+    throw new Error(`TTS failed for ${stepLabel} (single-shot, ${normalized.length} chars)`);
+  }
+
+  console.log(`[CookAlong] StepTTS[${stepLabel}] text is long (${normalized.length} chars), trying full first then chunked`);
   try {
-    const uri = await fetchTTSAudio(normalizedFull, voiceId, `${stepLabel}-full`);
-    console.log(`[CookAlong] FallbackLadder[${stepLabel}] full text succeeded`);
+    const uri = await fetchTTSAudio(normalized, voiceId, `${stepLabel}-full`);
+    console.log(`[CookAlong] StepTTS[${stepLabel}] full long text succeeded`);
     return { uri, variant: 'full' };
   } catch (e) {
-    console.log(`[CookAlong] FallbackLadder[${stepLabel}] full text failed:`, e);
+    console.log(`[CookAlong] StepTTS[${stepLabel}] full long text failed, will try chunks:`, e);
   }
 
   await new Promise<void>(r => setTimeout(r, TTS_REQUEST_STAGGER_MS));
 
-  const shortened = shortenStepText(normalizedFull);
-  if (shortened !== fullStepText && shortened.length < fullStepText.length) {
-    console.log(`[CookAlong] FallbackLadder[${stepLabel}] trying shortened text length: ${shortened.length}`);
-    try {
-      const uri = await fetchTTSAudio(shortened, voiceId, `${stepLabel}-short`);
-      console.log(`[CookAlong] FallbackLadder[${stepLabel}] shortened text succeeded`);
-      return { uri, variant: 'shortened' };
-    } catch (e) {
-      console.log(`[CookAlong] FallbackLadder[${stepLabel}] shortened text failed:`, e);
-    }
-    await new Promise<void>(r => setTimeout(r, TTS_REQUEST_STAGGER_MS));
-  }
-
-  const parts = splitStepText(normalizedFull);
+  const parts = safeSplitLongText(normalized);
   if (parts.length >= 2) {
-    console.log(`[CookAlong] FallbackLadder[${stepLabel}] trying split: part1=${parts[0].length} "${parts[0]}", part2=${parts[1].length} "${parts[1]}"`);
+    console.log(`[CookAlong] StepTTS[${stepLabel}] chunked (${parts.length}): chunk1=${parts[0].length} chars, chunk2=${parts[1].length} chars`);
+    console.log(`[CookAlong] StepTTS[${stepLabel}] chunk 1/${parts.length}: "${parts[0]}"`);
+    console.log(`[CookAlong] StepTTS[${stepLabel}] chunk 2/${parts.length}: "${parts[1]}"`);
     try {
-      const uri1 = await fetchTTSAudio(parts[0], voiceId, `${stepLabel}-split1`);
+      const uri1 = await fetchTTSAudio(parts[0], voiceId, `${stepLabel}-chunk1`);
       await new Promise<void>(r => setTimeout(r, TTS_REQUEST_STAGGER_MS));
-      await fetchTTSAudio(parts[1], voiceId, `${stepLabel}-split2`);
-      console.log(`[CookAlong] FallbackLadder[${stepLabel}] split succeeded`);
-      return { uri: uri1, variant: 'split' };
+      await fetchTTSAudio(parts[1], voiceId, `${stepLabel}-chunk2`);
+      console.log(`[CookAlong] StepTTS[${stepLabel}] both chunks succeeded`);
+      return { uri: uri1, variant: 'chunked', parts };
     } catch (e) {
-      console.log(`[CookAlong] FallbackLadder[${stepLabel}] split failed:`, e);
-    }
-    await new Promise<void>(r => setTimeout(r, TTS_REQUEST_STAGGER_MS));
-  }
-
-  const minimal = normalizedFull.length > 60
-    ? safeTruncate(normalizedFull, 55) + '.'
-    : normalizedFull;
-  console.log(`[CookAlong] FallbackLadder[${stepLabel}] minimal text: "${minimal}"`);
-  if (minimal.length < normalizedFull.length) {
-    console.log(`[CookAlong] FallbackLadder[${stepLabel}] trying minimal text length: ${minimal.length}`);
-    try {
-      const uri = await fetchTTSAudio(minimal, voiceId, `${stepLabel}-minimal`);
-      console.log(`[CookAlong] FallbackLadder[${stepLabel}] minimal text succeeded`);
-      return { uri, variant: 'minimal' };
-    } catch (e) {
-      console.log(`[CookAlong] FallbackLadder[${stepLabel}] minimal text also failed:`, e);
+      console.log(`[CookAlong] StepTTS[${stepLabel}] chunked failed:`, e);
     }
   }
 
-  throw new Error(`All TTS variants failed for ${stepLabel}`);
+  await new Promise<void>(r => setTimeout(r, TTS_REQUEST_STAGGER_MS));
+
+  try {
+    const uri = await fetchTTSAudio(normalized, voiceId, `${stepLabel}-full-last`);
+    console.log(`[CookAlong] StepTTS[${stepLabel}] final full retry succeeded`);
+    return { uri, variant: 'full' };
+  } catch (e) {
+    console.log(`[CookAlong] StepTTS[${stepLabel}] all attempts failed:`, e);
+  }
+
+  throw new Error(`All TTS attempts failed for ${stepLabel}`);
 }
 
 async function playAudioUri(uri: string, soundRef: React.MutableRefObject<Audio.Sound | null>): Promise<void> {
@@ -525,39 +477,38 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
     }
   }, []);
 
-  const speakStepWithLadder = useCallback(async (stepText: string, stepLabel: string): Promise<boolean> => {
+  const speakStepFull = useCallback(async (stepText: string, stepLabel: string): Promise<boolean> => {
     if (!activeRef.current) return false;
     setState((prev) => ({ ...prev, isSpeaking: true }));
     try {
-      const result = await fetchStepTTSWithFallbackLadder(stepText, resolvedVoiceId, stepLabel);
+      const result = await fetchStepTTS(stepText, resolvedVoiceId, stepLabel);
       if (!activeRef.current) return false;
 
-      if (result.variant === 'split') {
-        const normalizedStep = normalizeStepText(stepText);
-        const parts = splitStepText(normalizedStep);
-        console.log(`[CookAlong] speakStepWithLadder[${stepLabel}] playing split: chunk 1 of ${parts.length} (${parts[0]?.length} chars), chunk 2 of ${parts.length} (${parts[1]?.length} chars)`);
-        const cacheKey1 = `${resolvedVoiceId}:${parts[0]}`;
-        const cacheKey2 = `${resolvedVoiceId}:${parts[1]}`;
+      if (result.variant === 'chunked' && result.parts && result.parts.length >= 2) {
+        console.log(`[CookAlong] speakStepFull[${stepLabel}] playing chunked: ${result.parts.length} parts`);
+        const cacheKey1 = `${resolvedVoiceId}:${result.parts[0]}`;
+        const cacheKey2 = `${resolvedVoiceId}:${result.parts[1]}`;
         const uri1 = ttsAudioCache.get(cacheKey1);
         const uri2 = ttsAudioCache.get(cacheKey2);
         if (uri1) {
+          console.log(`[CookAlong] speakStepFull[${stepLabel}] playing chunk 1/${result.parts.length}`);
           await playAudioUri(uri1, soundRef);
         }
         if (!activeRef.current) return false;
         if (uri2) {
+          console.log(`[CookAlong] speakStepFull[${stepLabel}] playing chunk 2/${result.parts.length}`);
           await new Promise<void>(r => setTimeout(r, 200));
           await playAudioUri(uri2, soundRef);
         }
       } else {
+        console.log(`[CookAlong] speakStepFull[${stepLabel}] playing single (variant: ${result.variant})`);
         await playAudioUri(result.uri, soundRef);
       }
 
-      if (result.variant !== 'full') {
-        console.log(`[CookAlong] Step spoken using '${result.variant}' variant for ${stepLabel}`);
-      }
+      console.log(`[CookAlong] speakStepFull[${stepLabel}] done, variant: ${result.variant}`);
       return true;
     } catch (e) {
-      console.log(`[CookAlong] speakStepWithLadder failed for ${stepLabel}:`, e);
+      console.log(`[CookAlong] speakStepFull failed for ${stepLabel}:`, e);
       return false;
     } finally {
       setState((prev) => ({ ...prev, isSpeaking: false }));
@@ -611,7 +562,7 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
       if (!activeRef.current) return;
 
       const stepText = instructions[stepIdx] || 'No instruction available.';
-      const step1Spoken = await speakStepWithLadder(stepText, 'step1');
+      const step1Spoken = await speakStepFull(stepText, 'step1');
 
       if (!activeRef.current) return;
 
@@ -635,7 +586,7 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
 
         if (command === 'REPEAT_STEP') {
           const repeatText = instructions[stepIdx] || '';
-          const repeatSpoken = await speakStepWithLadder(repeatText, `repeat-step${stepIdx + 1}`);
+          const repeatSpoken = await speakStepFull(repeatText, `repeat-step${stepIdx + 1}`);
           if (!repeatSpoken) {
             await safeSpeakText("I could not generate the audio. Please read the step on screen.");
           }
@@ -673,7 +624,7 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
             if (!activeRef.current) break;
 
             await new Promise<void>(r => setTimeout(r, TTS_REQUEST_STAGGER_MS));
-            const nextSpoken = await speakStepWithLadder(nextStepText, `step${stepIdx + 1}`);
+            const nextSpoken = await speakStepFull(nextStepText, `step${stepIdx + 1}`);
             if (!nextSpoken) {
               await safeSpeakText("Please read this step on your screen.");
             }
@@ -696,7 +647,7 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
     } finally {
       loopRunningRef.current = false;
     }
-  }, [instructions, resolvedVoiceId, safeSpeakText, safeListenForCommand, speakStepWithLadder]);
+  }, [instructions, resolvedVoiceId, safeSpeakText, safeListenForCommand, speakStepFull]);
 
   const startCookAlong = useCallback(async () => {
     const tapTime = Date.now();
