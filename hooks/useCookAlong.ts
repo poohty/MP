@@ -19,20 +19,47 @@ function normalizeStepText(text: string): string {
     .trim();
 }
 
+function safeTruncate(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  let cutPoint = maxLen;
+  if (isInsideParentheses(text, cutPoint)) {
+    let depth = 0;
+    for (let i = cutPoint - 1; i >= 0; i--) {
+      if (text[i] === ')') depth++;
+      else if (text[i] === '(') {
+        if (depth === 0) {
+          cutPoint = i;
+          break;
+        }
+        depth--;
+      }
+    }
+  }
+  let result = text.substring(0, cutPoint).replace(/\s+$/, '');
+  result = result.replace(/\s+\S*$/, '');
+  if (result.length < 15 && text.length > 15) {
+    result = text.substring(0, maxLen).replace(/\s+\S*$/, '');
+  }
+  return result;
+}
+
 function shortenStepText(text: string): string {
   let shortened = normalizeStepText(text);
   if (shortened.length > TTS_SHORT_TEXT_LIMIT) {
     const sentenceEnd = shortened.indexOf('. ', 40);
-    if (sentenceEnd > 0 && sentenceEnd < shortened.length - 5) {
+    if (sentenceEnd > 0 && sentenceEnd < shortened.length - 5 && !isInsideParentheses(shortened, sentenceEnd)) {
       shortened = shortened.substring(0, sentenceEnd + 1);
     }
   }
   if (shortened.length > TTS_SHORT_TEXT_LIMIT) {
-    const commaIdx = shortened.lastIndexOf(',', TTS_SHORT_TEXT_LIMIT);
+    let commaIdx = shortened.lastIndexOf(',', TTS_SHORT_TEXT_LIMIT);
+    while (commaIdx > 30 && isInsideParentheses(shortened, commaIdx)) {
+      commaIdx = shortened.lastIndexOf(',', commaIdx - 1);
+    }
     if (commaIdx > 30) {
       shortened = shortened.substring(0, commaIdx) + '.';
     } else {
-      shortened = shortened.substring(0, TTS_SHORT_TEXT_LIMIT).replace(/\s+\S*$/, '') + '.';
+      shortened = safeTruncate(shortened, TTS_SHORT_TEXT_LIMIT) + '.';
     }
   }
   return shortened;
@@ -180,6 +207,8 @@ async function fetchStepTTSWithFallbackLadder(
   const normalizedFull = normalizeStepText(fullStepText);
   console.log(`[CookAlong] FallbackLadder[${stepLabel}] original length: ${fullStepText.length}, normalized length: ${normalizedFull.length}`);
   console.log(`[CookAlong] FallbackLadder[${stepLabel}] normalized text: "${normalizedFull}"`);
+  const shortenedPreview = shortenStepText(normalizedFull);
+  console.log(`[CookAlong] FallbackLadder[${stepLabel}] shortened preview: "${shortenedPreview}" (${shortenedPreview.length} chars)`);
 
   try {
     const uri = await fetchTTSAudio(normalizedFull, voiceId, `${stepLabel}-full`);
@@ -220,8 +249,9 @@ async function fetchStepTTSWithFallbackLadder(
   }
 
   const minimal = normalizedFull.length > 60
-    ? normalizedFull.substring(0, 55).replace(/\s+\S*$/, '') + '.'
+    ? safeTruncate(normalizedFull, 55) + '.'
     : normalizedFull;
+  console.log(`[CookAlong] FallbackLadder[${stepLabel}] minimal text: "${minimal}"`);
   if (minimal.length < normalizedFull.length) {
     console.log(`[CookAlong] FallbackLadder[${stepLabel}] trying minimal text length: ${minimal.length}`);
     try {
