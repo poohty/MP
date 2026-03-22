@@ -6,8 +6,57 @@ import { resolveVoiceId, type VoicePreference } from '@/constants/voice';
 
 const RECORD_DURATION_MS = 3000;
 const INTRO_TEXT = "Let's start with step one.";
-const TTS_MAX_RETRIES = 2;
-const TTS_RETRY_DELAY_MS = 600;
+const TTS_MAX_RETRIES = 1;
+const TTS_RETRY_DELAY_MS = 400;
+const TTS_SHORT_TEXT_LIMIT = 80;
+const TTS_REQUEST_STAGGER_MS = 350;
+
+const ttsAudioCache = new Map<string, string>();
+
+function shortenStepText(text: string): string {
+  let shortened = text
+    .replace(/\s*\(.*?\)\s*/g, ' ')
+    .replace(/\s*,\s*if needed/gi, '')
+    .replace(/\s*,\s*if desired/gi, '')
+    .replace(/\s*,\s*approximately\s+\d+[^,.]*/gi, '')
+    .replace(/\s*,\s*about\s+\d+[^,.]*/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (shortened.length > TTS_SHORT_TEXT_LIMIT) {
+    const sentenceEnd = shortened.indexOf('. ', 40);
+    if (sentenceEnd > 0 && sentenceEnd < shortened.length - 5) {
+      shortened = shortened.substring(0, sentenceEnd + 1);
+    }
+  }
+  if (shortened.length > TTS_SHORT_TEXT_LIMIT) {
+    const commaIdx = shortened.lastIndexOf(',', TTS_SHORT_TEXT_LIMIT);
+    if (commaIdx > 30) {
+      shortened = shortened.substring(0, commaIdx) + '.';
+    } else {
+      shortened = shortened.substring(0, TTS_SHORT_TEXT_LIMIT).replace(/\s+\S*$/, '') + '.';
+    }
+  }
+  return shortened;
+}
+
+function splitStepText(text: string): string[] {
+  const sentences = text.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 0);
+  if (sentences.length >= 2) {
+    const mid = Math.ceil(sentences.length / 2);
+    return [
+      sentences.slice(0, mid).join(' '),
+      sentences.slice(mid).join(' '),
+    ];
+  }
+  const commaIdx = text.indexOf(',', Math.floor(text.length / 3));
+  if (commaIdx > 0 && commaIdx < text.length - 10) {
+    return [
+      text.substring(0, commaIdx + 1).trim(),
+      text.substring(commaIdx + 1).trim(),
+    ];
+  }
+  return [text];
+}
 
 type VoiceCommand = 'STEP_COMPLETE' | 'REPEAT_STEP' | 'NONE';
 
@@ -71,6 +120,12 @@ async function fetchTTSAudioOnce(text: string, voiceId: string, requestId: strin
 
 async function fetchTTSAudio(text: string, voiceId: string, requestId?: string): Promise<string> {
   const id = requestId || Math.random().toString(36).slice(2, 6);
+  const cacheKey = `${voiceId}:${text}`;
+  const cached = ttsAudioCache.get(cacheKey);
+  if (cached) {
+    console.log(`[CookAlong] TTS[${id}] cache hit, text length: ${text.length}`);
+    return cached;
+  }
 
   for (let attempt = 0; attempt <= TTS_MAX_RETRIES; attempt++) {
     if (attempt > 0) {
@@ -82,6 +137,7 @@ async function fetchTTSAudio(text: string, voiceId: string, requestId?: string):
     const result = await fetchTTSAudioOnce(text, voiceId, `${id}:${attempt}`);
 
     if (result.ok) {
+      ttsAudioCache.set(cacheKey, result.uri);
       return result.uri;
     }
 
@@ -93,6 +149,68 @@ async function fetchTTSAudio(text: string, voiceId: string, requestId?: string):
   }
 
   throw new Error('TTS failed after retries. The voice server may be temporarily overloaded.');
+}
+
+async function fetchStepTTSWithFallbackLadder(
+  fullStepText: string,
+  voiceId: string,
+  stepLabel: string
+): Promise<{ uri: string; variant: string }> {
+  console.log(`[CookAlong] FallbackLadder[${stepLabel}] full text length: ${fullStepText.length}`);
+
+  try {
+    const uri = await fetchTTSAudio(fullStepText, voiceId, `${stepLabel}-full`);
+    console.log(`[CookAlong] FallbackLadder[${stepLabel}] full text succeeded`);
+    return { uri, variant: 'full' };
+  } catch (e) {
+    console.log(`[CookAlong] FallbackLadder[${stepLabel}] full text failed:`, e);
+  }
+
+  await new Promise<void>(r => setTimeout(r, TTS_REQUEST_STAGGER_MS));
+
+  const shortened = shortenStepText(fullStepText);
+  if (shortened !== fullStepText && shortened.length < fullStepText.length) {
+    console.log(`[CookAlong] FallbackLadder[${stepLabel}] trying shortened text length: ${shortened.length}`);
+    try {
+      const uri = await fetchTTSAudio(shortened, voiceId, `${stepLabel}-short`);
+      console.log(`[CookAlong] FallbackLadder[${stepLabel}] shortened text succeeded`);
+      return { uri, variant: 'shortened' };
+    } catch (e) {
+      console.log(`[CookAlong] FallbackLadder[${stepLabel}] shortened text failed:`, e);
+    }
+    await new Promise<void>(r => setTimeout(r, TTS_REQUEST_STAGGER_MS));
+  }
+
+  const parts = splitStepText(fullStepText);
+  if (parts.length >= 2) {
+    console.log(`[CookAlong] FallbackLadder[${stepLabel}] trying split: part1=${parts[0].length}, part2=${parts[1].length}`);
+    try {
+      const uri1 = await fetchTTSAudio(parts[0], voiceId, `${stepLabel}-split1`);
+      await new Promise<void>(r => setTimeout(r, TTS_REQUEST_STAGGER_MS));
+      await fetchTTSAudio(parts[1], voiceId, `${stepLabel}-split2`);
+      console.log(`[CookAlong] FallbackLadder[${stepLabel}] split succeeded`);
+      return { uri: uri1, variant: 'split' };
+    } catch (e) {
+      console.log(`[CookAlong] FallbackLadder[${stepLabel}] split failed:`, e);
+    }
+    await new Promise<void>(r => setTimeout(r, TTS_REQUEST_STAGGER_MS));
+  }
+
+  const minimal = fullStepText.length > 60
+    ? fullStepText.substring(0, 55).replace(/\s+\S*$/, '') + '.'
+    : fullStepText;
+  if (minimal.length < fullStepText.length) {
+    console.log(`[CookAlong] FallbackLadder[${stepLabel}] trying minimal text length: ${minimal.length}`);
+    try {
+      const uri = await fetchTTSAudio(minimal, voiceId, `${stepLabel}-minimal`);
+      console.log(`[CookAlong] FallbackLadder[${stepLabel}] minimal text succeeded`);
+      return { uri, variant: 'minimal' };
+    } catch (e) {
+      console.log(`[CookAlong] FallbackLadder[${stepLabel}] minimal text also failed:`, e);
+    }
+  }
+
+  throw new Error(`All TTS variants failed for ${stepLabel}`);
 }
 
 async function playAudioUri(uri: string, soundRef: React.MutableRefObject<Audio.Sound | null>): Promise<void> {
@@ -354,7 +472,44 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
     }
   }, []);
 
-  const runCookAlongLoop = useCallback(async (startIndex: number, preloadedIntroUri?: string, step1Promise?: Promise<string | null>) => {
+  const speakStepWithLadder = useCallback(async (stepText: string, stepLabel: string): Promise<boolean> => {
+    if (!activeRef.current) return false;
+    setState((prev) => ({ ...prev, isSpeaking: true }));
+    try {
+      const result = await fetchStepTTSWithFallbackLadder(stepText, resolvedVoiceId, stepLabel);
+      if (!activeRef.current) return false;
+
+      if (result.variant === 'split') {
+        const parts = splitStepText(stepText);
+        const cacheKey1 = `${resolvedVoiceId}:${parts[0]}`;
+        const cacheKey2 = `${resolvedVoiceId}:${parts[1]}`;
+        const uri1 = ttsAudioCache.get(cacheKey1);
+        const uri2 = ttsAudioCache.get(cacheKey2);
+        if (uri1) {
+          await playAudioUri(uri1, soundRef);
+        }
+        if (!activeRef.current) return false;
+        if (uri2) {
+          await new Promise<void>(r => setTimeout(r, 200));
+          await playAudioUri(uri2, soundRef);
+        }
+      } else {
+        await playAudioUri(result.uri, soundRef);
+      }
+
+      if (result.variant !== 'full') {
+        console.log(`[CookAlong] Step spoken using '${result.variant}' variant for ${stepLabel}`);
+      }
+      return true;
+    } catch (e) {
+      console.log(`[CookAlong] speakStepWithLadder failed for ${stepLabel}:`, e);
+      return false;
+    } finally {
+      setState((prev) => ({ ...prev, isSpeaking: false }));
+    }
+  }, [resolvedVoiceId]);
+
+  const runCookAlongLoop = useCallback(async (startIndex: number, preloadedIntroUri?: string) => {
     if (loopRunningRef.current) return;
     loopRunningRef.current = true;
 
@@ -394,44 +549,22 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
 
       if (!activeRef.current) return;
 
-      console.log('[CookAlong] Intro finished, resolving step 1 audio');
+      console.log('[CookAlong] Intro finished, now fetching step 1 via fallback ladder');
 
-      let step1Uri: string | null = null;
-      if (step1Promise) {
-        try {
-          step1Uri = await step1Promise;
-        } catch (e) {
-          console.log('[CookAlong] Step1 promise rejected:', e);
-        }
-      }
-
-      if (!step1Uri) {
-        console.log('[CookAlong] Step1 not ready from promise, fetching now');
-        try {
-          step1Uri = await fetchTTSAudio(instructions[stepIdx] || 'No instruction available.', resolvedVoiceId, 'step1-late');
-        } catch (e) {
-          console.log('[CookAlong] Step1 late fetch also failed:', e);
-        }
-      }
+      await new Promise<void>((resolve) => setTimeout(resolve, TTS_REQUEST_STAGGER_MS));
 
       if (!activeRef.current) return;
 
-      await new Promise<void>((resolve) => setTimeout(resolve, 300));
+      const stepText = instructions[stepIdx] || 'No instruction available.';
+      const step1Spoken = await speakStepWithLadder(stepText, 'step1');
 
       if (!activeRef.current) return;
 
-      if (step1Uri) {
-        setState((prev) => ({ ...prev, isSpeaking: true }));
-        try {
-          await playAudioUri(step1Uri, soundRef);
-        } catch (e) {
-          console.log('[CookAlong] Step 1 speak error:', e);
-        }
-        setState((prev) => ({ ...prev, isSpeaking: false }));
-        console.log('[CookAlong] Step 1 playback done, total from loop start:', Date.now() - loopStartTime, 'ms');
+      if (!step1Spoken) {
+        console.log('[CookAlong] Step 1 all TTS variants failed, speaking generic fallback');
+        await safeSpeakText("Please read step one on your screen. I could not generate the audio for it.");
       } else {
-        console.log('[CookAlong] Step 1 audio unavailable, speaking fallback');
-        await safeSpeakText(`Step one. ${instructions[stepIdx] || 'No instruction available.'}`);
+        console.log('[CookAlong] Step 1 playback done, total from loop start:', Date.now() - loopStartTime, 'ms');
       }
 
       if (!activeRef.current) return;
@@ -446,7 +579,11 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
         if (!activeRef.current) break;
 
         if (command === 'REPEAT_STEP') {
-          await safeSpeakText(instructions[stepIdx] || '');
+          const repeatText = instructions[stepIdx] || '';
+          const repeatSpoken = await speakStepWithLadder(repeatText, `repeat-step${stepIdx + 1}`);
+          if (!repeatSpoken) {
+            await safeSpeakText("I could not generate the audio. Please read the step on screen.");
+          }
           if (!activeRef.current) break;
           if (stepIdx >= instructions.length - 1) {
             await safeSpeakText(finalStepReminder);
@@ -474,13 +611,22 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
           } else {
             stepIdx += 1;
             setState((prev) => ({ ...prev, currentStepIndex: stepIdx }));
+            const nextStepText = instructions[stepIdx] || '';
+            console.log(`[CookAlong] Speaking step ${stepIdx + 1}, text length: ${nextStepText.length}`);
+
+            await safeSpeakText(`Step ${stepIdx + 1}.`);
+            if (!activeRef.current) break;
+
+            await new Promise<void>(r => setTimeout(r, TTS_REQUEST_STAGGER_MS));
+            const nextSpoken = await speakStepWithLadder(nextStepText, `step${stepIdx + 1}`);
+            if (!nextSpoken) {
+              await safeSpeakText("Please read this step on your screen.");
+            }
+
+            if (!activeRef.current) break;
             if (stepIdx >= instructions.length - 1) {
-              await safeSpeakText(`Step ${stepIdx + 1}. ${instructions[stepIdx] || ''}`);
-              if (!activeRef.current) break;
               await safeSpeakText(finalStepReminder);
             } else {
-              await safeSpeakText(`Step ${stepIdx + 1}. ${instructions[stepIdx] || ''}`);
-              if (!activeRef.current) break;
               await safeSpeakText(reminderLine);
             }
           }
@@ -495,7 +641,7 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
     } finally {
       loopRunningRef.current = false;
     }
-  }, [instructions, resolvedVoiceId, safeSpeakText, safeListenForCommand]);
+  }, [instructions, resolvedVoiceId, safeSpeakText, safeListenForCommand, speakStepWithLadder]);
 
   const startCookAlong = useCallback(async () => {
     const tapTime = Date.now();
@@ -515,8 +661,6 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
       Alert.alert('No Instructions', 'This recipe has no instructions to read aloud.');
       return;
     }
-
-    const step1Text = instructions[0] || 'No instruction available.';
 
     setState((prev) => ({ ...prev, phase: 'starting' }));
     console.log('[CookAlong] Phase: starting — health check + permissions + intro TTS');
@@ -565,16 +709,6 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
         return null;
       });
 
-    const step1TTSPromise = fetchTTSAudio(step1Text, resolvedVoiceId, 'step1')
-      .then(uri => {
-        console.log('[CookAlong] Step1 TTS done in', Date.now() - tapTime, 'ms');
-        return uri;
-      })
-      .catch((e) => {
-        console.log('[CookAlong] Step1 TTS failed (will retry later):', e);
-        return null;
-      });
-
     const [healthOk, permGranted, introUri] = await Promise.all([
       healthPromise,
       permPromise,
@@ -615,8 +749,8 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
       lastTranscript: '',
     });
 
-    console.log('[CookAlong] Launching loop with intro ready, step1 fetching in background. Total setup:', Date.now() - tapTime, 'ms');
-    void runCookAlongLoop(0, introUri, step1TTSPromise);
+    console.log('[CookAlong] Launching loop with intro ready, step1 will be fetched after intro plays. Total setup:', Date.now() - tapTime, 'ms');
+    void runCookAlongLoop(0, introUri);
   }, [instructions, resolvedVoiceId, runCookAlongLoop]);
 
   const stopCookAlong = useCallback(async () => {
