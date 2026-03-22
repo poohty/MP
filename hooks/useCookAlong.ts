@@ -93,6 +93,7 @@ async function fetchTTSAudio(text: string, voiceId: string, requestId?: string):
 }
 
 async function playAudioUri(uri: string, soundRef: React.MutableRefObject<Audio.Sound | null>): Promise<void> {
+  console.log('[CookAlong] playAudioUri: setting audio mode for playback');
   await Audio.setAudioModeAsync({
     playsInSilentModeIOS: true,
     allowsRecordingIOS: false,
@@ -100,23 +101,67 @@ async function playAudioUri(uri: string, soundRef: React.MutableRefObject<Audio.
     shouldDuckAndroid: false,
   });
 
-  const { sound } = await Audio.Sound.createAsync(
+  console.log('[CookAlong] playAudioUri: creating sound, uri length:', uri?.length ?? 0);
+  const { sound, status: initialStatus } = await Audio.Sound.createAsync(
     { uri },
-    { shouldPlay: true, volume: 1.0 }
+    { shouldPlay: false, volume: 1.0 }
   );
   soundRef.current = sound;
 
-  return new Promise<void>((resolve) => {
+  if (!initialStatus.isLoaded) {
+    console.log('[CookAlong] playAudioUri: sound failed to load initially');
+    sound.unloadAsync().catch(() => {});
+    if (soundRef.current === sound) soundRef.current = null;
+    return;
+  }
+
+  console.log('[CookAlong] playAudioUri: sound loaded, duration:', initialStatus.durationMillis, 'ms, playing now');
+
+  let resolved = false;
+  const safeResolve = (resolveFn: () => void) => {
+    if (resolved) return;
+    resolved = true;
+    sound.unloadAsync().catch(() => {});
+    if (soundRef.current === sound) soundRef.current = null;
+    resolveFn();
+  };
+
+  const playPromise = new Promise<void>((resolve) => {
+    const timeout = setTimeout(() => {
+      console.log('[CookAlong] playAudioUri: safety timeout reached, resolving');
+      safeResolve(resolve);
+    }, Math.max((initialStatus.durationMillis ?? 30000) + 5000, 10000));
+
     sound.setOnPlaybackStatusUpdate((status) => {
-      if (status.isLoaded && status.didJustFinish) {
-        sound.unloadAsync().catch(() => {});
-        if (soundRef.current === sound) {
-          soundRef.current = null;
+      if (!status.isLoaded) {
+        if ('error' in status && status.error) {
+          console.log('[CookAlong] playAudioUri: playback error:', status.error);
+        } else {
+          console.log('[CookAlong] playAudioUri: sound unloaded during playback');
         }
-        resolve();
+        clearTimeout(timeout);
+        safeResolve(resolve);
+        return;
+      }
+      if (status.didJustFinish) {
+        console.log('[CookAlong] playAudioUri: playback finished normally');
+        clearTimeout(timeout);
+        safeResolve(resolve);
       }
     });
   });
+
+  try {
+    await sound.playAsync();
+    console.log('[CookAlong] playAudioUri: playAsync called successfully');
+  } catch (e) {
+    console.log('[CookAlong] playAudioUri: playAsync error:', e);
+    sound.unloadAsync().catch(() => {});
+    if (soundRef.current === sound) soundRef.current = null;
+    return;
+  }
+
+  return playPromise;
 }
 
 async function speakText(text: string, soundRef: React.MutableRefObject<Audio.Sound | null>, voiceId: string): Promise<void> {
