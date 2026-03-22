@@ -298,8 +298,8 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
   const loopRunningRef = useRef(false);
   const resolvedVoiceId = resolveVoiceId(voicePreference);
 
-  const cleanup = useCallback(async () => {
-    console.log('[CookAlong] cleanup called');
+  const cleanup = useCallback(async (reason?: string) => {
+    console.log('[CookAlong] cleanup called', reason ? `reason: ${reason}` : '');
     activeRef.current = false;
     loopRunningRef.current = false;
 
@@ -390,7 +390,7 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
     }
   }, [resolvedVoiceId]);
 
-  const runCookAlongLoop = useCallback(async (startIndex: number, preloadedIntroUri?: string) => {
+  const runCookAlongLoop = useCallback(async (startIndex: number, preloadedIntroUri?: string, _preloadedStep1Uri?: string) => {
     if (loopRunningRef.current) {
       console.log('[CookAlong] Loop already running, ignoring');
       return;
@@ -432,11 +432,13 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
 
       const stepText = instructions[stepIdx];
       if (stepText && stepText.length > 0) {
-        console.log('[CookAlong] Speaking step 1');
+        console.log('[CookAlong] Requesting step 1 TTS sequentially');
         const spoken = await speakStep(stepText, 'step1');
         if (!activeRef.current) { console.log('[CookAlong] Cancelled after step1 speech'); return; }
 
-        if (!spoken) {
+        if (spoken) {
+          console.log('[CookAlong] Step 1 TTS ready');
+        } else {
           console.log('[CookAlong] Step 1 TTS failed, speaking fallback');
           await safeSpeakText("I could not read step one. Please read step one on your screen.", 'step1-fallback');
         }
@@ -643,7 +645,8 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
   }, [instructions, resolvedVoiceId, runCookAlongLoop]);
 
   const stopCookAlong = useCallback(async () => {
-    await cleanup();
+    console.log('[CookAlong] stopCookAlong called by user');
+    await cleanup('user-stop');
   }, [cleanup]);
 
   return {
