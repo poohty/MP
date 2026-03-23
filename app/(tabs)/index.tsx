@@ -142,7 +142,6 @@ export default function HomeScreen() {
         stepIndex={walkthrough.stepIndex}
         totalSteps={walkthrough.totalSteps}
         onNext={walkthrough.next}
-        onSkip={walkthrough.skip}
       />
     </GradientBackground>
   );

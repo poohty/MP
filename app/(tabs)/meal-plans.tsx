@@ -76,7 +76,6 @@ export default function MealPlansScreen() {
         stepIndex={walkthrough.stepIndex}
         totalSteps={walkthrough.totalSteps}
         onNext={walkthrough.next}
-        onSkip={walkthrough.skip}
       />
     </GradientBackground>
   );

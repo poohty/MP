@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Modal, Animated } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Modal } from 'react-native';
 import { WalkthroughStep } from '@/hooks/useWalkthrough';
 import Colors from '@/constants/colors';
 import { useTheme } from '@/hooks/theme-store';
@@ -11,7 +11,6 @@ interface WalkthroughModalProps {
   stepIndex: number;
   totalSteps: number;
   onNext: () => void;
-  onSkip: () => void;
 }
 
 export default function WalkthroughModal({
@@ -20,7 +19,6 @@ export default function WalkthroughModal({
   stepIndex,
   totalSteps,
   onNext,
-  onSkip,
 }: WalkthroughModalProps) {
   const { isDark } = useTheme();
   const colors = isDark ? Colors.dark : Colors.light;
@@ -67,13 +65,9 @@ export default function WalkthroughModal({
           </View>
 
           <View style={styles.actions}>
-            <TouchableOpacity onPress={onSkip} style={styles.skipButton} testID="walkthrough-skip">
-              <Text style={[styles.skipText, { color: colors.textSecondary }]}>Skip</Text>
-            </TouchableOpacity>
-
             <TouchableOpacity
               onPress={onNext}
-              style={[styles.nextButton, { backgroundColor: colors.primary }]}
+              style={[styles.nextButton, styles.nextButtonFull, { backgroundColor: colors.primary }]}
               testID="walkthrough-next"
               activeOpacity={0.8}
             >
@@ -147,20 +141,16 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  skipButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  skipText: {
-    fontSize: 15,
-    fontWeight: '500' as const,
+    justifyContent: 'flex-end',
   },
   nextButton: {
     paddingVertical: 12,
     paddingHorizontal: 28,
     borderRadius: 12,
+  },
+  nextButtonFull: {
+    flex: 1,
+    alignItems: 'center' as const,
   },
   nextText: {
     fontSize: 15,

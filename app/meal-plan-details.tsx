@@ -365,7 +365,6 @@ export default function MealPlanDetailsScreen() {
         stepIndex={walkthrough.stepIndex}
         totalSteps={walkthrough.totalSteps}
         onNext={walkthrough.next}
-        onSkip={walkthrough.skip}
       />
 
       <WalkthroughModal
@@ -374,7 +373,6 @@ export default function MealPlanDetailsScreen() {
         stepIndex={calendarTutorial.stepIndex}
         totalSteps={calendarTutorial.totalSteps}
         onNext={calendarTutorial.next}
-        onSkip={calendarTutorial.skip}
       />
 
       <WalkthroughModal
@@ -383,7 +381,6 @@ export default function MealPlanDetailsScreen() {
         stepIndex={multiplierTutorial.stepIndex}
         totalSteps={multiplierTutorial.totalSteps}
         onNext={multiplierTutorial.next}
-        onSkip={multiplierTutorial.skip}
       />
     </>
   );

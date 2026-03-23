@@ -842,7 +842,6 @@ Use realistic grocery store pricing. Consider the store type and location for pr
         stepIndex={walkthrough.stepIndex}
         totalSteps={walkthrough.totalSteps}
         onNext={walkthrough.next}
-        onSkip={walkthrough.skip}
       />
     </>
   );
