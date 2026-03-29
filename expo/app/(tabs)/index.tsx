@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/hooks/auth-store';
 import { useRecipes } from '@/hooks/recipe-store';
 import { useTheme } from '@/hooks/theme-store';
@@ -11,6 +12,8 @@ import { Camera, Link, FolderOpen } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWalkthrough, WalkthroughStep } from '@/hooks/useWalkthrough';
 import WalkthroughModal from '@/components/WalkthroughModal';
+import OnboardingQuestionnaire from '@/components/OnboardingQuestionnaire';
+import { getStarterRecipesForOption, StarterRecipeData } from '@/mocks/starter-recipes';
 
 const HOME_WALKTHROUGH_STEPS: WalkthroughStep[] = [
   { title: 'Add recipes', body: 'You can add recipes in three ways. Let\'s go over them.' },
@@ -20,13 +23,71 @@ const HOME_WALKTHROUGH_STEPS: WalkthroughStep[] = [
   { title: 'Fastest way to start', body: 'If you already have a lot of recipe URLs saved, place them all into a folder and upload the whole folder at once. This is much quicker than adding recipes one by one and is the best way to build a large cookbook when you\'re first starting.' },
 ];
 
+const ONBOARDING_KEY_PREFIX = 'onboarding-completed-';
+const RECIPES_PER_OPTION = 3;
+
 export default function HomeScreen() {
   const { user, isAuthenticated, isLoading } = useAuth();
-  const { recipes } = useRecipes();
+  const { seedStarterRecipes } = useRecipes();
   const { isDark } = useTheme();
   const themeColors = isDark ? Colors.dark : Colors.light;
   const { height: windowHeight } = useWindowDimensions();
   const walkthrough = useWalkthrough('home', HOME_WALKTHROUGH_STEPS);
+
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id || !isAuthenticated) {
+      setShowOnboarding(false);
+      setOnboardingChecked(true);
+      return;
+    }
+
+    const checkOnboarding = async () => {
+      try {
+        const key = `${ONBOARDING_KEY_PREFIX}${user.id}`;
+        const completed = await AsyncStorage.getItem(key);
+        console.log(`[Onboarding] Check for user ${user.id}: completed=${!!completed}`);
+        if (!completed) {
+          setShowOnboarding(true);
+        }
+      } catch (e) {
+        console.warn('[Onboarding] Error checking onboarding state:', e);
+      } finally {
+        setOnboardingChecked(true);
+      }
+    };
+
+    void checkOnboarding();
+  }, [user?.id, isAuthenticated]);
+
+  const handleOnboardingComplete = useCallback(async (selectedOptionIds: string[]) => {
+    if (!user?.id) return;
+
+    console.log(`[Onboarding] User selected: ${selectedOptionIds.join(', ')}`);
+
+    const allStarterRecipes: StarterRecipeData[] = [];
+    for (const optionId of selectedOptionIds) {
+      const recipesForOption = getStarterRecipesForOption(optionId);
+      const subset = recipesForOption.slice(0, RECIPES_PER_OPTION);
+      allStarterRecipes.push(...subset);
+    }
+
+    console.log(`[Onboarding] Seeding ${allStarterRecipes.length} recipes...`);
+    const addedCount = await seedStarterRecipes(allStarterRecipes);
+    console.log(`[Onboarding] Seeded ${addedCount} recipes`);
+
+    const key = `${ONBOARDING_KEY_PREFIX}${user.id}`;
+    const completionData = JSON.stringify({
+      completedAt: new Date().toISOString(),
+      selectedOptions: selectedOptionIds,
+    });
+    await AsyncStorage.setItem(key, completionData);
+    console.log('[Onboarding] Marked as complete');
+
+    setShowOnboarding(false);
+  }, [user?.id, seedStarterRecipes]);
 
   const layout = useMemo(() => {
     const heroHeight = Math.max(112, Math.min(140, Math.round(windowHeight * 0.17)));
@@ -143,6 +204,12 @@ export default function HomeScreen() {
         totalSteps={walkthrough.totalSteps}
         onNext={walkthrough.next}
       />
+      {onboardingChecked && (
+        <OnboardingQuestionnaire
+          visible={showOnboarding}
+          onComplete={handleOnboardingComplete}
+        />
+      )}
     </GradientBackground>
   );
 }

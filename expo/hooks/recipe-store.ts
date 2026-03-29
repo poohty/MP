@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
 import { Recipe, RecipeCategory } from '@/types';
+import { StarterRecipeData, buildRecipeContent } from '@/mocks/starter-recipes';
 import { useAuth } from './auth-store';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 import { compressBase64Image } from '@/utils/image-compression';
@@ -1713,6 +1714,73 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     }
   }, [loadRecipesFromSupabase]);
 
+  const seedStarterRecipes = useCallback(async (starterRecipes: StarterRecipeData[]) => {
+    if (!user?.id) {
+      console.warn('⚠️ seedStarterRecipes called without user id');
+      return 0;
+    }
+
+    console.log(`🌱 Seeding ${starterRecipes.length} starter recipes for user ${user.id}`);
+
+    const storageKey = `${RECIPES_STORAGE_KEY}-${user.id}`;
+    const storedRaw = await AsyncStorage.getItem(storageKey);
+    let currentRecipes: Recipe[] = [];
+    if (storedRaw) {
+      try {
+        currentRecipes = JSON.parse(storedRaw) as Recipe[];
+      } catch {
+        currentRecipes = [];
+      }
+    }
+
+    const existingNames = new Set(currentRecipes.map(r => r.name.trim().toLowerCase()));
+    let addedCount = 0;
+
+    const newRecipes: Recipe[] = [];
+    for (const starter of starterRecipes) {
+      const nameLower = starter.name.trim().toLowerCase();
+      if (existingNames.has(nameLower)) {
+        console.log(`⏭️ Skipping duplicate starter recipe: "${starter.name}"`);
+        continue;
+      }
+
+      const content = buildRecipeContent(starter);
+      const newRecipe: Recipe = {
+        id: `starter-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        name: starter.name,
+        category: starter.category,
+        ingredients: starter.ingredients,
+        instructions: starter.instructions,
+        content,
+        prepTime: starter.prepTime,
+        cookTime: starter.cookTime,
+        totalTime: starter.totalTime,
+        calories: starter.calories,
+        createdAt: Date.now() - Math.floor(Math.random() * 1000),
+        ownerUserId: user.id,
+      };
+
+      newRecipes.push(newRecipe);
+      existingNames.add(nameLower);
+      addedCount++;
+    }
+
+    if (newRecipes.length === 0) {
+      console.log('🌱 No new starter recipes to add (all duplicates)');
+      return 0;
+    }
+
+    const merged = [...currentRecipes, ...newRecipes];
+    await saveRecipes(merged);
+
+    for (const recipe of newRecipes) {
+      await syncRecipeToSupabase(recipe, user.id);
+    }
+
+    console.log(`✅ Seeded ${addedCount} starter recipes successfully`);
+    return addedCount;
+  }, [user?.id, saveRecipes, syncRecipeToSupabase]);
+
   const debugSupabaseRecipesForUser = useCallback(async (ownerUserId: string) => {
     if (!isSupabaseEnabled) {
       console.log('🐛 DEBUG: Supabase is disabled');
@@ -1762,6 +1830,7 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     loadRecipesFromSupabase,
     syncRecipeToSupabase,
     debugSupabaseRecipesForUser,
+    seedStarterRecipes,
   };
 });
 
