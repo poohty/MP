@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 import { useAuth } from '@/hooks/auth-store';
 import { useRecipes } from '@/hooks/recipe-store';
 import { useTheme } from '@/hooks/theme-store';
@@ -39,7 +40,10 @@ export default function HomeScreen() {
   const walkthrough = useWalkthrough('home', HOME_WALKTHROUGH_STEPS, walkthroughEnabled);
 
   useEffect(() => {
+    if (isLoading) return;
+
     if (!user?.id || !isAuthenticated) {
+      console.log('[Onboarding] No authenticated user, skipping questionnaire');
       setShowOnboarding(false);
       setOnboardingChecked(true);
       return;
@@ -47,6 +51,16 @@ export default function HomeScreen() {
 
     const checkOnboarding = async () => {
       try {
+        if (isSupabaseEnabled) {
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (!sessionData?.session?.user) {
+            console.log('[Onboarding] No real Supabase session, skipping questionnaire');
+            setShowOnboarding(false);
+            setOnboardingChecked(true);
+            return;
+          }
+        }
+
         const key = `${ONBOARDING_KEY_PREFIX}${user.id}`;
         const completed = await AsyncStorage.getItem(key);
         console.log(`[Onboarding] Check for user ${user.id}: completed=${!!completed}`);
@@ -61,7 +75,7 @@ export default function HomeScreen() {
     };
 
     void checkOnboarding();
-  }, [user?.id, isAuthenticated]);
+  }, [user?.id, isAuthenticated, isLoading]);
 
   const handleOnboardingComplete = useCallback(async (selectedOptionIds: string[]) => {
     if (!user?.id) return;
