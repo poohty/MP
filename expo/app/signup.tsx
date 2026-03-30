@@ -11,13 +11,11 @@ import * as Location from 'expo-location';
 
 export default function SignupScreen() {
   const { signup } = useAuth();
-  const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState<{
-    name?: string;
     username?: string;
     email?: string;
     password?: string;
@@ -28,16 +26,11 @@ export default function SignupScreen() {
 
   const validate = () => {
     const newErrors: {
-      name?: string;
       username?: string;
       email?: string;
       password?: string;
       confirmPassword?: string;
     } = {};
-    
-    if (!name) {
-      newErrors.name = 'Name is required';
-    }
 
     const trimmedUsername = username.trim().toLowerCase();
     if (!trimmedUsername) {
@@ -106,7 +99,7 @@ export default function SignupScreen() {
         locationGranted = locationPermission;
       }
       
-      const result = await signup(name.trim(), username.trim().toLowerCase(), email.trim(), password, locationGranted);
+      const result = await signup(username.trim().toLowerCase(), email.trim(), password, locationGranted);
 
       if (result.ok && result.reason === 'VERIFY_EMAIL_REQUIRED') {
         router.push({ pathname: '/verify-email', params: { email: email.trim() } });
@@ -148,14 +141,6 @@ export default function SignupScreen() {
         </View>
         
         <View style={styles.signupBlock}>
-          <Input
-            label="Name"
-            placeholder="Enter your name"
-            value={name}
-            onChangeText={setName}
-            error={errors.name}
-          />
-          
           <Input
             label="Username"
             placeholder="Choose a username"

@@ -90,7 +90,7 @@ const result = createContextHook(() => {
         console.log('📤 Creating new profile:', { id: userToStore.id, username });
       }
 
-      const displayName = userToStore.name || userToStore.username || userToStore.email;
+      const displayName = userToStore.name || userToStore.username || userToStore.email.split('@')[0];
 
       const upsertData: Record<string, unknown> = {
         id: userToStore.id,
@@ -385,7 +385,7 @@ const result = createContextHook(() => {
   );
 
   const signup = useCallback(
-    async (name: string, username: string, email: string, password: string, locationPermission?: boolean): Promise<SignupResult> => {
+    async (username: string, email: string, password: string, locationPermission?: boolean): Promise<SignupResult> => {
       const normalizedUsername = username.trim().toLowerCase();
 
       if (!isSupabaseEnabled) {
@@ -394,7 +394,7 @@ const result = createContextHook(() => {
           const newUser: User = {
             id: userId,
             email,
-            name,
+            name: normalizedUsername,
             username: normalizedUsername,
             locationPermission,
             shareCookbookWithFriends: false,
@@ -431,7 +431,6 @@ const result = createContextHook(() => {
           options: {
             emailRedirectTo,
             data: {
-              name,
               username: normalizedUsername,
               locationPermission: !!locationPermission,
             },
@@ -471,7 +470,7 @@ const result = createContextHook(() => {
         const newUser: User = {
           id: supaUser.id,
           email: supaUser.email ?? email,
-          name,
+          name: normalizedUsername,
           username: normalizedUsername,
           locationPermission,
           shareCookbookWithFriends: false,
