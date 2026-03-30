@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
 import { Recipe, RecipeCategory } from '@/types';
-import { StarterRecipeData, buildRecipeContent } from '@/mocks/starter-recipes';
+import { StarterRecipeData, buildRecipeContent, getStarterRecipeImageUrl } from '@/mocks/starter-recipes';
 import { useAuth } from './auth-store';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 import { compressBase64Image } from '@/utils/image-compression';
@@ -1746,6 +1746,9 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
       }
 
       const content = buildRecipeContent(starter);
+      const imageUri = getStarterRecipeImageUrl(starter.name, starter.category);
+      console.log(`🖼️ [StarterSeed] Image for "${starter.name}": ${imageUri.substring(0, 60)}...`);
+
       const newRecipe: Recipe = {
         id: `starter-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         name: starter.name,
@@ -1757,6 +1760,7 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
         cookTime: starter.cookTime,
         totalTime: starter.totalTime,
         calories: starter.calories,
+        imageUri,
         createdAt: Date.now() - Math.floor(Math.random() * 1000),
         ownerUserId: userId,
       };
