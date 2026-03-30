@@ -262,7 +262,29 @@ const result = createContextHook(() => {
 
       try {
         console.log('🔐 Supabase login attempt:', { email });
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        const loginStart = Date.now();
+
+        const authPromise = supabase.auth.signInWithPassword({ email, password });
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('LOGIN_TIMEOUT')), 15000)
+        );
+
+        let data;
+        let error;
+        try {
+          const result = await Promise.race([authPromise, timeoutPromise]);
+          data = result.data;
+          error = result.error;
+        } catch (raceError: unknown) {
+          const msg = raceError instanceof Error ? raceError.message : '';
+          if (msg === 'LOGIN_TIMEOUT') {
+            console.warn('🔐 Login timed out after 15s');
+            return { ok: false, reason: 'LOGIN_FAILED' };
+          }
+          throw raceError;
+        }
+
+        console.log('🔐 Auth response in', Date.now() - loginStart, 'ms');
 
         if (error || !data.user) {
           console.warn('🔐 Supabase login failed:', error?.message || 'Unknown error');
@@ -287,52 +309,71 @@ const result = createContextHook(() => {
         const metadataName = data.user.user_metadata?.name as string | undefined;
         const metadataUsername = data.user.user_metadata?.username as string | undefined;
 
-        let profileDisplayName: string | null = null;
-        let profileUsername: string | null = null;
-        let savedShareCookbook = false;
-        let savedTtsVoiceId: string | null = null;
-        let savedVoicePreference: VoicePreference = 'female';
-        try {
-          const { data: profileData } = await supabase
-            .from('user_profiles')
-            .select('display_name, username, share_cookbook_with_friends, tts_voice_id, voice_preference')
-            .eq('id', data.user.id)
-            .maybeSingle();
-          if (profileData) {
-            profileDisplayName = profileData.display_name || null;
-            profileUsername = profileData.username || null;
-            if (profileData.share_cookbook_with_friends != null) {
-              savedShareCookbook = !!profileData.share_cookbook_with_friends;
-            }
-            if (profileData.tts_voice_id) {
-              savedTtsVoiceId = profileData.tts_voice_id;
-            }
-            if (profileData.voice_preference === 'male' || profileData.voice_preference === 'female') {
-              savedVoicePreference = profileData.voice_preference;
-            }
-          }
-          console.log('🔐 Fetched profile from Supabase:', { profileDisplayName, profileUsername, savedShareCookbook, savedVoicePreference });
-        } catch {
-          console.warn('⚠️ Could not fetch profile during login, using defaults');
-        }
-
-        const resolvedName = profileDisplayName || metadataName || safeEmail.split('@')[0];
-        const resolvedUsername = profileUsername || metadataUsername || await generateUniqueUsername(baseUsername, data.user.id);
-
-        const newUser: User = {
+        const quickUser: User = {
           id: data.user.id,
           email: safeEmail,
-          name: resolvedName,
-          username: resolvedUsername,
-          shareCookbookWithFriends: savedShareCookbook,
-          ttsVoiceId: savedTtsVoiceId,
-          voicePreference: savedVoicePreference,
+          name: metadataName || safeEmail.split('@')[0],
+          username: metadataUsername || baseUsername,
+          shareCookbookWithFriends: false,
         };
 
-        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
-        setUser(newUser);
+        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(quickUser));
+        setUser(quickUser);
+        console.log('🔐 Login success (quick), total:', Date.now() - loginStart, 'ms');
 
-        await upsertUserProfileToSupabase(newUser);
+        void (async () => {
+          try {
+            let profileDisplayName: string | null = null;
+            let profileUsername: string | null = null;
+            let savedShareCookbook = false;
+            let savedTtsVoiceId: string | null = null;
+            let savedVoicePreference: VoicePreference = 'female';
+            try {
+              const { data: profileData } = await supabase
+                .from('user_profiles')
+                .select('display_name, username, share_cookbook_with_friends, tts_voice_id, voice_preference')
+                .eq('id', data.user!.id)
+                .maybeSingle();
+              if (profileData) {
+                profileDisplayName = profileData.display_name || null;
+                profileUsername = profileData.username || null;
+                if (profileData.share_cookbook_with_friends != null) {
+                  savedShareCookbook = !!profileData.share_cookbook_with_friends;
+                }
+                if (profileData.tts_voice_id) {
+                  savedTtsVoiceId = profileData.tts_voice_id;
+                }
+                if (profileData.voice_preference === 'male' || profileData.voice_preference === 'female') {
+                  savedVoicePreference = profileData.voice_preference;
+                }
+              }
+              console.log('🔐 Background profile fetch done:', { profileDisplayName, profileUsername, savedShareCookbook, savedVoicePreference });
+            } catch {
+              console.warn('⚠️ Background profile fetch failed, keeping defaults');
+            }
+
+            const resolvedName = profileDisplayName || metadataName || safeEmail.split('@')[0];
+            const resolvedUsername = profileUsername || metadataUsername || await generateUniqueUsername(baseUsername, data.user!.id);
+
+            const fullUser: User = {
+              id: data.user!.id,
+              email: safeEmail,
+              name: resolvedName,
+              username: resolvedUsername,
+              shareCookbookWithFriends: savedShareCookbook,
+              ttsVoiceId: savedTtsVoiceId,
+              voicePreference: savedVoicePreference,
+            };
+
+            await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(fullUser));
+            setUser(fullUser);
+            console.log('🔐 Background profile merge complete');
+
+            await upsertUserProfileToSupabase(fullUser);
+          } catch (bgError) {
+            console.warn('⚠️ Background profile sync failed:', bgError);
+          }
+        })();
 
         return { ok: true };
       } catch (error) {
