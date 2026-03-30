@@ -12,6 +12,83 @@ const RECIPES_STORAGE_KEY = 'meal-planner-recipes';
 const DEFAULT_THUMBNAIL_DATA_URI =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=";
 
+async function fetchSourceImageNoAI(sourceUrl: string): Promise<string> {
+  try {
+    console.log(`🖼️ [StarterSeed] Fetching source page: ${sourceUrl.substring(0, 80)}...`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const response = await fetch(sourceUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.log(`❌ [StarterSeed] Page fetch failed: ${response.status}`);
+      return '';
+    }
+
+    const html = await response.text();
+    const ogMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
+    const twitterMatch = html.match(/<meta\s+(?:name|property)="twitter:image"\s+content="([^"]+)"/i);
+    const imageUrl = ogMatch?.[1] || twitterMatch?.[1];
+
+    if (!imageUrl || (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://'))) {
+      console.log(`⚠️ [StarterSeed] No og:image found on page`);
+      return '';
+    }
+
+    console.log(`🔄 [StarterSeed] Downloading image: ${imageUrl.substring(0, 80)}...`);
+    const imgController = new AbortController();
+    const imgTimeoutId = setTimeout(() => imgController.abort(), 10000);
+
+    const imgResponse = await fetch(imageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'Referer': sourceUrl,
+      },
+      signal: imgController.signal,
+    });
+    clearTimeout(imgTimeoutId);
+
+    if (!imgResponse.ok) {
+      console.log(`❌ [StarterSeed] Image download failed: ${imgResponse.status}`);
+      return '';
+    }
+
+    const blob = await imgResponse.blob();
+    const contentType = imgResponse.headers.get('content-type') || 'image/jpeg';
+    if (!contentType.startsWith('image/')) {
+      console.log(`❌ [StarterSeed] Not an image content-type: ${contentType}`);
+      return '';
+    }
+
+    return new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          const rawBase64 = reader.result as string;
+          const compressed = await compressBase64Image(rawBase64);
+          console.log(`✅ [StarterSeed] Image ready (${compressed.length} chars)`);
+          resolve(compressed);
+        } catch {
+          resolve((reader.result as string) || '');
+        }
+      };
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(blob);
+    });
+  } catch (error: any) {
+    console.log(`⚠️ [StarterSeed] Image fetch error: ${error?.message || error}`);
+    return '';
+  }
+}
+
 const [RecipeContext, useRecipes] = createContextHook(() => { // eslint-disable-line rork/general-context-optimization
   const { user } = useAuth();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -1735,75 +1812,74 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     }
 
     const existingNames = new Set(currentRecipes.map(r => r.name.trim().toLowerCase()));
-    let addedCount = 0;
 
-    const newRecipes: Recipe[] = [];
-    for (const starter of starterRecipes) {
-      const nameLower = starter.name.trim().toLowerCase();
+    const recipesToAdd = starterRecipes.filter(s => {
+      const nameLower = s.name.trim().toLowerCase();
       if (existingNames.has(nameLower)) {
-        console.log(`⏭️ Skipping duplicate starter recipe: "${starter.name}"`);
-        continue;
+        console.log(`⏭️ Skipping duplicate starter recipe: "${s.name}"`);
+        return false;
       }
-
-      const content = buildRecipeContent(starter);
-
-      console.log(`🎨 [StarterSeed] Generating AI thumbnail for "${starter.name}"...`);
-      let imageUri = '';
-      try {
-        const aiImage = await generateAiThumbnail(starter.name, starter.category);
-        if (aiImage && aiImage.startsWith('data:')) {
-          imageUri = aiImage;
-          console.log(`✅ [StarterSeed] AI thumbnail generated for "${starter.name}" (${aiImage.length} chars)`);
-        } else {
-          console.log(`⚠️ [StarterSeed] AI returned no usable image for "${starter.name}", using placeholder`);
-          imageUri = DEFAULT_THUMBNAIL_DATA_URI;
-        }
-      } catch (err) {
-        console.warn(`⚠️ [StarterSeed] AI thumbnail error for "${starter.name}":`, err);
-        imageUri = DEFAULT_THUMBNAIL_DATA_URI;
-      }
-
-      const newRecipe: Recipe = {
-        id: `starter-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-        name: starter.name,
-        category: starter.category,
-        ingredients: starter.ingredients,
-        instructions: starter.instructions,
-        content,
-        prepTime: starter.prepTime,
-        cookTime: starter.cookTime,
-        totalTime: starter.totalTime,
-        calories: starter.calories,
-        imageUri,
-        createdAt: Date.now() - Math.floor(Math.random() * 1000),
-        ownerUserId: userId,
-      };
-
-      newRecipes.push(newRecipe);
       existingNames.add(nameLower);
-      addedCount++;
+      return true;
+    });
 
-      if (newRecipes.length < starterRecipes.length) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-    }
-
-    if (newRecipes.length === 0) {
+    if (recipesToAdd.length === 0) {
       console.log('🌱 No new starter recipes to add (all duplicates)');
       return 0;
     }
 
+    console.log(`🖼️ Fetching source images for ${recipesToAdd.length} recipes in parallel (NO AI)...`);
+    const imageResults = await Promise.allSettled(
+      recipesToAdd.map(starter =>
+        starter.sourceUrl
+          ? fetchSourceImageNoAI(starter.sourceUrl)
+          : Promise.resolve('')
+      )
+    );
+
+    const fetchedCount = imageResults.filter(
+      r => r.status === 'fulfilled' && r.value && r.value.startsWith('data:')
+    ).length;
+    console.log(`✅ Fetched ${fetchedCount}/${recipesToAdd.length} source images successfully`);
+
+    const newRecipes: Recipe[] = recipesToAdd.map((starter, index) => {
+      const result = imageResults[index];
+      let imageUri = DEFAULT_THUMBNAIL_DATA_URI;
+      if (result.status === 'fulfilled' && result.value && result.value.startsWith('data:')) {
+        imageUri = result.value;
+      }
+
+      return {
+        id: `starter-${Date.now()}-${index}-${Math.random().toString(36).substring(2, 9)}`,
+        name: starter.name,
+        category: starter.category,
+        ingredients: starter.ingredients,
+        instructions: starter.instructions,
+        content: buildRecipeContent(starter),
+        prepTime: starter.prepTime,
+        cookTime: starter.cookTime,
+        totalTime: starter.totalTime,
+        calories: starter.calories,
+        url: starter.sourceUrl,
+        imageUri,
+        createdAt: Date.now() - Math.floor(Math.random() * 1000),
+        ownerUserId: userId,
+      };
+    });
+
     const merged = [...currentRecipes, ...newRecipes];
-    await saveRecipes(merged);
+    const mergedWithOwner = merged.map(r => ({ ...r, ownerUserId: r.ownerUserId || userId }));
+    await AsyncStorage.setItem(storageKey, JSON.stringify(mergedWithOwner));
+    setRecipes(mergedWithOwner);
 
-    for (const recipe of newRecipes) {
-      await syncRecipeToSupabase(recipe, userId);
-    }
+    console.log(`🔄 Syncing ${newRecipes.length} new recipes to Supabase in parallel...`);
+    await Promise.allSettled(
+      newRecipes.map(recipe => syncRecipeToSupabase(recipe, userId))
+    );
 
-    console.log(`✅ Seeded ${addedCount} starter recipes with AI-generated thumbnails`);
-
-    return addedCount;
-  }, [user?.id, saveRecipes, syncRecipeToSupabase, generateAiThumbnail]);
+    console.log(`✅ Seeded ${newRecipes.length} starter recipes with source images (no AI)`);
+    return newRecipes.length;
+  }, [user?.id, syncRecipeToSupabase]);
 
   const debugSupabaseRecipesForUser = useCallback(async (ownerUserId: string) => {
     if (!isSupabaseEnabled) {
