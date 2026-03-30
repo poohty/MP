@@ -1720,9 +1720,10 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
       return 0;
     }
 
-    console.log(`🌱 Seeding ${starterRecipes.length} starter recipes for user ${user.id}`);
+    const userId = user.id;
+    console.log(`🌱 Seeding ${starterRecipes.length} starter recipes for user ${userId}`);
 
-    const storageKey = `${RECIPES_STORAGE_KEY}-${user.id}`;
+    const storageKey = `${RECIPES_STORAGE_KEY}-${userId}`;
     const storedRaw = await AsyncStorage.getItem(storageKey);
     let currentRecipes: Recipe[] = [];
     if (storedRaw) {
@@ -1757,7 +1758,7 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
         totalTime: starter.totalTime,
         calories: starter.calories,
         createdAt: Date.now() - Math.floor(Math.random() * 1000),
-        ownerUserId: user.id,
+        ownerUserId: userId,
       };
 
       newRecipes.push(newRecipe);
@@ -1774,12 +1775,74 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     await saveRecipes(merged);
 
     for (const recipe of newRecipes) {
-      await syncRecipeToSupabase(recipe, user.id);
+      await syncRecipeToSupabase(recipe, userId);
     }
 
-    console.log(`✅ Seeded ${addedCount} starter recipes successfully`);
+    console.log(`✅ Seeded ${addedCount} starter recipes (generating thumbnails in background)`);
+
+    const generateThumbnailsInBackground = async () => {
+      console.log(`🎨 [StarterThumbnails] Starting background thumbnail generation for ${newRecipes.length} recipes`);
+      const freshRaw = await AsyncStorage.getItem(storageKey);
+      let workingRecipes: Recipe[] = [];
+      if (freshRaw) {
+        try {
+          workingRecipes = JSON.parse(freshRaw) as Recipe[];
+        } catch {
+          workingRecipes = [];
+        }
+      }
+
+      const newRecipeIds = new Set(newRecipes.map(r => r.id));
+      let successCount = 0;
+      let failCount = 0;
+
+      for (let i = 0; i < newRecipes.length; i++) {
+        const recipe = newRecipes[i];
+        console.log(`🎨 [StarterThumbnails] [${i + 1}/${newRecipes.length}] Generating for: "${recipe.name}"`);
+
+        try {
+          const thumbnail = await generateAiThumbnail(recipe.name, recipe.category);
+          if (thumbnail && thumbnail.startsWith('data:')) {
+            workingRecipes = workingRecipes.map(r =>
+              r.id === recipe.id ? { ...r, imageUri: thumbnail } : r
+            );
+            successCount++;
+            console.log(`✅ [StarterThumbnails] [${i + 1}/${newRecipes.length}] Generated for: "${recipe.name}"`);
+          } else {
+            failCount++;
+            console.log(`⚠️ [StarterThumbnails] [${i + 1}/${newRecipes.length}] AI returned no image for: "${recipe.name}"`);
+          }
+        } catch (err) {
+          failCount++;
+          console.warn(`⚠️ [StarterThumbnails] [${i + 1}/${newRecipes.length}] Error for "${recipe.name}":`, err);
+        }
+
+        if ((i + 1) % 3 === 0 || i === newRecipes.length - 1) {
+          try {
+            await saveRecipes(workingRecipes);
+            const updatedWithImages = workingRecipes.filter(r => newRecipeIds.has(r.id) && r.imageUri);
+            for (const r of updatedWithImages) {
+              if (r.imageUri) {
+                await syncRecipeToSupabase(r, userId);
+              }
+            }
+          } catch (saveErr) {
+            console.warn('⚠️ [StarterThumbnails] Error saving batch:', saveErr);
+          }
+        }
+
+        if (i < newRecipes.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      }
+
+      console.log(`🎨 [StarterThumbnails] Done: ${successCount} success, ${failCount} failed`);
+    };
+
+    void generateThumbnailsInBackground();
+
     return addedCount;
-  }, [user?.id, saveRecipes, syncRecipeToSupabase]);
+  }, [user?.id, saveRecipes, syncRecipeToSupabase, generateAiThumbnail]);
 
   const debugSupabaseRecipesForUser = useCallback(async (ownerUserId: string) => {
     if (!isSupabaseEnabled) {

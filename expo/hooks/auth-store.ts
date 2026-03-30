@@ -2,7 +2,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { User } from '@/types';
-import { router } from 'expo-router';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 import type { VoicePreference } from '@/constants/voice';
 
@@ -254,7 +253,6 @@ const result = createContextHook(() => {
           await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
           setUser(newUser);
 
-          router.replace('/(tabs)');
           return { ok: true };
         } catch (error) {
           console.error('Login failed (offline mode):', error);
@@ -336,7 +334,6 @@ const result = createContextHook(() => {
 
         await upsertUserProfileToSupabase(newUser);
 
-        router.replace('/(tabs)');
         return { ok: true };
       } catch (error) {
         console.error('Login failed:', error);
@@ -366,7 +363,6 @@ const result = createContextHook(() => {
           await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
           setUser(newUser);
 
-          router.replace('/(tabs)');
           return { ok: true };
         } catch (error) {
           console.error('Signup failed (offline mode):', error);
@@ -446,7 +442,6 @@ const result = createContextHook(() => {
 
         await upsertUserProfileToSupabase(newUser);
 
-        router.replace('/(tabs)');
         return { ok: true };
       } catch (error) {
         console.error('Signup failed:', error);
@@ -483,7 +478,6 @@ const result = createContextHook(() => {
       await AsyncStorage.removeItem(USER_STORAGE_KEY);
       setUser(null);
       lastUpsertIdRef.current = null;
-      router.replace('../login');
     } catch (error) {
       console.error('Logout failed:', error);
     }
