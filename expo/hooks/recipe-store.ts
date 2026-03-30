@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
 import { Recipe, RecipeCategory } from '@/types';
-import { StarterRecipeData, buildRecipeContent, getStarterRecipeImageUrl } from '@/mocks/starter-recipes';
+import { StarterRecipeData, buildRecipeContent } from '@/mocks/starter-recipes';
 import { useAuth } from './auth-store';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 import { compressBase64Image } from '@/utils/image-compression';
@@ -1746,8 +1746,22 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
       }
 
       const content = buildRecipeContent(starter);
-      const imageUri = getStarterRecipeImageUrl(starter.name, starter.category);
-      console.log(`🖼️ [StarterSeed] Image for "${starter.name}": ${imageUri.substring(0, 60)}...`);
+
+      console.log(`🎨 [StarterSeed] Generating AI thumbnail for "${starter.name}"...`);
+      let imageUri = '';
+      try {
+        const aiImage = await generateAiThumbnail(starter.name, starter.category);
+        if (aiImage && aiImage.startsWith('data:')) {
+          imageUri = aiImage;
+          console.log(`✅ [StarterSeed] AI thumbnail generated for "${starter.name}" (${aiImage.length} chars)`);
+        } else {
+          console.log(`⚠️ [StarterSeed] AI returned no usable image for "${starter.name}", using placeholder`);
+          imageUri = DEFAULT_THUMBNAIL_DATA_URI;
+        }
+      } catch (err) {
+        console.warn(`⚠️ [StarterSeed] AI thumbnail error for "${starter.name}":`, err);
+        imageUri = DEFAULT_THUMBNAIL_DATA_URI;
+      }
 
       const newRecipe: Recipe = {
         id: `starter-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -1768,6 +1782,10 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
       newRecipes.push(newRecipe);
       existingNames.add(nameLower);
       addedCount++;
+
+      if (newRecipes.length < starterRecipes.length) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
     }
 
     if (newRecipes.length === 0) {
@@ -1782,68 +1800,7 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
       await syncRecipeToSupabase(recipe, userId);
     }
 
-    console.log(`✅ Seeded ${addedCount} starter recipes (generating thumbnails in background)`);
-
-    const generateThumbnailsInBackground = async () => {
-      console.log(`🎨 [StarterThumbnails] Starting background thumbnail generation for ${newRecipes.length} recipes`);
-      const freshRaw = await AsyncStorage.getItem(storageKey);
-      let workingRecipes: Recipe[] = [];
-      if (freshRaw) {
-        try {
-          workingRecipes = JSON.parse(freshRaw) as Recipe[];
-        } catch {
-          workingRecipes = [];
-        }
-      }
-
-      const newRecipeIds = new Set(newRecipes.map(r => r.id));
-      let successCount = 0;
-      let failCount = 0;
-
-      for (let i = 0; i < newRecipes.length; i++) {
-        const recipe = newRecipes[i];
-        console.log(`🎨 [StarterThumbnails] [${i + 1}/${newRecipes.length}] Generating for: "${recipe.name}"`);
-
-        try {
-          const thumbnail = await generateAiThumbnail(recipe.name, recipe.category);
-          if (thumbnail && thumbnail.startsWith('data:')) {
-            workingRecipes = workingRecipes.map(r =>
-              r.id === recipe.id ? { ...r, imageUri: thumbnail } : r
-            );
-            successCount++;
-            console.log(`✅ [StarterThumbnails] [${i + 1}/${newRecipes.length}] Generated for: "${recipe.name}"`);
-          } else {
-            failCount++;
-            console.log(`⚠️ [StarterThumbnails] [${i + 1}/${newRecipes.length}] AI returned no image for: "${recipe.name}"`);
-          }
-        } catch (err) {
-          failCount++;
-          console.warn(`⚠️ [StarterThumbnails] [${i + 1}/${newRecipes.length}] Error for "${recipe.name}":`, err);
-        }
-
-        if ((i + 1) % 3 === 0 || i === newRecipes.length - 1) {
-          try {
-            await saveRecipes(workingRecipes);
-            const updatedWithImages = workingRecipes.filter(r => newRecipeIds.has(r.id) && r.imageUri);
-            for (const r of updatedWithImages) {
-              if (r.imageUri) {
-                await syncRecipeToSupabase(r, userId);
-              }
-            }
-          } catch (saveErr) {
-            console.warn('⚠️ [StarterThumbnails] Error saving batch:', saveErr);
-          }
-        }
-
-        if (i < newRecipes.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
-      }
-
-      console.log(`🎨 [StarterThumbnails] Done: ${successCount} success, ${failCount} failed`);
-    };
-
-    void generateThumbnailsInBackground();
+    console.log(`✅ Seeded ${addedCount} starter recipes with AI-generated thumbnails`);
 
     return addedCount;
   }, [user?.id, saveRecipes, syncRecipeToSupabase, generateAiThumbnail]);
