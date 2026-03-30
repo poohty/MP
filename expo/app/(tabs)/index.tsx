@@ -32,10 +32,11 @@ export default function HomeScreen() {
   const { isDark } = useTheme();
   const themeColors = isDark ? Colors.dark : Colors.light;
   const { height: windowHeight } = useWindowDimensions();
-  const walkthrough = useWalkthrough('home', HOME_WALKTHROUGH_STEPS);
-
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
+
+  const walkthroughEnabled = onboardingChecked && !showOnboarding;
+  const walkthrough = useWalkthrough('home', HOME_WALKTHROUGH_STEPS, walkthroughEnabled);
 
   useEffect(() => {
     if (!user?.id || !isAuthenticated) {
