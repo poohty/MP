@@ -158,7 +158,7 @@ export default function LoginScreen() {
           >
             <ArrowLeft size={24} color={themeColors.text} />
           </TouchableOpacity>
-          <Text style={[styles.title, { color: themeColors.text }]}>Welcome Back</Text>
+          <Text style={[styles.title, { color: themeColors.text }]}>Meal Planner Roulette</Text>
           <Text style={[styles.subtitle, { color: themeColors.textSecondary }]}>Log in to your account</Text>
         </View>
         
