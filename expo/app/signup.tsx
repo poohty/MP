@@ -22,6 +22,7 @@ export default function SignupScreen() {
     confirmPassword?: string;
   }>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
 
   const validate = () => {
@@ -121,6 +122,18 @@ export default function SignupScreen() {
     }
   };
 
+  const handleGoogleLogin = async () => {
+    setIsGoogleLoading(true);
+    try {
+      await useAuth().loginWithGoogle?.();
+    } catch (error) {
+      console.error('Google signup error:', error);
+      Alert.alert('Signup failed', 'Could not complete Google sign-in.');
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
   return (
     <GradientBackground>
       <KeyboardAvoidingView
@@ -210,8 +223,17 @@ export default function SignupScreen() {
             title="Sign Up"
             onPress={handleSignup}
             isLoading={isLoading}
+            disabled={locationPermission === null || isGoogleLoading}
             style={styles.button}
-            disabled={locationPermission === null}
+          />
+          
+          <Button
+            title="Continue with Google"
+            onPress={handleGoogleLogin}
+            isLoading={isGoogleLoading}
+            disabled={locationPermission === null || isLoading}
+            variant="secondary"
+            style={styles.googleButton}
           />
         </View>
         
@@ -268,6 +290,9 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 8,
+  },
+  googleButton: {
+    marginTop: 12,
   },
   locationSection: {
     marginBottom: 20,

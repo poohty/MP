@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { User } from '@/types';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 import type { VoicePreference } from '@/constants/voice';
+import * as WebBrowser from 'expo-web-browser';
 
 
 const USER_STORAGE_KEY = 'meal-planner-user';
@@ -17,9 +18,9 @@ type SignupResult =
   | { ok: false; reason: 'SIGNUP_FAILED' | 'USERNAME_TAKEN' };
 
 // Supabase redirect URLs (must be allow-listed in Supabase Dashboard > Authentication > URL Configuration):
-//   Signup verification: myapp://auth-callback
-//   Password reset:      myapp://reset-password
-const EMAIL_REDIRECT_URL = 'myapp://auth-callback';
+//   Signup verification: rorkai://auth-callback
+//   Password reset:      rorkai://reset-password
+const EMAIL_REDIRECT_URL = 'rorkai://auth-callback';
 
 function getEmailRedirectTo(): string {
   console.log('🔗 Email redirect URL:', EMAIL_REDIRECT_URL);
@@ -491,6 +492,33 @@ const result = createContextHook(() => {
     [upsertUserProfileToSupabase]
   );
 
+  const loginWithGoogle = useCallback(async (): Promise<{ ok: boolean; reason?: string }> => {
+    if (!isSupabaseEnabled) return { ok: false, reason: 'LOGIN_FAILED' };
+    
+    try {
+      console.log('🔗 Initiating Google OAuth Login...');
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: EMAIL_REDIRECT_URL,
+          skipBrowserRedirect: true,
+        },
+      });
+      
+      if (error || !data?.url) {
+        console.error('❌ Google Login failed:', error?.message);
+        return { ok: false, reason: 'LOGIN_FAILED' };
+      }
+      
+      await WebBrowser.openAuthSessionAsync(data.url, EMAIL_REDIRECT_URL);
+      
+      return { ok: true };
+    } catch (error) {
+      console.error('❌ Google Login error:', error);
+      return { ok: false, reason: 'LOGIN_FAILED' };
+    }
+  }, []);
+
   const updateProfile = useCallback(async (updates: Partial<User>) => {
     try {
       if (!user) return;
@@ -529,9 +557,10 @@ const result = createContextHook(() => {
     login,
     signup,
     logout,
+    loginWithGoogle,
     updateProfile,
     isAuthenticated: !!user,
-  }), [user, isLoading, login, signup, logout, updateProfile]);
+  }), [user, isLoading, login, signup, logout, loginWithGoogle, updateProfile]);
 });
 
 const AuthContext = result[0];

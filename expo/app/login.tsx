@@ -19,6 +19,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
 
   const validate = () => {
@@ -51,11 +52,7 @@ export default function LoginScreen() {
 
       if (!result.ok) {
         if (result.reason === 'EMAIL_NOT_VERIFIED') {
-          Alert.alert(
-            'Email not verified',
-            'Please verify your email using the link we sent, then log in.',
-            [{ text: 'OK' }]
-          );
+          router.push({ pathname: '/verify-email', params: { email: email.trim() } });
           return;
         }
 
@@ -66,6 +63,20 @@ export default function LoginScreen() {
       setErrors({ email: 'An error occurred during login' });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setIsGoogleLoading(true);
+    try {
+      // The auth-store loginWithGoogle uses WebBrowser.openAuthSessionAsync
+      // which handles the redirect logic out to the auth-callback deep link
+      await useAuth().loginWithGoogle?.();
+    } catch (error) {
+      console.error('Google login error:', error);
+      Alert.alert('Login failed', 'Could not complete Google sign-in.');
+    } finally {
+      setIsGoogleLoading(false);
     }
   };
 
@@ -85,7 +96,7 @@ export default function LoginScreen() {
     try {
       console.log('🔑 Sending password reset email to:', trimmed);
       const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
-        redirectTo: 'myapp://reset-password',
+        redirectTo: 'rorkai://reset-password',
       });
       if (error) {
         console.error('🔑 Password reset error:', error);
@@ -118,7 +129,7 @@ export default function LoginScreen() {
     }
 
     try {
-      const emailRedirectTo = 'myapp://auth-callback';
+      const emailRedirectTo = 'rorkai://auth-callback';
 
       console.log('📨 Resend verification email:', { email: trimmed, emailRedirectTo });
       const { error } = await supabase.auth.resend({
@@ -204,7 +215,17 @@ export default function LoginScreen() {
             title="Log In"
             onPress={handleLogin}
             isLoading={isLoading}
+            disabled={isGoogleLoading}
             style={styles.button}
+          />
+          
+          <Button
+            title="Continue with Google"
+            onPress={handleGoogleLogin}
+            isLoading={isGoogleLoading}
+            disabled={isLoading}
+            variant="secondary"
+            style={styles.googleButton}
           />
 
           <TouchableOpacity
@@ -325,6 +346,9 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 8,
+  },
+  googleButton: {
+    marginTop: 12,
   },
   forgotButton: {
     alignSelf: 'center',

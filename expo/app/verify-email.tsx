@@ -43,7 +43,7 @@ export default function VerifyEmailScreen() {
 
     try {
       setIsResending(true);
-      const emailRedirectTo = 'myapp://auth-callback';
+      const emailRedirectTo = 'rorkai://auth-callback';
 
       console.log('📨 VerifyEmail: resend verification email:', { email: trimmed, emailRedirectTo });
       const { error } = await supabase.auth.resend({
@@ -82,8 +82,10 @@ export default function VerifyEmailScreen() {
 
             <Text style={styles.title}>Verify your email</Text>
             <Text style={styles.subtitle} testID="verifyEmailBody">
-              We sent a verification link to: {email || 'your email'}.
+              You have not verified your email yet...
+              {'\n\n'}We sent a verification link to: {email || 'your email'}.
               {'\n\n'}Open your email and tap the link to verify. The link will open the app and confirm your email automatically.
+              {'\n\n'}Please check your spam folder if you did not receive it.
             </Text>
 
             <View style={styles.tipBox}>
