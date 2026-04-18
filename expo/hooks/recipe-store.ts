@@ -89,7 +89,7 @@ async function fetchSourceImageNoAI(sourceUrl: string): Promise<string> {
   }
 }
 
-const [RecipeContext, useRecipes] = createContextHook(() => { // eslint-disable-line rork/general-context-optimization
+const [RecipeContext, useRecipes] = createContextHook(() => { // eslint-disable-line custom/general-context-optimization
   const { user } = useAuth();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -304,7 +304,7 @@ const [RecipeContext, useRecipes] = createContextHook(() => { // eslint-disable-
   }, [user?.id, syncRecipeToSupabase]);
 
   const generateAiThumbnail = useCallback(async (recipeName: string, category: string): Promise<string> => {
-    console.log(`🎨 Rork AI thumbnail generation for "${recipeName}" in category "${category}"`);
+    console.log(`🎨 AI thumbnail generation for "${recipeName}" in category "${category}"`);
 
     try {
       const safeName = (recipeName || "").toString().trim();
@@ -348,10 +348,10 @@ const [RecipeContext, useRecipes] = createContextHook(() => { // eslint-disable-
           console.warn("⚠️ AI response did not contain a usable base64 image");
         }
       } else {
-        console.warn(`⚠️ Rork AI image generation failed: HTTP ${response.status}`);
+        console.warn(`⚠️ AI image generation failed: HTTP ${response.status}`);
       }
     } catch (error: any) {
-      console.warn("⚠️ Rork AI image generation error:", error?.message || error);
+      console.warn("⚠️ AI image generation error:", error?.message || error);
     }
 
     // If we reach this point, AI generation failed

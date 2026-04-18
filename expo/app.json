@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": ["rorkai", "mealplannerroulette"],
+    "scheme": ["mealplannerroulette"],
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.rork.meal-planner-roulette",
+      "bundleIdentifier": "com.mealplanner.roulette",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos",
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera",
@@ -35,7 +35,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.meal-planner-roulette",
+      "package": "com.mealplanner.roulette",
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
@@ -55,7 +55,7 @@
       [
         "expo-router",
         {
-          "origin": "https://rork.com/"
+          "origin": "https://mealplannerroulette.com/"
         }
       ],
       [

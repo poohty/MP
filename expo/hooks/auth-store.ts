@@ -18,9 +18,9 @@ type SignupResult =
   | { ok: false; reason: 'SIGNUP_FAILED' | 'USERNAME_TAKEN' };
 
 // Supabase redirect URLs (must be allow-listed in Supabase Dashboard > Authentication > URL Configuration):
-//   Signup verification: rorkai://auth-callback
-//   Password reset:      rorkai://reset-password
-const EMAIL_REDIRECT_URL = 'rorkai://auth-callback';
+//   Signup verification: mealplannerroulette://auth-callback
+//   Password reset:      mealplannerroulette://reset-password
+const EMAIL_REDIRECT_URL = 'mealplannerroulette://auth-callback';
 
 function getEmailRedirectTo(): string {
   console.log('🔗 Email redirect URL:', EMAIL_REDIRECT_URL);

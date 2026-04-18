@@ -12,7 +12,7 @@ import { ArrowLeft } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function LoginScreen() {
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const { isDark } = useTheme();
   const themeColors = isDark ? Colors.dark : Colors.light;
   const [email, setEmail] = useState('');
@@ -69,9 +69,7 @@ export default function LoginScreen() {
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true);
     try {
-      // The auth-store loginWithGoogle uses WebBrowser.openAuthSessionAsync
-      // which handles the redirect logic out to the auth-callback deep link
-      await useAuth().loginWithGoogle?.();
+      await loginWithGoogle?.();
     } catch (error) {
       console.error('Google login error:', error);
       Alert.alert('Login failed', 'Could not complete Google sign-in.');
@@ -96,7 +94,7 @@ export default function LoginScreen() {
     try {
       console.log('🔑 Sending password reset email to:', trimmed);
       const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
-        redirectTo: 'rorkai://reset-password',
+        redirectTo: 'mealplannerroulette://reset-password',
       });
       if (error) {
         console.error('🔑 Password reset error:', error);
@@ -129,7 +127,7 @@ export default function LoginScreen() {
     }
 
     try {
-      const emailRedirectTo = 'rorkai://auth-callback';
+      const emailRedirectTo = 'mealplannerroulette://auth-callback';
 
       console.log('📨 Resend verification email:', { email: trimmed, emailRedirectTo });
       const { error } = await supabase.auth.resend({

@@ -43,7 +43,7 @@ export default function VerifyEmailScreen() {
 
     try {
       setIsResending(true);
-      const emailRedirectTo = 'rorkai://auth-callback';
+      const emailRedirectTo = 'mealplannerroulette://auth-callback';
 
       console.log('📨 VerifyEmail: resend verification email:', { email: trimmed, emailRedirectTo });
       const { error } = await supabase.auth.resend({

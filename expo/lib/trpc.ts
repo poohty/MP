@@ -8,9 +8,9 @@ import superjson from "superjson";
 export const trpc = createTRPCReact<AppRouter>();
 
 export function getBackendBaseUrl(): string {
-  const envUrl = (process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '').trim();
+  const envUrl = (process.env.EXPO_PUBLIC_API_BASE_URL ?? process.env.EXPO_PUBLIC_RORK_API_BASE_URL ?? '').trim();
   if (envUrl) {
-    console.log('[getBackendBaseUrl] Using EXPO_PUBLIC_RORK_API_BASE_URL:', envUrl);
+    console.log('[getBackendBaseUrl] Using env URL:', envUrl);
     return envUrl;
   }
 

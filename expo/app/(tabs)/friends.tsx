@@ -128,7 +128,7 @@ export default function FriendsScreen() {
       if (!supabaseUrl || !supabaseKey) {
         Alert.alert(
           '⚠️ Environment Variables Missing',
-          `Supabase URL: ${supabaseUrl ? '✅ SET' : '❌ NOT SET'}\nSupabase Key: ${supabaseKey ? '✅ SET' : '❌ NOT SET'}\n\nPlease configure environment variables in Rork settings.`
+          `Supabase URL: ${supabaseUrl ? '✅ SET' : '❌ NOT SET'}\nSupabase Key: ${supabaseKey ? '✅ SET' : '❌ NOT SET'}\n\nPlease configure environment variables in your settings.`
         );
         return;
       }
