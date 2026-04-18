@@ -22,6 +22,8 @@ export default function VerifyEmailScreen() {
   const params = useLocalSearchParams<VerifyEmailParams>();
   const email = useMemo(() => normalizeEmailParam(params.email), [params.email]);
   const [isResending, setIsResending] = useState<boolean>(false);
+  const [isTestingEmail, setIsTestingEmail] = useState<boolean>(false);
+  const isDevMode = process.env.EXPO_PUBLIC_ENV_MODE === 'dev';
 
   const handleResend = useCallback(async () => {
     const trimmed = email.trim();
@@ -63,6 +65,34 @@ export default function VerifyEmailScreen() {
       Alert.alert('Could not resend', 'Please try again.', [{ text: 'OK' }]);
     } finally {
       setIsResending(false);
+    }
+  }, [email]);
+
+  const handleTestEmail = useCallback(async () => {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      Alert.alert('Missing email', 'Cannot test email delivery without an email address.');
+      return;
+    }
+
+    try {
+      setIsTestingEmail(true);
+      console.log('🧪 DEV MODE: Sending test Magic Link to:', trimmed);
+      const { error } = await supabase.auth.signInWithOtp({
+        email: trimmed,
+        options: { emailRedirectTo: 'mealplannerroulette://auth-callback' },
+      });
+      if (error) {
+        console.error('🧪 TEST EMAIL ERROR:', error);
+        Alert.alert('Test Failed', `Error sending test email:\n\n${error.message}`);
+      } else {
+        Alert.alert('Test Sent!', 'Magic link test sent! If you do not receive it in 2-3 minutes, your Supabase SMTP is failing or rate-limited.');
+      }
+    } catch (e) {
+      console.error('🧪 TEST EMAIL UNEXPECTED ERROR:', e);
+      Alert.alert('Test Failed', 'Unexpected error occurred.');
+    } finally {
+      setIsTestingEmail(false);
     }
   }, [email]);
 
@@ -111,6 +141,23 @@ export default function VerifyEmailScreen() {
                 variant="primary"
                 testID="backToLoginButton"
               />
+
+              {isDevMode && (
+                <View style={styles.devBox}>
+                  <Text style={styles.devTitle}>DEV MODE: Testing</Text>
+                  <Button
+                    title={isTestingEmail ? 'Testing...' : 'Test Email Delivery (Magic Link)'}
+                    onPress={handleTestEmail}
+                    isLoading={isTestingEmail}
+                    disabled={isTestingEmail || isResending}
+                    variant="secondary"
+                    style={styles.devButton}
+                  />
+                  <Text style={styles.devSubtitle}>
+                    Use this to verify if your Supabase free-tier SMTP is working or blocking emails.
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
         </ScrollView>
@@ -173,5 +220,29 @@ const styles = StyleSheet.create({
   actions: {
     marginTop: 16,
     gap: 10,
+  },
+  devBox: {
+    marginTop: 20,
+    padding: 12,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  devTitle: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#666',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  devButton: {
+    backgroundColor: '#333',
+  },
+  devSubtitle: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 8,
+    textAlign: 'center',
   },
 });
