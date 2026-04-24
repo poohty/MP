@@ -4,7 +4,7 @@ import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import { useAuth } from '@/hooks/auth-store';
 import Colors from '@/constants/colors';
-import { ExternalLink, CheckSquare, Square, Edit3, Camera, Link as LinkIcon, BookPlus, Mic, MicOff } from 'lucide-react-native';
+import { ExternalLink, CheckSquare, Square, Edit3, Camera, Link as LinkIcon, BookPlus, Mic, MicOff, StickyNote, Trash2 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import GradientBackground from '@/components/GradientBackground';
 import { Recipe, RecipeCategory } from '@/types';
@@ -30,7 +30,7 @@ const RECIPE_DETAIL_WALKTHROUGH_STEPS: WalkthroughStep[] = [
 export default function RecipeDetailsScreen() {
   const { id, friendUserId } = useLocalSearchParams<{ id: string; friendUserId?: string }>();
   const { user } = useAuth();
-  const { recipes, updateRecipeStepProgress, changeRecipeCategory, updateRecipeImage, convertImageToBase64, importRecipeFromFriend, getRecipesForUser } = useRecipes();
+  const { recipes, updateRecipeStepProgress, changeRecipeCategory, updateRecipeImage, updateRecipeNotes, convertImageToBase64, importRecipeFromFriend, getRecipesForUser } = useRecipes();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [checkedSteps, setCheckedSteps] = useState<{ [stepIndex: number]: boolean }>({});
   const [isLoadingContent, setIsLoadingContent] = useState(false);
@@ -39,6 +39,9 @@ export default function RecipeDetailsScreen() {
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [, setIsImporting] = useState(false);
+  const [isEditingNotes, setIsEditingNotes] = useState<boolean>(false);
+  const [notesDraft, setNotesDraft] = useState<string>('');
+  const [isSavingNotes, setIsSavingNotes] = useState<boolean>(false);
 
   const walkthrough = useWalkthrough('recipe-detail', RECIPE_DETAIL_WALKTHROUGH_STEPS);
 
@@ -73,6 +76,8 @@ export default function RecipeDetailsScreen() {
       if (foundRecipe) {
         setRecipe(foundRecipe);
         setCheckedSteps(foundRecipe.stepProgress || {});
+        setNotesDraft(foundRecipe.userNotes ?? '');
+        setIsEditingNotes(false);
         if (!foundRecipe.content && foundRecipe.url) {
           void handleExtractRecipeContent(foundRecipe);
         }
@@ -769,6 +774,122 @@ export default function RecipeDetailsScreen() {
                     <Text style={styles.notesText}>{parsedContent.notes}</Text>
                   </View>
                 ) : null}
+
+                {/* My Notes (user-authored) */}
+                {!friendUserId && (
+                  <View style={styles.section} testID="my-notes-section">
+                    <View style={styles.myNotesHeader}>
+                      <View style={styles.myNotesTitleRow}>
+                        <StickyNote size={18} color={Colors.primary} />
+                        <Text style={[styles.sectionTitle, { marginBottom: 0, marginLeft: 8 }]}>My Notes</Text>
+                      </View>
+                      {!isEditingNotes && (
+                        <TouchableOpacity
+                          onPress={() => {
+                            setNotesDraft(recipe.userNotes ?? '');
+                            setIsEditingNotes(true);
+                          }}
+                          style={styles.myNotesEditBtn}
+                          testID="my-notes-edit-btn"
+                        >
+                          <Edit3 size={16} color={Colors.primary} />
+                          <Text style={styles.myNotesEditBtnText}>{recipe.userNotes ? 'Edit' : 'Add'}</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+
+                    {isEditingNotes ? (
+                      <View>
+                        <TextInput
+                          value={notesDraft}
+                          onChangeText={setNotesDraft}
+                          placeholder="Add your personal notes about this recipe..."
+                          placeholderTextColor={Colors.textSecondary}
+                          style={styles.myNotesInput}
+                          multiline
+                          textAlignVertical="top"
+                          editable={!isSavingNotes}
+                          testID="my-notes-input"
+                        />
+                        <View style={styles.myNotesActions}>
+                          <TouchableOpacity
+                            style={[styles.myNotesBtn, styles.myNotesCancelBtn]}
+                            onPress={() => {
+                              setIsEditingNotes(false);
+                              setNotesDraft(recipe.userNotes ?? '');
+                            }}
+                            disabled={isSavingNotes}
+                            testID="my-notes-cancel-btn"
+                          >
+                            <Text style={styles.myNotesCancelText}>Cancel</Text>
+                          </TouchableOpacity>
+                          {recipe.userNotes ? (
+                            <TouchableOpacity
+                              style={[styles.myNotesBtn, styles.myNotesClearBtn]}
+                              onPress={() => {
+                                Alert.alert(
+                                  'Remove note?',
+                                  'This will delete your note for this recipe.',
+                                  [
+                                    { text: 'Cancel', style: 'cancel' },
+                                    {
+                                      text: 'Remove',
+                                      style: 'destructive',
+                                      onPress: async () => {
+                                        setIsSavingNotes(true);
+                                        const ok = await updateRecipeNotes(recipe.id, '');
+                                        setIsSavingNotes(false);
+                                        if (ok) {
+                                          setRecipe({ ...recipe, userNotes: '' });
+                                          setNotesDraft('');
+                                          setIsEditingNotes(false);
+                                        } else {
+                                          Alert.alert('Error', 'Failed to remove note');
+                                        }
+                                      },
+                                    },
+                                  ]
+                                );
+                              }}
+                              disabled={isSavingNotes}
+                              testID="my-notes-clear-btn"
+                            >
+                              <Trash2 size={16} color={Colors.error ?? '#E74C3C'} />
+                              <Text style={styles.myNotesClearText}>Remove</Text>
+                            </TouchableOpacity>
+                          ) : null}
+                          <TouchableOpacity
+                            style={[styles.myNotesBtn, styles.myNotesSaveBtn]}
+                            onPress={async () => {
+                              const trimmed = notesDraft.trim();
+                              setIsSavingNotes(true);
+                              const ok = await updateRecipeNotes(recipe.id, trimmed);
+                              setIsSavingNotes(false);
+                              if (ok) {
+                                setRecipe({ ...recipe, userNotes: trimmed });
+                                setIsEditingNotes(false);
+                              } else {
+                                Alert.alert('Error', 'Failed to save note');
+                              }
+                            }}
+                            disabled={isSavingNotes}
+                            testID="my-notes-save-btn"
+                          >
+                            {isSavingNotes ? (
+                              <ActivityIndicator size="small" color="#FFFFFF" />
+                            ) : (
+                              <Text style={styles.myNotesSaveText}>Save</Text>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : recipe.userNotes ? (
+                      <Text style={styles.myNotesText} testID="my-notes-text">{recipe.userNotes}</Text>
+                    ) : (
+                      <Text style={styles.myNotesEmpty}>No notes yet. Tap Add to jot down tips, tweaks, or reminders for this recipe.</Text>
+                    )}
+                  </View>
+                )}
                 
                 {/* Show raw content with step checkboxes ONLY for instruction-like content */}
                 {(parsedContent.ingredients.length === 0 && parsedContent.instructions.length === 0) && (
@@ -1110,6 +1231,94 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
+    fontStyle: 'italic',
+  },
+  myNotesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  myNotesTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  myNotesEditBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: Colors.primary + '15',
+  },
+  myNotesEditBtnText: {
+    color: Colors.primary,
+    fontWeight: '600',
+    fontSize: 13,
+    marginLeft: 6,
+  },
+  myNotesInput: {
+    minHeight: 100,
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.textSecondary + '30',
+    padding: 12,
+    color: Colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  myNotesActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 10,
+    gap: 8,
+  },
+  myNotesBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  myNotesCancelBtn: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.textSecondary + '40',
+  },
+  myNotesCancelText: {
+    color: Colors.textSecondary,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  myNotesClearBtn: {
+    backgroundColor: (Colors.error ?? '#E74C3C') + '15',
+  },
+  myNotesClearText: {
+    color: Colors.error ?? '#E74C3C',
+    fontWeight: '600',
+    fontSize: 13,
+    marginLeft: 4,
+  },
+  myNotesSaveBtn: {
+    backgroundColor: Colors.primary,
+    minWidth: 72,
+    justifyContent: 'center',
+  },
+  myNotesSaveText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  myNotesText: {
+    color: Colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  myNotesEmpty: {
+    color: Colors.textSecondary,
+    fontSize: 13,
     fontStyle: 'italic',
   },
   rawContentContainer: {

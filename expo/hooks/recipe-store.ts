@@ -1296,6 +1296,22 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     }
   }, [recipes, saveRecipes]);
 
+  const updateRecipeNotes = useCallback(async (recipeId: string, userNotes: string) => {
+    try {
+      const updatedRecipes = recipes.map(recipe =>
+        recipe.id === recipeId
+          ? { ...recipe, userNotes }
+          : recipe
+      );
+      await saveRecipes(updatedRecipes);
+      console.log(`[updateRecipeNotes] Saved notes for recipe ${recipeId} (length=${userNotes.length})`);
+      return true;
+    } catch (error) {
+      console.error('Failed to update recipe notes:', error);
+      return false;
+    }
+  }, [recipes, saveRecipes]);
+
   const deleteRecipeFromSupabase = useCallback(async (recipeId: string, ownerUserId: string) => {
     if (!isSupabaseEnabled) {
       console.log('📴 Supabase disabled, skipping remote delete');
@@ -1925,6 +1941,7 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     convertImageToBase64,
     importBookmarksWithRetry,
     updateRecipeImage,
+    updateRecipeNotes,
     importRecipeFromFriend,
     getRecipesForUser,
     loadRecipesFromSupabase,

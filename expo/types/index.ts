@@ -44,6 +44,7 @@ export type Recipe = {
   nutritionalInfo?: string;
   isFavorite?: boolean;
   stepProgress?: { [stepIndex: number]: boolean };
+  userNotes?: string;
   createdAt: number;
   ownerUserId?: string;
   importedFromUserId?: string;
