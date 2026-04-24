@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert, Platform, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Keyboard, Dimensions } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert, Platform, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Keyboard, Pressable } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import { useAuth } from '@/hooks/auth-store';
@@ -42,53 +42,6 @@ export default function RecipeDetailsScreen() {
   const [isEditingNotes, setIsEditingNotes] = useState<boolean>(false);
   const [notesDraft, setNotesDraft] = useState<string>('');
   const [isSavingNotes, setIsSavingNotes] = useState<boolean>(false);
-  const scrollViewRef = useRef<ScrollView | null>(null);
-  const notesSectionYRef = useRef<number>(0);
-  const notesActionsBottomInSectionRef = useRef<number>(0);
-  const [keyboardHeight, setKeyboardHeight] = useState<number>(0);
-  const isEditingNotesRef = useRef<boolean>(false);
-
-  useEffect(() => { isEditingNotesRef.current = isEditingNotes; }, [isEditingNotes]);
-
-  const scrollNotesActionsAboveKeyboard = useCallback((kbHeight?: number) => {
-    try {
-      const kb = typeof kbHeight === 'number' ? kbHeight : keyboardHeight;
-      const winH = Dimensions.get('window').height;
-      const effectiveKb = kb > 0 ? kb : (Platform.OS === 'ios' ? 336 : 300);
-      const headerAndSafe = Platform.OS === 'ios' ? 120 : 80;
-      const visibleH = Math.max(200, winH - effectiveKb - headerAndSafe);
-      const absBottom = notesSectionYRef.current + notesActionsBottomInSectionRef.current;
-      const target = Math.max(0, absBottom - visibleH + 24);
-      scrollViewRef.current?.scrollTo({ y: target, animated: true });
-    } catch (e) {
-      console.log('scrollNotesActionsAboveKeyboard error', e);
-    }
-  }, [keyboardHeight]);
-
-  const scrollToNotesSection = useCallback(() => {
-    setTimeout(() => {
-      scrollNotesActionsAboveKeyboard();
-    }, Platform.OS === 'ios' ? 250 : 150);
-  }, [scrollNotesActionsAboveKeyboard]);
-
-  useEffect(() => {
-    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvt, (e) => {
-      const h = e?.endCoordinates?.height ?? 0;
-      setKeyboardHeight(h);
-      if (isEditingNotesRef.current) {
-        setTimeout(() => scrollNotesActionsAboveKeyboard(h), 50);
-      }
-    });
-    const hideSub = Keyboard.addListener(hideEvt, () => {
-      setKeyboardHeight(0);
-    });
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, [scrollNotesActionsAboveKeyboard]);
 
   const walkthrough = useWalkthrough('recipe-detail', RECIPE_DETAIL_WALKTHROUGH_STEPS);
 
@@ -609,17 +562,10 @@ export default function RecipeDetailsScreen() {
         }} 
       />
       <GradientBackground>
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
-        >
         <ScrollView
-          ref={scrollViewRef}
           style={styles.container}
-          contentContainerStyle={{ paddingBottom: isEditingNotes ? Math.max(320, keyboardHeight + 120) : 32 }}
+          contentContainerStyle={{ paddingBottom: 32 }}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
         >
         <View style={styles.imageContainer}>
           {getImageSource(recipe) ? (
@@ -835,126 +781,26 @@ export default function RecipeDetailsScreen() {
 
                 {/* My Notes (user-authored) */}
                 {!friendUserId && (
-                  <View
-                    style={styles.section}
-                    testID="my-notes-section"
-                    onLayout={(e) => { notesSectionYRef.current = e.nativeEvent.layout.y; }}
-                  >
+                  <View style={styles.section} testID="my-notes-section">
                     <View style={styles.myNotesHeader}>
                       <View style={styles.myNotesTitleRow}>
                         <StickyNote size={18} color={Colors.primary} />
                         <Text style={[styles.sectionTitle, { marginBottom: 0, marginLeft: 8 }]}>My Notes</Text>
                       </View>
-                      {!isEditingNotes && (
-                        <TouchableOpacity
-                          onPress={() => {
-                            setNotesDraft(recipe.userNotes ?? '');
-                            setIsEditingNotes(true);
-                            scrollToNotesSection();
-                          }}
-                          style={styles.myNotesEditBtn}
-                          testID="my-notes-edit-btn"
-                        >
-                          <Edit3 size={16} color={Colors.primary} />
-                          <Text style={styles.myNotesEditBtnText}>{recipe.userNotes ? 'Edit' : 'Add'}</Text>
-                        </TouchableOpacity>
-                      )}
+                      <TouchableOpacity
+                        onPress={() => {
+                          setNotesDraft(recipe.userNotes ?? '');
+                          setIsEditingNotes(true);
+                        }}
+                        style={styles.myNotesEditBtn}
+                        testID="my-notes-edit-btn"
+                      >
+                        <Edit3 size={16} color={Colors.primary} />
+                        <Text style={styles.myNotesEditBtnText}>{recipe.userNotes ? 'Edit' : 'Add'}</Text>
+                      </TouchableOpacity>
                     </View>
 
-                    {isEditingNotes ? (
-                      <View>
-                        <TextInput
-                          value={notesDraft}
-                          onChangeText={setNotesDraft}
-                          placeholder="Add your personal notes about this recipe..."
-                          placeholderTextColor={Colors.textSecondary}
-                          style={styles.myNotesInput}
-                          multiline
-                          textAlignVertical="top"
-                          editable={!isSavingNotes}
-                          onFocus={() => scrollNotesActionsAboveKeyboard()}
-                          testID="my-notes-input"
-                        />
-                        <View
-                          style={styles.myNotesActions}
-                          onLayout={(e) => {
-                            notesActionsBottomInSectionRef.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
-                          }}
-                        >
-                          <TouchableOpacity
-                            style={[styles.myNotesBtn, styles.myNotesCancelBtn]}
-                            onPress={() => {
-                              Keyboard.dismiss();
-                              setIsEditingNotes(false);
-                              setNotesDraft(recipe.userNotes ?? '');
-                            }}
-                            disabled={isSavingNotes}
-                            testID="my-notes-cancel-btn"
-                          >
-                            <Text style={styles.myNotesCancelText}>Cancel</Text>
-                          </TouchableOpacity>
-                          {recipe.userNotes ? (
-                            <TouchableOpacity
-                              style={[styles.myNotesBtn, styles.myNotesClearBtn]}
-                              onPress={() => {
-                                Alert.alert(
-                                  'Remove note?',
-                                  'This will delete your note for this recipe.',
-                                  [
-                                    { text: 'Cancel', style: 'cancel' },
-                                    {
-                                      text: 'Remove',
-                                      style: 'destructive',
-                                      onPress: async () => {
-                                        setIsSavingNotes(true);
-                                        const ok = await updateRecipeNotes(recipe.id, '');
-                                        setIsSavingNotes(false);
-                                        if (ok) {
-                                          setRecipe({ ...recipe, userNotes: '' });
-                                          setNotesDraft('');
-                                          setIsEditingNotes(false);
-                                        } else {
-                                          Alert.alert('Error', 'Failed to remove note');
-                                        }
-                                      },
-                                    },
-                                  ]
-                                );
-                              }}
-                              disabled={isSavingNotes}
-                              testID="my-notes-clear-btn"
-                            >
-                              <Trash2 size={16} color={Colors.error ?? '#E74C3C'} />
-                              <Text style={styles.myNotesClearText}>Remove</Text>
-                            </TouchableOpacity>
-                          ) : null}
-                          <TouchableOpacity
-                            style={[styles.myNotesBtn, styles.myNotesSaveBtn]}
-                            onPress={async () => {
-                              const trimmed = notesDraft.trim();
-                              Keyboard.dismiss();
-                              setIsSavingNotes(true);
-                              const ok = await updateRecipeNotes(recipe.id, trimmed);
-                              setIsSavingNotes(false);
-                              if (ok) {
-                                setRecipe({ ...recipe, userNotes: trimmed });
-                                setIsEditingNotes(false);
-                              } else {
-                                Alert.alert('Error', 'Failed to save note');
-                              }
-                            }}
-                            disabled={isSavingNotes}
-                            testID="my-notes-save-btn"
-                          >
-                            {isSavingNotes ? (
-                              <ActivityIndicator size="small" color="#FFFFFF" />
-                            ) : (
-                              <Text style={styles.myNotesSaveText}>Save</Text>
-                            )}
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    ) : recipe.userNotes ? (
+                    {recipe.userNotes ? (
                       <Text style={styles.myNotesText} testID="my-notes-text">{recipe.userNotes}</Text>
                     ) : (
                       <Text style={styles.myNotesEmpty}>No notes yet. Tap Add to jot down tips, tweaks, or reminders for this recipe.</Text>
@@ -1060,7 +906,6 @@ export default function RecipeDetailsScreen() {
           ) : null}
         </View>
         </ScrollView>
-        </KeyboardAvoidingView>
         <WalkthroughModal
           visible={walkthrough.isVisible}
           step={walkthrough.currentStep}
@@ -1068,6 +913,122 @@ export default function RecipeDetailsScreen() {
           totalSteps={walkthrough.totalSteps}
           onNext={walkthrough.next}
         />
+        <Modal
+          visible={isEditingNotes}
+          transparent
+          animationType="slide"
+          onRequestClose={() => {
+            Keyboard.dismiss();
+            setIsEditingNotes(false);
+          }}
+        >
+          <KeyboardAvoidingView
+            style={styles.noteModalWrap}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <Pressable
+              style={styles.noteModalBackdrop}
+              onPress={() => {
+                Keyboard.dismiss();
+                setIsEditingNotes(false);
+                setNotesDraft(recipe.userNotes ?? '');
+              }}
+            />
+            <View style={styles.noteSheet}>
+              <View style={styles.noteSheetHandle} />
+              <View style={styles.noteSheetHeader}>
+                <StickyNote size={18} color={Colors.primary} />
+                <Text style={styles.noteSheetTitle}>My Notes</Text>
+              </View>
+              <TextInput
+                value={notesDraft}
+                onChangeText={setNotesDraft}
+                placeholder="Add your personal notes about this recipe..."
+                placeholderTextColor={Colors.textSecondary}
+                style={styles.noteSheetInput}
+                multiline
+                textAlignVertical="top"
+                editable={!isSavingNotes}
+                autoFocus
+                testID="my-notes-input"
+              />
+              <View style={styles.noteSheetActions}>
+                <TouchableOpacity
+                  style={[styles.myNotesBtn, styles.myNotesCancelBtn]}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setIsEditingNotes(false);
+                    setNotesDraft(recipe.userNotes ?? '');
+                  }}
+                  disabled={isSavingNotes}
+                  testID="my-notes-cancel-btn"
+                >
+                  <Text style={styles.myNotesCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                {recipe.userNotes ? (
+                  <TouchableOpacity
+                    style={[styles.myNotesBtn, styles.myNotesClearBtn]}
+                    onPress={() => {
+                      Alert.alert(
+                        'Remove note?',
+                        'This will delete your note for this recipe.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Remove',
+                            style: 'destructive',
+                            onPress: async () => {
+                              setIsSavingNotes(true);
+                              const ok = await updateRecipeNotes(recipe.id, '');
+                              setIsSavingNotes(false);
+                              if (ok) {
+                                setRecipe({ ...recipe, userNotes: '' });
+                                setNotesDraft('');
+                                Keyboard.dismiss();
+                                setIsEditingNotes(false);
+                              } else {
+                                Alert.alert('Error', 'Failed to remove note');
+                              }
+                            },
+                          },
+                        ]
+                      );
+                    }}
+                    disabled={isSavingNotes}
+                    testID="my-notes-clear-btn"
+                  >
+                    <Trash2 size={16} color={Colors.error ?? '#E74C3C'} />
+                    <Text style={styles.myNotesClearText}>Remove</Text>
+                  </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity
+                  style={[styles.myNotesBtn, styles.myNotesSaveBtn]}
+                  onPress={async () => {
+                    const trimmed = notesDraft.trim();
+                    Keyboard.dismiss();
+                    setIsSavingNotes(true);
+                    const ok = await updateRecipeNotes(recipe.id, trimmed);
+                    setIsSavingNotes(false);
+                    if (ok) {
+                      setRecipe({ ...recipe, userNotes: trimmed });
+                      setIsEditingNotes(false);
+                    } else {
+                      Alert.alert('Error', 'Failed to save note');
+                    }
+                  }}
+                  disabled={isSavingNotes}
+                  testID="my-notes-save-btn"
+                >
+                  {isSavingNotes ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.myNotesSaveText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
         <Modal
           visible={showImageModal}
           transparent
@@ -1392,6 +1353,59 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: 13,
     fontStyle: 'italic',
+  },
+  noteModalWrap: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  noteModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  noteSheet: {
+    backgroundColor: Colors.cardBackground ?? Colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 16,
+  },
+  noteSheetHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.textSecondary + '50',
+    marginBottom: 12,
+  },
+  noteSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  noteSheetTitle: {
+    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  noteSheetInput: {
+    minHeight: 140,
+    maxHeight: 220,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.textSecondary + '30',
+    padding: 12,
+    color: Colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  noteSheetActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 12,
+    gap: 8,
   },
   rawContentContainer: {
     backgroundColor: Colors.surface,
