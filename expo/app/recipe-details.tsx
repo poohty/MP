@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert, Platform, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Keyboard } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert, Platform, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Keyboard, Dimensions } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import { useAuth } from '@/hooks/auth-store';
@@ -44,16 +44,51 @@ export default function RecipeDetailsScreen() {
   const [isSavingNotes, setIsSavingNotes] = useState<boolean>(false);
   const scrollViewRef = useRef<ScrollView | null>(null);
   const notesSectionYRef = useRef<number>(0);
+  const notesActionsBottomInSectionRef = useRef<number>(0);
+  const [keyboardHeight, setKeyboardHeight] = useState<number>(0);
+  const isEditingNotesRef = useRef<boolean>(false);
+
+  useEffect(() => { isEditingNotesRef.current = isEditingNotes; }, [isEditingNotes]);
+
+  const scrollNotesActionsAboveKeyboard = useCallback((kbHeight?: number) => {
+    try {
+      const kb = typeof kbHeight === 'number' ? kbHeight : keyboardHeight;
+      const winH = Dimensions.get('window').height;
+      const effectiveKb = kb > 0 ? kb : (Platform.OS === 'ios' ? 336 : 300);
+      const headerAndSafe = Platform.OS === 'ios' ? 120 : 80;
+      const visibleH = Math.max(200, winH - effectiveKb - headerAndSafe);
+      const absBottom = notesSectionYRef.current + notesActionsBottomInSectionRef.current;
+      const target = Math.max(0, absBottom - visibleH + 24);
+      scrollViewRef.current?.scrollTo({ y: target, animated: true });
+    } catch (e) {
+      console.log('scrollNotesActionsAboveKeyboard error', e);
+    }
+  }, [keyboardHeight]);
 
   const scrollToNotesSection = useCallback(() => {
     setTimeout(() => {
-      try {
-        scrollViewRef.current?.scrollTo({ y: Math.max(0, notesSectionYRef.current - 16), animated: true });
-      } catch (e) {
-        console.log('scrollToNotesSection error', e);
-      }
+      scrollNotesActionsAboveKeyboard();
     }, Platform.OS === 'ios' ? 250 : 150);
-  }, []);
+  }, [scrollNotesActionsAboveKeyboard]);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) => {
+      const h = e?.endCoordinates?.height ?? 0;
+      setKeyboardHeight(h);
+      if (isEditingNotesRef.current) {
+        setTimeout(() => scrollNotesActionsAboveKeyboard(h), 50);
+      }
+    });
+    const hideSub = Keyboard.addListener(hideEvt, () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [scrollNotesActionsAboveKeyboard]);
 
   const walkthrough = useWalkthrough('recipe-detail', RECIPE_DETAIL_WALKTHROUGH_STEPS);
 
@@ -582,8 +617,9 @@ export default function RecipeDetailsScreen() {
         <ScrollView
           ref={scrollViewRef}
           style={styles.container}
-          contentContainerStyle={{ paddingBottom: isEditingNotes ? 320 : 32 }}
+          contentContainerStyle={{ paddingBottom: isEditingNotes ? Math.max(320, keyboardHeight + 120) : 32 }}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
         >
         <View style={styles.imageContainer}>
           {getImageSource(recipe) ? (
@@ -836,9 +872,15 @@ export default function RecipeDetailsScreen() {
                           multiline
                           textAlignVertical="top"
                           editable={!isSavingNotes}
+                          onFocus={() => scrollNotesActionsAboveKeyboard()}
                           testID="my-notes-input"
                         />
-                        <View style={styles.myNotesActions}>
+                        <View
+                          style={styles.myNotesActions}
+                          onLayout={(e) => {
+                            notesActionsBottomInSectionRef.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
+                          }}
+                        >
                           <TouchableOpacity
                             style={[styles.myNotesBtn, styles.myNotesCancelBtn]}
                             onPress={() => {
