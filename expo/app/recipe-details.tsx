@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert, Platform, TextInput, Modal, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert, Platform, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Keyboard } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
 import { useAuth } from '@/hooks/auth-store';
@@ -42,6 +42,18 @@ export default function RecipeDetailsScreen() {
   const [isEditingNotes, setIsEditingNotes] = useState<boolean>(false);
   const [notesDraft, setNotesDraft] = useState<string>('');
   const [isSavingNotes, setIsSavingNotes] = useState<boolean>(false);
+  const scrollViewRef = useRef<ScrollView | null>(null);
+  const notesSectionYRef = useRef<number>(0);
+
+  const scrollToNotesSection = useCallback(() => {
+    setTimeout(() => {
+      try {
+        scrollViewRef.current?.scrollTo({ y: Math.max(0, notesSectionYRef.current - 16), animated: true });
+      } catch (e) {
+        console.log('scrollToNotesSection error', e);
+      }
+    }, Platform.OS === 'ios' ? 250 : 150);
+  }, []);
 
   const walkthrough = useWalkthrough('recipe-detail', RECIPE_DETAIL_WALKTHROUGH_STEPS);
 
@@ -562,7 +574,17 @@ export default function RecipeDetailsScreen() {
         }} 
       />
       <GradientBackground>
-        <ScrollView style={styles.container}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+        >
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.container}
+          contentContainerStyle={{ paddingBottom: isEditingNotes ? 320 : 32 }}
+          keyboardShouldPersistTaps="handled"
+        >
         <View style={styles.imageContainer}>
           {getImageSource(recipe) ? (
             <Image
@@ -777,7 +799,11 @@ export default function RecipeDetailsScreen() {
 
                 {/* My Notes (user-authored) */}
                 {!friendUserId && (
-                  <View style={styles.section} testID="my-notes-section">
+                  <View
+                    style={styles.section}
+                    testID="my-notes-section"
+                    onLayout={(e) => { notesSectionYRef.current = e.nativeEvent.layout.y; }}
+                  >
                     <View style={styles.myNotesHeader}>
                       <View style={styles.myNotesTitleRow}>
                         <StickyNote size={18} color={Colors.primary} />
@@ -788,6 +814,7 @@ export default function RecipeDetailsScreen() {
                           onPress={() => {
                             setNotesDraft(recipe.userNotes ?? '');
                             setIsEditingNotes(true);
+                            scrollToNotesSection();
                           }}
                           style={styles.myNotesEditBtn}
                           testID="my-notes-edit-btn"
@@ -815,6 +842,7 @@ export default function RecipeDetailsScreen() {
                           <TouchableOpacity
                             style={[styles.myNotesBtn, styles.myNotesCancelBtn]}
                             onPress={() => {
+                              Keyboard.dismiss();
                               setIsEditingNotes(false);
                               setNotesDraft(recipe.userNotes ?? '');
                             }}
@@ -862,6 +890,7 @@ export default function RecipeDetailsScreen() {
                             style={[styles.myNotesBtn, styles.myNotesSaveBtn]}
                             onPress={async () => {
                               const trimmed = notesDraft.trim();
+                              Keyboard.dismiss();
                               setIsSavingNotes(true);
                               const ok = await updateRecipeNotes(recipe.id, trimmed);
                               setIsSavingNotes(false);
@@ -989,6 +1018,7 @@ export default function RecipeDetailsScreen() {
           ) : null}
         </View>
         </ScrollView>
+        </KeyboardAvoidingView>
         <WalkthroughModal
           visible={walkthrough.isVisible}
           step={walkthrough.currentStep}
