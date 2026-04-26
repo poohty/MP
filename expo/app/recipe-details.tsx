@@ -683,6 +683,30 @@ export default function RecipeDetailsScreen() {
                   </View>
                 )}
                 
+                {/* Saved My Notes preview shown directly above Instructions */}
+                {!friendUserId && recipe.userNotes ? (
+                  <View style={styles.section} testID="my-notes-preview">
+                    <View style={styles.myNotesHeader}>
+                      <View style={styles.myNotesTitleRow}>
+                        <StickyNote size={18} color={Colors.primary} />
+                        <Text style={[styles.sectionTitle, { marginBottom: 0, marginLeft: 8 }]}>My Notes</Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setNotesDraft(recipe.userNotes ?? '');
+                          setIsEditingNotes(true);
+                        }}
+                        style={styles.myNotesEditBtn}
+                        testID="my-notes-edit-btn-preview"
+                      >
+                        <Edit3 size={16} color={Colors.primary} />
+                        <Text style={styles.myNotesEditBtnText}>Edit</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={styles.myNotesText} testID="my-notes-text-preview">{recipe.userNotes}</Text>
+                  </View>
+                ) : null}
+
                 {/* Instructions Section */}
                 {parsedContent.instructions.length > 0 && (
                   <View style={styles.section}>
@@ -800,9 +824,7 @@ export default function RecipeDetailsScreen() {
                       </TouchableOpacity>
                     </View>
 
-                    {recipe.userNotes ? (
-                      <Text style={styles.myNotesText} testID="my-notes-text">{recipe.userNotes}</Text>
-                    ) : (
+                    {recipe.userNotes ? null : (
                       <Text style={styles.myNotesEmpty}>No notes yet. Tap Add to jot down tips, tweaks, or reminders for this recipe.</Text>
                     )}
                   </View>
