@@ -13,7 +13,7 @@
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FF6B6B"
     },
     "ios": {
       "supportsTablet": true,
@@ -35,19 +35,20 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#FF6B6B"
       },
       "package": "com.mealplanner.roulette",
       "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "RECORD_AUDIO"
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
     "web": {
@@ -94,7 +95,13 @@
       "typedRoutes": true
     },
     "extra": {
-      "backendUrl": "https://dev-7g0mm8duw925pow1e3hiw.rorktest.dev"
+      "backendUrl": "https://dev-7g0mm8duw925pow1e3hiw.rorktest.dev",
+      "router": {
+        "origin": "https://mealplannerroulette.com/"
+      },
+      "eas": {
+        "projectId": "e36152c2-4d13-42cf-8583-ca804d6dae79"
+      }
     }
   }
 }
