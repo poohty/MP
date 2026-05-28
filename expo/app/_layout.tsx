@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, useSegments, router } from "expo-router";
+import { Stack, useSegments, router, type Href } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -9,6 +9,7 @@ import { RecipeContext } from "@/hooks/recipe-store";
 import { MealPlanContext } from "@/hooks/meal-plan-store";
 import { UserContext } from "@/hooks/user-store";
 import { ThemeContext, useTheme } from "@/hooks/theme-store";
+import { SubscriptionContext, useSubscription } from "@/hooks/subscription-store";
 import Colors from "@/constants/colors";
 import { trpc, trpcClient } from "@/lib/trpc";
 
@@ -21,7 +22,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isLoading) return;
 
-    const currentSegment = segments[0] ?? '';
+    const currentSegment = (segments[0] as string) ?? '';
     const isOnAuthRoute = AUTH_ROUTES.includes(currentSegment);
 
     console.log('[AuthGate] isAuthenticated:', isAuthenticated, 'segment:', currentSegment, 'isOnAuthRoute:', isOnAuthRoute);
@@ -38,6 +39,32 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function SubscriptionGate({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuth();
+  const { hasAccess, isLoading } = useSubscription();
+  const segments = useSegments();
+
+  useEffect(() => {
+    if (!isAuthenticated || isLoading) return;
+
+    const currentSegment = (segments[0] as string) ?? '';
+    const isOnAuthRoute = AUTH_ROUTES.includes(currentSegment);
+    const isOnPaywall = currentSegment === 'paywall';
+
+    if (isOnAuthRoute) return;
+
+    if (!hasAccess && !isOnPaywall) {
+      console.log('[SubscriptionGate] No access, redirecting to /paywall');
+      router.replace('/paywall' as Href);
+    } else if (hasAccess && isOnPaywall) {
+      console.log('[SubscriptionGate] Access granted, redirecting to /(tabs)');
+      router.replace('/(tabs)');
+    }
+  }, [isAuthenticated, isLoading, hasAccess, segments]);
+
+  return <>{children}</>;
+}
+
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 void SplashScreen.preventAutoHideAsync();
 
@@ -49,8 +76,9 @@ function RootLayoutNav() {
 
   return (
     <AuthGate>
-      <Stack 
-        screenOptions={{ 
+      <SubscriptionGate>
+      <Stack
+        screenOptions={{
           headerBackTitle: "Back",
           headerStyle: {
             backgroundColor: theme.background,
@@ -69,6 +97,7 @@ function RootLayoutNav() {
         <Stack.Screen name="verify-email" options={{ headerShown: false }} />
         <Stack.Screen name="auth-callback" options={{ headerShown: false }} />
         <Stack.Screen name="reset-password" options={{ headerShown: false }} />
+        <Stack.Screen name="paywall" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="edit-profile" options={{ title: "Edit Profile" }} />
         <Stack.Screen name="upload-bookmarks" options={{ title: "Upload Bookmarks" }} />
@@ -82,6 +111,7 @@ function RootLayoutNav() {
         <Stack.Screen name="image-diagnostics" options={{ title: "Image Diagnostics" }} />
         <Stack.Screen name="help-support" options={{ title: "Help & Support" }} />
       </Stack>
+      </SubscriptionGate>
     </AuthGate>
   );
 }
@@ -97,14 +127,16 @@ export default function RootLayout() {
         <GestureHandlerRootView style={{ flex: 1 }}>
           <ThemeContext>
             <AuthContext>
-              <UserContext>
-                <RecipeContext>
-                  <MealPlanContext>
-                    <StatusBar style="auto" />
-                    <RootLayoutNav />
-                  </MealPlanContext>
-                </RecipeContext>
-              </UserContext>
+              <SubscriptionContext>
+                <UserContext>
+                  <RecipeContext>
+                    <MealPlanContext>
+                      <StatusBar style="auto" />
+                      <RootLayoutNav />
+                    </MealPlanContext>
+                  </RecipeContext>
+                </UserContext>
+              </SubscriptionContext>
             </AuthContext>
           </ThemeContext>
         </GestureHandlerRootView>
