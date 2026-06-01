@@ -19,7 +19,13 @@
       }
     },
     "production": {
-      "environment": "production"
+      "environment": "production",
+      "ios": {
+        "buildConfiguration": "Release"
+      },
+      "env": {
+        "EAS_BUILD_PROFILE": "production"
+      }
     }
   },
   "submit": {
