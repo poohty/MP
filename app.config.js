@@ -1,5 +1,3 @@
-const IS_PRODUCTION = process.env.EAS_BUILD_PROFILE === 'production';
-
 /** @type {import('expo/config').ExpoConfig} */
 const config = {
   name: "Meal Planner Roulette",
@@ -68,8 +66,6 @@ const config = {
     ["expo-av", { microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone" }],
     "expo-font",
     "expo-web-browser",
-    // Only include expo-dev-client in non-production builds
-    ...(!IS_PRODUCTION ? ["expo-dev-client"] : []),
   ],
   experiments: {
     typedRoutes: true,
