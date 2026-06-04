@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(eas whoami *)"
+      "Bash(eas whoami *)",
+      "WebSearch",
+      "WebFetch(domain:www.revenuecat.com)"
     ]
   }
 }

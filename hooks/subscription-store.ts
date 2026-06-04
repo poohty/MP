@@ -142,7 +142,7 @@ const result = createContextHook(() => {
   }, []);
 
   // Whether the user can access app features
-  const hasAccess = isProUser || isTrialActive;
+  const hasAccess = isProUser;
 
   return useMemo(() => ({
     isProUser,

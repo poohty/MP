@@ -21,7 +21,7 @@ const PRIVACY_URL = 'https://pbandjcreationsllc.com/privacy';
 type PlanId = 'monthly' | 'yearly';
 
 export default function PaywallScreen() {
-  const { offerings, purchase, restore, trialDaysRemaining, isTrialActive } = useSubscription();
+  const { offerings, purchase, restore } = useSubscription();
   const { logout } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<PlanId>('yearly');
   const [isPurchasing, setIsPurchasing] = useState(false);
@@ -82,9 +82,7 @@ export default function PaywallScreen() {
           </View>
           <Text style={styles.title}>Meal Planner Roulette</Text>
           <Text style={styles.subtitle}>
-            {isTrialActive
-              ? `Your free trial ends in ${trialDaysRemaining} day${trialDaysRemaining === 1 ? '' : 's'}`
-              : 'Your free trial has ended'}
+            Start your 7-day free trial. Cancel anytime.
           </Text>
         </View>
 
