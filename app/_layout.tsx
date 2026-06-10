@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useSegments, router, type Href } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
 import { AuthContext, useAuth } from "@/hooks/auth-store";
@@ -73,6 +73,19 @@ const queryClient = new QueryClient();
 function RootLayoutNav() {
   const { themeMode } = useTheme();
   const theme = themeMode === 'dark' ? Colors.dark : Colors.light;
+  const { isLoading: isAuthLoading } = useAuth();
+  const { isLoading: isSubLoading } = useSubscription();
+  const splashHiddenRef = useRef(false);
+
+  // Keep splash screen visible until both auth and subscription finish loading.
+  // This prevents the paywall from flashing on reopen for subscribed users.
+  useEffect(() => {
+    if (!isAuthLoading && !isSubLoading && !splashHiddenRef.current) {
+      splashHiddenRef.current = true;
+      console.log('[RootLayoutNav] Auth & Subscription loaded, hiding splash screen');
+      void SplashScreen.hideAsync();
+    }
+  }, [isAuthLoading, isSubLoading]);
 
   return (
     <AuthGate>
@@ -117,9 +130,8 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
-  useEffect(() => {
-    void SplashScreen.hideAsync();
-  }, []);
+  // Splash screen is now hidden inside RootLayoutNav after auth + subscription resolve.
+  // Do NOT hide it here — that causes the paywall to flash for subscribed users.
 
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>

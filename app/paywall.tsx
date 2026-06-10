@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Crown, Check, RotateCcw, Star } from 'lucide-react-native';
+import { Crown, Check, RotateCcw } from 'lucide-react-native';
 import type { PurchasesPackage } from 'react-native-purchases';
 import { useSubscription } from '@/hooks/subscription-store';
 import { useAuth } from '@/hooks/auth-store';
@@ -18,14 +18,46 @@ import Colors from '@/constants/colors';
 const TERMS_URL = 'https://pbandjcreationsllc.com/terms';
 const PRIVACY_URL = 'https://pbandjcreationsllc.com/privacy';
 
-type PlanId = 'monthly' | 'yearly';
+/** Only show a loading fallback if offerings take longer than this (slow internet). */
+const SLOW_LOAD_THRESHOLD_MS = 2000;
+
+type PlanId = 'trial' | 'monthly' | 'yearly';
 
 export default function PaywallScreen() {
-  const { offerings, purchase, restore } = useSubscription();
+  const { offerings, purchase, restore, isLoading } = useSubscription();
   const { logout } = useAuth();
-  const [selectedPlan, setSelectedPlan] = useState<PlanId>('yearly');
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>('trial');
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  // Only flip to true after a delay — avoids flashing a spinner on fast connections.
+  const [showSlowLoader, setShowSlowLoader] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (isLoading) {
+      timerRef.current = setTimeout(() => setShowSlowLoader(true), SLOW_LOAD_THRESHOLD_MS);
+    } else {
+      setShowSlowLoader(false);
+      if (timerRef.current) clearTimeout(timerRef.current);
+    }
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [isLoading]);
+
+  // Splash screen already covers the initial load. SubscriptionGate handles redirect
+  // after purchase. Only show a spinner as a fallback for slow internet (>2 s).
+  if (isLoading && showSlowLoader) {
+    return (
+      <View style={styles.loadingRoot}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>Loading subscription options…</Text>
+      </View>
+    );
+  }
+
+  // If still loading but under the threshold, render nothing — splash screen covers it.
+  if (isLoading) {
+    return <View style={styles.root} />;
+  }
 
   const monthlyPkg = offerings.find(
     (p) => p.packageType === 'MONTHLY' || p.identifier.toLowerCase().includes('monthly')
@@ -40,22 +72,41 @@ export default function PaywallScreen() {
   const monthlyPrice = monthlyPkg?.product.priceString ?? '$9.00';
   const yearlyPrice = yearlyPkg?.product.priceString ?? '$90.00';
 
-  const handleSubscribe = useCallback(async () => {
-    if (!selectedPackage) {
-      Alert.alert('Not Available', 'Subscription packages are not loaded yet. Please try again shortly.');
-      return;
-    }
-
+  const executeSubscribe = useCallback(async (pkg: PurchasesPackage) => {
     setIsPurchasing(true);
     try {
-      const success = await purchase(selectedPackage);
+      const success = await purchase(pkg);
       if (!success) {
         // User cancelled or error — already logged inside purchase()
       }
     } finally {
       setIsPurchasing(false);
     }
-  }, [selectedPackage, purchase]);
+  }, [purchase]);
+
+  const handleSubscribe = useCallback(async () => {
+    if (!selectedPackage) {
+      Alert.alert('Not Available', 'Subscription packages are not loaded yet. Please try again shortly.');
+      return;
+    }
+
+    if (selectedPlan === 'trial') {
+      Alert.alert(
+        'Start 7-Day Free Trial',
+        'You will lose access to all premium features after 7 days if you do not subscribe. Cancel anytime in your App Store Account Settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Continue',
+            style: 'default',
+            onPress: () => executeSubscribe(selectedPackage),
+          },
+        ]
+      );
+    } else {
+      await executeSubscribe(selectedPackage);
+    }
+  }, [selectedPlan, selectedPackage, executeSubscribe]);
 
   const handleRestore = useCallback(async () => {
     setIsRestoring(true);
@@ -82,7 +133,7 @@ export default function PaywallScreen() {
           </View>
           <Text style={styles.title}>Meal Planner Roulette</Text>
           <Text style={styles.subtitle}>
-            Start your 7-day free trial. Cancel anytime.
+            Choose a plan to get started. Cancel anytime.
           </Text>
         </View>
 
@@ -105,53 +156,60 @@ export default function PaywallScreen() {
           ))}
         </View>
 
-        {/* Plan Cards */}
-        <View style={styles.plansRow}>
+        {/* Plan Cards Stack */}
+        <View style={styles.plansColumn}>
+          {/* Trial */}
+          <TouchableOpacity
+            style={[styles.planListItem, selectedPlan === 'trial' && styles.planListItemSelected]}
+            onPress={() => setSelectedPlan('trial')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.planListLeft}>
+              <View style={[styles.radio, selectedPlan === 'trial' && styles.radioSelected]}>
+                {selectedPlan === 'trial' && <View style={styles.radioInner} />}
+              </View>
+              <View>
+                <Text style={styles.planListLabel}>1 Free Week Trial</Text>
+                <Text style={styles.planListSub}>7 Days Free, then {yearlyPrice}/year</Text>
+              </View>
+            </View>
+            <View style={styles.trialBadge}>
+              <Text style={styles.trialBadgeText}>Try Free</Text>
+            </View>
+          </TouchableOpacity>
 
           {/* Monthly */}
           <TouchableOpacity
-            style={[styles.planCard, selectedPlan === 'monthly' && styles.planCardSelected]}
+            style={[styles.planListItem, selectedPlan === 'monthly' && styles.planListItemSelected]}
             onPress={() => setSelectedPlan('monthly')}
             activeOpacity={0.8}
           >
-            <Text style={[styles.planName, selectedPlan === 'monthly' && styles.planNameSelected]}>
-              Monthly
-            </Text>
-            <Text style={[styles.planPrice, selectedPlan === 'monthly' && styles.planPriceSelected]}>
-              {monthlyPrice}
-            </Text>
-            <Text style={[styles.planPer, selectedPlan === 'monthly' && styles.planPerSelected]}>
-              per month
-            </Text>
-            <Text style={[styles.planCancel, selectedPlan === 'monthly' && styles.planCancelSelected]}>
-              Cancel anytime
-            </Text>
+            <View style={styles.planListLeft}>
+              <View style={[styles.radio, selectedPlan === 'monthly' && styles.radioSelected]}>
+                {selectedPlan === 'monthly' && <View style={styles.radioInner} />}
+              </View>
+              <View>
+                <Text style={styles.planListLabel}>Monthly Plan</Text>
+                <Text style={styles.planListSub}>{monthlyPrice}/month, cancel anytime</Text>
+              </View>
+            </View>
           </TouchableOpacity>
 
-          {/* Yearly */}
+          {/* Yearly (Pay Upfront) */}
           <TouchableOpacity
-            style={[styles.planCard, selectedPlan === 'yearly' && styles.planCardSelected]}
+            style={[styles.planListItem, selectedPlan === 'yearly' && styles.planListItemSelected]}
             onPress={() => setSelectedPlan('yearly')}
             activeOpacity={0.8}
           >
-            <View style={styles.badgeWrap}>
-              <View style={styles.badge}>
-                <Star size={10} color="#FFFFFF" fill="#FFFFFF" />
-                <Text style={styles.badgeText}>Best Value</Text>
+            <View style={styles.planListLeft}>
+              <View style={[styles.radio, selectedPlan === 'yearly' && styles.radioSelected]}>
+                {selectedPlan === 'yearly' && <View style={styles.radioInner} />}
+              </View>
+              <View>
+                <Text style={styles.planListLabel}>Annual Plan</Text>
+                <Text style={styles.planListSub}>{yearlyPrice}/year, save 17%</Text>
               </View>
             </View>
-            <Text style={[styles.planName, selectedPlan === 'yearly' && styles.planNameSelected]}>
-              Annual
-            </Text>
-            <Text style={[styles.planPrice, selectedPlan === 'yearly' && styles.planPriceSelected]}>
-              {yearlyPrice}
-            </Text>
-            <Text style={[styles.planPer, selectedPlan === 'yearly' && styles.planPerSelected]}>
-              per year
-            </Text>
-            <Text style={[styles.planSave, selectedPlan === 'yearly' && styles.planSaveSelected]}>
-              Save 17%
-            </Text>
           </TouchableOpacity>
         </View>
 
@@ -165,11 +223,13 @@ export default function PaywallScreen() {
           {isPurchasing ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.ctaText}>Start Subscription</Text>
+            <Text style={styles.ctaText}>
+              {selectedPlan === 'trial' ? 'Start Free Trial' : 'Subscribe Now'}
+            </Text>
           )}
         </TouchableOpacity>
 
-        <Text style={styles.trialNote}>7-day free trial included · Cancel anytime</Text>
+        <Text style={styles.trialNote}>Cancel anytime in App Store Settings</Text>
 
         {/* Restore */}
         <TouchableOpacity
@@ -213,6 +273,18 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: '#F7F5FF',
+  },
+  loadingRoot: {
+    flex: 1,
+    backgroundColor: '#F7F5FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 15,
+    color: Colors.textSecondary,
+    fontWeight: '500',
   },
   scroll: {
     flexGrow: 1,
@@ -287,87 +359,72 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // Plans
-  plansRow: {
-    flexDirection: 'row',
-    gap: 12,
+  // Plans Column & List Items
+  plansColumn: {
     width: '100%',
-    marginBottom: 20,
+    gap: 12,
+    marginBottom: 24,
   },
-  planCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
+  planListItem: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
     borderWidth: 2,
     borderColor: Colors.border,
     ...Colors.shadow,
   },
-  planCardSelected: {
+  planListItemSelected: {
     borderColor: Colors.primary,
-    backgroundColor: '#F0EDFF',
+    backgroundColor: '#F7F5FF',
   },
-  badgeWrap: {
-    height: 22,
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  badge: {
+  planListLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioSelected: {
+    borderColor: Colors.primary,
+  },
+  radioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: Colors.primary,
-    borderRadius: 20,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    gap: 4,
   },
-  badgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
+  planListLabel: {
+    fontSize: 15,
     fontWeight: '700',
-  },
-  planName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-    marginBottom: 6,
-  },
-  planNameSelected: {
-    color: Colors.primary,
-  },
-  planPrice: {
-    fontSize: 22,
-    fontWeight: '800',
     color: Colors.text,
   },
-  planPriceSelected: {
-    color: Colors.primary,
-  },
-  planPer: {
-    fontSize: 12,
+  planListSub: {
+    fontSize: 13,
     color: Colors.textSecondary,
     marginTop: 2,
   },
-  planPerSelected: {
-    color: Colors.primary,
+  trialBadge: {
+    backgroundColor: Colors.primary,
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
-  planCancel: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    marginTop: 6,
-  },
-  planCancelSelected: {
-    color: Colors.primary,
-  },
-  planSave: {
-    fontSize: 12,
+  trialBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
     fontWeight: '700',
-    color: Colors.success,
-    marginTop: 6,
-  },
-  planSaveSelected: {
-    color: Colors.primary,
+    textTransform: 'uppercase',
   },
 
   // CTA

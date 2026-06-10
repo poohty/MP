@@ -14,7 +14,7 @@ const config = {
     backgroundColor: "#FF6B6B",
   },
   ios: {
-    buildNumber: "2",
+    buildNumber: "4",
     supportsTablet: true,
     bundleIdentifier: "com.mealplanner.roulette",
     infoPlist: {
