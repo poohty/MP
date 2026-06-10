@@ -15,52 +15,59 @@ import { trpc, trpcClient } from "@/lib/trpc";
 
 const AUTH_ROUTES = ['login', 'signup', 'verify-email', 'auth-callback', 'reset-password'];
 
-function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+/**
+ * Single unified navigation gate that atomically decides the correct route.
+ * Eliminates the race between separate AuthGate and SubscriptionGate components
+ * where the tabs screen would flash before the paywall redirect on re-login.
+ */
+function NavigationGate({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { hasAccess, isLoading: isSubLoading } = useSubscription();
   const segments = useSegments();
 
   useEffect(() => {
-    if (isLoading) return;
-
-    const currentSegment = (segments[0] as string) ?? '';
-    const isOnAuthRoute = AUTH_ROUTES.includes(currentSegment);
-
-    console.log('[AuthGate] isAuthenticated:', isAuthenticated, 'segment:', currentSegment, 'isOnAuthRoute:', isOnAuthRoute);
-
-    if (!isAuthenticated && !isOnAuthRoute) {
-      console.log('[AuthGate] Not authenticated, redirecting to /login');
-      router.replace('/login');
-    } else if (isAuthenticated && isOnAuthRoute) {
-      console.log('[AuthGate] Authenticated but on auth route, redirecting to /(tabs)');
-      router.replace('/(tabs)');
-    }
-  }, [isAuthenticated, isLoading, segments]);
-
-  return <>{children}</>;
-}
-
-function SubscriptionGate({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
-  const { hasAccess, isLoading } = useSubscription();
-  const segments = useSegments();
-
-  useEffect(() => {
-    if (!isAuthenticated || isLoading) return;
+    // Wait until both stores have finished loading before making any decision.
+    if (isAuthLoading || isSubLoading) return;
 
     const currentSegment = (segments[0] as string) ?? '';
     const isOnAuthRoute = AUTH_ROUTES.includes(currentSegment);
     const isOnPaywall = currentSegment === 'paywall';
 
-    if (isOnAuthRoute) return;
+    console.log('[NavigationGate]', {
+      isAuthenticated,
+      hasAccess,
+      segment: currentSegment,
+      isOnAuthRoute,
+      isOnPaywall,
+    });
 
+    // ── Not authenticated ──
+    if (!isAuthenticated) {
+      if (!isOnAuthRoute) {
+        console.log('[NavigationGate] Not authenticated → /login');
+        router.replace('/login');
+      }
+      return;
+    }
+
+    // ── Authenticated but on auth route ──
+    if (isOnAuthRoute) {
+      // Decide atomically: go to tabs (subscribed) or paywall (not subscribed)
+      const target = hasAccess ? '/(tabs)' : '/paywall';
+      console.log('[NavigationGate] Authenticated on auth route →', target);
+      router.replace(target as Href);
+      return;
+    }
+
+    // ── Authenticated, not on auth route ──
     if (!hasAccess && !isOnPaywall) {
-      console.log('[SubscriptionGate] No access, redirecting to /paywall');
+      console.log('[NavigationGate] No access → /paywall');
       router.replace('/paywall' as Href);
     } else if (hasAccess && isOnPaywall) {
-      console.log('[SubscriptionGate] Access granted, redirecting to /(tabs)');
+      console.log('[NavigationGate] Access granted → /(tabs)');
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, isLoading, hasAccess, segments]);
+  }, [isAuthenticated, isAuthLoading, isSubLoading, hasAccess, segments]);
 
   return <>{children}</>;
 }
@@ -73,9 +80,16 @@ const queryClient = new QueryClient();
 function RootLayoutNav() {
   const { themeMode } = useTheme();
   const theme = themeMode === 'dark' ? Colors.dark : Colors.light;
-  const { isLoading: isAuthLoading } = useAuth();
+  const { isLoading: isAuthLoading, isAuthenticated } = useAuth();
   const { isLoading: isSubLoading } = useSubscription();
   const splashHiddenRef = useRef(false);
+
+  // Reset the splash gate when the user logs out so it can re-show on next login.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      splashHiddenRef.current = false;
+    }
+  }, [isAuthenticated]);
 
   // Keep splash screen visible until both auth and subscription finish loading.
   // This prevents the paywall from flashing on reopen for subscribed users.
@@ -88,8 +102,7 @@ function RootLayoutNav() {
   }, [isAuthLoading, isSubLoading]);
 
   return (
-    <AuthGate>
-      <SubscriptionGate>
+    <NavigationGate>
       <Stack
         screenOptions={{
           headerBackTitle: "Back",
@@ -124,14 +137,12 @@ function RootLayoutNav() {
         <Stack.Screen name="image-diagnostics" options={{ title: "Image Diagnostics" }} />
         <Stack.Screen name="help-support" options={{ title: "Help & Support" }} />
       </Stack>
-      </SubscriptionGate>
-    </AuthGate>
+    </NavigationGate>
   );
 }
 
 export default function RootLayout() {
-  // Splash screen is now hidden inside RootLayoutNav after auth + subscription resolve.
-  // Do NOT hide it here — that causes the paywall to flash for subscribed users.
+  // Splash screen is hidden inside RootLayoutNav after auth + subscription resolve.
 
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>

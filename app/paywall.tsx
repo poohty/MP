@@ -24,11 +24,12 @@ const SLOW_LOAD_THRESHOLD_MS = 2000;
 type PlanId = 'trial' | 'monthly' | 'yearly';
 
 export default function PaywallScreen() {
-  const { offerings, purchase, restore, isLoading } = useSubscription();
+  const { offerings, purchase, restore, isLoading, refetchOfferings } = useSubscription();
   const { logout } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<PlanId>('trial');
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   // Only flip to true after a delay — avoids flashing a spinner on fast connections.
   const [showSlowLoader, setShowSlowLoader] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,19 +73,33 @@ export default function PaywallScreen() {
   const monthlyPrice = monthlyPkg?.product.priceString ?? '$9.00';
   const yearlyPrice = yearlyPkg?.product.priceString ?? '$90.00';
 
-  const executeSubscribe = useCallback(async (pkg: PurchasesPackage) => {
+  const executeSubscribe = useCallback(async (pkg: PurchasesPackage): Promise<void> => {
     setIsPurchasing(true);
     try {
       const success = await purchase(pkg);
       if (!success) {
-        // User cancelled or error — already logged inside purchase()
+        // User cancelled without completing — no error thrown.
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'An error occurred during purchase.';
+      Alert.alert('Subscription Failed', message);
     } finally {
       setIsPurchasing(false);
     }
   }, [purchase]);
 
-  const handleSubscribe = useCallback(async () => {
+  const handleRetryOfferings = useCallback(async (): Promise<void> => {
+    setIsRetrying(true);
+    try {
+      await refetchOfferings();
+    } catch (err) {
+      Alert.alert('Error', 'Failed to reload subscription plans. Please try again.');
+    } finally {
+      setIsRetrying(false);
+    }
+  }, [refetchOfferings]);
+
+  const handleSubscribe = useCallback(async (): Promise<void> => {
     if (!selectedPackage) {
       Alert.alert('Not Available', 'Subscription packages are not loaded yet. Please try again shortly.');
       return;
@@ -99,7 +114,9 @@ export default function PaywallScreen() {
           {
             text: 'Continue',
             style: 'default',
-            onPress: () => executeSubscribe(selectedPackage),
+            onPress: () => {
+              void executeSubscribe(selectedPackage);
+            },
           },
         ]
       );
@@ -108,7 +125,7 @@ export default function PaywallScreen() {
     }
   }, [selectedPlan, selectedPackage, executeSubscribe]);
 
-  const handleRestore = useCallback(async () => {
+  const handleRestore = useCallback(async (): Promise<void> => {
     setIsRestoring(true);
     try {
       const success = await restore();
@@ -157,79 +174,103 @@ export default function PaywallScreen() {
         </View>
 
         {/* Plan Cards Stack */}
-        <View style={styles.plansColumn}>
-          {/* Trial */}
-          <TouchableOpacity
-            style={[styles.planListItem, selectedPlan === 'trial' && styles.planListItemSelected]}
-            onPress={() => setSelectedPlan('trial')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.planListLeft}>
-              <View style={[styles.radio, selectedPlan === 'trial' && styles.radioSelected]}>
-                {selectedPlan === 'trial' && <View style={styles.radioInner} />}
-              </View>
-              <View>
-                <Text style={styles.planListLabel}>1 Free Week Trial</Text>
-                <Text style={styles.planListSub}>7 Days Free, then {yearlyPrice}/year</Text>
-              </View>
-            </View>
-            <View style={styles.trialBadge}>
-              <Text style={styles.trialBadgeText}>Try Free</Text>
-            </View>
-          </TouchableOpacity>
-
-          {/* Monthly */}
-          <TouchableOpacity
-            style={[styles.planListItem, selectedPlan === 'monthly' && styles.planListItemSelected]}
-            onPress={() => setSelectedPlan('monthly')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.planListLeft}>
-              <View style={[styles.radio, selectedPlan === 'monthly' && styles.radioSelected]}>
-                {selectedPlan === 'monthly' && <View style={styles.radioInner} />}
-              </View>
-              <View>
-                <Text style={styles.planListLabel}>Monthly Plan</Text>
-                <Text style={styles.planListSub}>{monthlyPrice}/month, cancel anytime</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-
-          {/* Yearly (Pay Upfront) */}
-          <TouchableOpacity
-            style={[styles.planListItem, selectedPlan === 'yearly' && styles.planListItemSelected]}
-            onPress={() => setSelectedPlan('yearly')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.planListLeft}>
-              <View style={[styles.radio, selectedPlan === 'yearly' && styles.radioSelected]}>
-                {selectedPlan === 'yearly' && <View style={styles.radioInner} />}
-              </View>
-              <View>
-                <Text style={styles.planListLabel}>Annual Plan</Text>
-                <Text style={styles.planListSub}>{yearlyPrice}/year, save 17%</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* CTA */}
-        <TouchableOpacity
-          style={[styles.ctaButton, isPurchasing && styles.ctaButtonDisabled]}
-          onPress={handleSubscribe}
-          activeOpacity={0.85}
-          disabled={isPurchasing || isRestoring}
-        >
-          {isPurchasing ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.ctaText}>
-              {selectedPlan === 'trial' ? 'Start Free Trial' : 'Subscribe Now'}
+        {offerings.length === 0 ? (
+          <View style={styles.errorCard}>
+            <Text style={styles.errorCardTitle}>Plans Not Loaded</Text>
+            <Text style={styles.errorCardText}>
+              We couldn't retrieve the subscription options. Please verify your connection or check app settings.
             </Text>
-          )}
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.retryButton, isRetrying && styles.retryButtonDisabled]}
+              onPress={handleRetryOfferings}
+              disabled={isRetrying}
+              activeOpacity={0.8}
+            >
+              {isRetrying ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.retryButtonText}>Retry Loading Plans</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            {/* Plan Cards Stack */}
+            <View style={styles.plansColumn}>
+              {/* Trial */}
+              <TouchableOpacity
+                style={[styles.planListItem, selectedPlan === 'trial' && styles.planListItemSelected]}
+                onPress={() => setSelectedPlan('trial')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.planListLeft}>
+                  <View style={[styles.radio, selectedPlan === 'trial' && styles.radioSelected]}>
+                    {selectedPlan === 'trial' && <View style={styles.radioInner} />}
+                  </View>
+                  <View>
+                    <Text style={styles.planListLabel}>1 Free Week Trial</Text>
+                    <Text style={styles.planListSub}>7 Days Free, then {yearlyPrice}/year</Text>
+                  </View>
+                </View>
+                <View style={styles.trialBadge}>
+                  <Text style={styles.trialBadgeText}>Try Free</Text>
+                </View>
+              </TouchableOpacity>
 
-        <Text style={styles.trialNote}>Cancel anytime in App Store Settings</Text>
+              {/* Monthly */}
+              <TouchableOpacity
+                style={[styles.planListItem, selectedPlan === 'monthly' && styles.planListItemSelected]}
+                onPress={() => setSelectedPlan('monthly')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.planListLeft}>
+                  <View style={[styles.radio, selectedPlan === 'monthly' && styles.radioSelected]}>
+                    {selectedPlan === 'monthly' && <View style={styles.radioInner} />}
+                  </View>
+                  <View>
+                    <Text style={styles.planListLabel}>Monthly Plan</Text>
+                    <Text style={styles.planListSub}>{monthlyPrice}/month, cancel anytime</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+
+              {/* Yearly (Pay Upfront) */}
+              <TouchableOpacity
+                style={[styles.planListItem, selectedPlan === 'yearly' && styles.planListItemSelected]}
+                onPress={() => setSelectedPlan('yearly')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.planListLeft}>
+                  <View style={[styles.radio, selectedPlan === 'yearly' && styles.radioSelected]}>
+                    {selectedPlan === 'yearly' && <View style={styles.radioInner} />}
+                  </View>
+                  <View>
+                    <Text style={styles.planListLabel}>Annual Plan</Text>
+                    <Text style={styles.planListSub}>{yearlyPrice}/year, save 17%</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* CTA */}
+            <TouchableOpacity
+              style={[styles.ctaButton, isPurchasing && styles.ctaButtonDisabled]}
+              onPress={handleSubscribe}
+              activeOpacity={0.85}
+              disabled={isPurchasing || isRestoring}
+            >
+              {isPurchasing ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.ctaText}>
+                  {selectedPlan === 'trial' ? 'Start Free Trial' : 'Subscribe Now'}
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            <Text style={styles.trialNote}>Cancel anytime in App Store Settings</Text>
+          </>
+        )}
 
         {/* Restore */}
         <TouchableOpacity
@@ -493,5 +534,47 @@ const styles = StyleSheet.create({
   signOutText: {
     fontSize: 13,
     color: Colors.textSecondary,
+  },
+  errorCard: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFEBEA',
+    ...Colors.shadowMd,
+  },
+  errorCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#D32F2F',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorCardText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  retryButtonDisabled: {
+    opacity: 0.6,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

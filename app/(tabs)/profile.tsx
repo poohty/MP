@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, Switch } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, Switch, ActivityIndicator, Linking, Platform } from 'react-native';
 import { useAuth } from '@/hooks/auth-store';
 import { useUser } from '@/hooks/user-store';
 import { useTheme } from '@/hooks/theme-store';
+import { useSubscription } from '@/hooks/subscription-store';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
-import { User, Settings, Info, Heart, Users, Moon, Mic } from 'lucide-react-native';
+import { User, Settings, Info, Heart, Users, Moon, Mic, Crown, RotateCcw } from 'lucide-react-native';
 import { VOICE_OPTIONS, type VoicePreference } from '@/constants/voice';
 import { router } from 'expo-router';
 
@@ -14,12 +15,42 @@ export default function ProfileScreen() {
   const { user, logout, updateProfile } = useAuth();
   const { currentUserProfile, updateShareCookbook } = useUser();
   const { toggleTheme, isDark } = useTheme();
+  const { isProUser, restore } = useSubscription();
   const [shareToggle, setShareToggle] = useState<boolean | null>(null);
   const [isSavingShare, setIsSavingShare] = useState(false);
   const [voicePreference, setVoicePreference] = useState<VoicePreference>(user?.voicePreference ?? 'female');
   const [isSavingVoice, setIsSavingVoice] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
   const hydratedRef = useRef(false);
   const voiceHydratedRef = useRef(false);
+
+  const handleManageSubscription = useCallback((): void => {
+    const url = Platform.OS === 'ios'
+      ? 'https://apps.apple.com/account/subscriptions'
+      : 'https://play.google.com/store/account/subscriptions';
+
+    Linking.openURL(url).catch((err) => {
+      console.error('Failed to open subscription management URL:', err);
+      Alert.alert('Error', 'Unable to open subscription settings. Please open the App Store or Google Play Store manually.');
+    });
+  }, []);
+
+  const handleRestore = useCallback(async (): Promise<void> => {
+    setIsRestoring(true);
+    try {
+      const success = await restore();
+      if (success) {
+        Alert.alert('Restored', 'Your subscription has been restored successfully.');
+      } else {
+        Alert.alert('Not Found', 'No active subscription found for this account.');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'An error occurred during restore.';
+      Alert.alert('Restore Failed', message);
+    } finally {
+      setIsRestoring(false);
+    }
+  }, [restore]);
 
   useEffect(() => {
     if (!hydratedRef.current) {
@@ -41,7 +72,7 @@ export default function ProfileScreen() {
     }
   }, [currentUserProfile?.voicePreference, user?.voicePreference]);
 
-  const handleShareToggle = async (nextValue: boolean) => {
+  const handleShareToggle = async (nextValue: boolean): Promise<void> => {
     setShareToggle(nextValue);
     setIsSavingShare(true);
     try {
@@ -60,7 +91,7 @@ export default function ProfileScreen() {
 
   const colors = isDark ? Colors.dark : Colors.light;
 
-  const handleVoiceChange = useCallback(async (value: VoicePreference) => {
+  const handleVoiceChange = useCallback(async (value: VoicePreference): Promise<void> => {
     setVoicePreference(value);
     setIsSavingVoice(true);
     try {
@@ -73,7 +104,7 @@ export default function ProfileScreen() {
     }
   }, [voicePreference, updateProfile]);
 
-  const handleLogout = () => {
+  const handleLogout = (): void => {
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
@@ -177,7 +208,54 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
-        
+
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Subscription</Text>
+
+          <View style={styles.menuItem}>
+            <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
+              <Crown size={20} color={isProUser ? '#FFD700' : colors.primary} />
+            </View>
+            <Text style={[styles.menuText, { color: colors.text }]}>
+              Current Tier: <Text style={{ fontWeight: 'bold', color: isProUser ? colors.primary : colors.textSecondary }}>{isProUser ? 'Pro Plan' : 'Free Plan'}</Text>
+            </Text>
+            {isProUser && (
+              <TouchableOpacity onPress={handleManageSubscription}>
+                <Text style={{ color: colors.primary, fontWeight: '600', fontSize: 14 }}>Manage</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {!isProUser && (
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                router.push('/paywall');
+              }}
+            >
+              <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
+                <Crown size={20} color={colors.primary} />
+              </View>
+              <Text style={[styles.menuText, { color: colors.text }]}>Upgrade to Pro</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={handleRestore}
+            disabled={isRestoring}
+          >
+            <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
+              {isRestoring ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <RotateCcw size={20} color={colors.primary} />
+              )}
+            </View>
+            <Text style={[styles.menuText, { color: colors.text }]}>Restore Purchases</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Social</Text>
           

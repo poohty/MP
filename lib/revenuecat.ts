@@ -1,15 +1,30 @@
 import { Platform } from 'react-native';
-import Purchases, { LOG_LEVEL, type PurchasesPackage, type CustomerInfo } from 'react-native-purchases';
+import Purchases, {
+  LOG_LEVEL,
+  PURCHASES_ERROR_CODE,
+  type PurchasesPackage,
+  type CustomerInfo,
+} from 'react-native-purchases';
 
 const APPLE_KEY = process.env.EXPO_PUBLIC_REVENUECAT_APPLE_KEY ?? '';
 const GOOGLE_KEY = process.env.EXPO_PUBLIC_REVENUECAT_GOOGLE_KEY ?? '';
 
 export const ENTITLEMENT_ID = 'Meal Planner Roulette Pro';
 
+/** Tracks whether Purchases.configure() has already been called. */
+let configured = false;
+
 export function isRevenueCatEnabled(): boolean {
   const key = Platform.OS === 'ios' ? APPLE_KEY : GOOGLE_KEY;
   return key.length > 0;
 }
+
+/**
+ * Initialise the RevenueCat SDK once and log in the user.
+ * Subsequent calls with the same userId are no-ops; a different userId
+ * triggers a logIn() without re-configuring.
+ */
+let currentUserId: string | null = null;
 
 export async function initializePurchases(userId: string): Promise<void> {
   if (!isRevenueCatEnabled()) {
@@ -17,19 +32,28 @@ export async function initializePurchases(userId: string): Promise<void> {
     return;
   }
 
-  const apiKey = Platform.OS === 'ios' ? APPLE_KEY : GOOGLE_KEY;
+  if (!configured) {
+    const apiKey = Platform.OS === 'ios' ? APPLE_KEY : GOOGLE_KEY;
 
-  if (__DEV__) {
-    Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+    if (__DEV__) {
+      Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+    }
+
+    Purchases.configure({ apiKey });
+    configured = true;
+    console.log('[RevenueCat] SDK configured');
   }
 
-  Purchases.configure({ apiKey });
-
-  try {
-    await Purchases.logIn(userId);
-    console.log('[RevenueCat] Initialized and logged in:', userId);
-  } catch (error) {
-    console.error('[RevenueCat] Failed to log in user:', error);
+  if (currentUserId !== userId) {
+    try {
+      await Purchases.logIn(userId);
+      currentUserId = userId;
+      console.log('[RevenueCat] Logged in user:', userId);
+    } catch (error) {
+      console.error('[RevenueCat] Failed to log in user:', error);
+    }
+  } else {
+    console.log('[RevenueCat] Already logged in as:', userId);
   }
 }
 
@@ -39,6 +63,18 @@ export async function checkSubscriptionStatus(): Promise<boolean> {
   try {
     const customerInfo: CustomerInfo = await Purchases.getCustomerInfo();
     const isActive = customerInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
+
+    if (__DEV__ && !isActive) {
+      const activeKeys = Object.keys(customerInfo.entitlements.active);
+      if (activeKeys.length > 0) {
+        console.warn(
+          `[RevenueCat] Entitlement "${ENTITLEMENT_ID}" not found but active entitlements exist:`,
+          activeKeys,
+          '— check that the entitlement ID matches the RevenueCat dashboard.',
+        );
+      }
+    }
+
     console.log('[RevenueCat] Pro entitlement active:', isActive);
     return isActive;
   } catch (error) {
@@ -68,13 +104,16 @@ export async function purchasePackage(pkg: PurchasesPackage): Promise<boolean> {
     console.log('[RevenueCat] Purchase complete, pro active:', isActive);
     return isActive;
   } catch (error: unknown) {
-    const err = error as { userCancelled?: boolean; message?: string };
-    if (err?.userCancelled) {
-      console.log('[RevenueCat] User cancelled purchase');
-      return false;
+    if (error instanceof Error && 'userCancelled' in error) {
+      const purchaseError = error as { userCancelled: boolean; code?: string };
+      if (purchaseError.userCancelled) {
+        console.log('[RevenueCat] User cancelled purchase');
+        return false;
+      }
     }
-    console.error('[RevenueCat] Purchase failed:', err?.message ?? error);
-    return false;
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[RevenueCat] Purchase failed:', message);
+    throw new Error(message);
   }
 }
 
@@ -90,4 +129,29 @@ export async function restorePurchases(): Promise<boolean> {
     console.error('[RevenueCat] Restore failed:', error);
     return false;
   }
+}
+
+/**
+ * Listen for real-time subscription changes (renewal, expiry, billing issues,
+ * family sharing, promotional offers applied externally, etc.).
+ * Returns a cleanup function to remove the listener.
+ */
+export function addSubscriptionListener(
+  onUpdate: (isPro: boolean) => void,
+): () => void {
+  if (!isRevenueCatEnabled()) {
+    return () => {};
+  }
+
+  const listener = (info: CustomerInfo): void => {
+    const isActive = info.entitlements.active[ENTITLEMENT_ID] !== undefined;
+    console.log('[RevenueCat] CustomerInfo updated, pro active:', isActive);
+    onUpdate(isActive);
+  };
+
+  Purchases.addCustomerInfoUpdateListener(listener);
+
+  return () => {
+    Purchases.removeCustomerInfoUpdateListener(listener);
+  };
 }
