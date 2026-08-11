@@ -45,22 +45,6 @@ export default function PaywallScreen() {
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [isLoading]);
 
-  // Splash screen already covers the initial load. SubscriptionGate handles redirect
-  // after purchase. Only show a spinner as a fallback for slow internet (>2 s).
-  if (isLoading && showSlowLoader) {
-    return (
-      <View style={styles.loadingRoot}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-        <Text style={styles.loadingText}>Loading subscription options…</Text>
-      </View>
-    );
-  }
-
-  // If still loading but under the threshold, render nothing — splash screen covers it.
-  if (isLoading) {
-    return <View style={styles.root} />;
-  }
-
   const monthlyPkg = offerings.find(
     (p) => p.packageType === 'MONTHLY' || p.identifier.toLowerCase().includes('monthly')
   );
@@ -140,6 +124,25 @@ export default function PaywallScreen() {
       setIsRestoring(false);
     }
   }, [restore]);
+
+  // Early returns must stay BELOW every hook — bailing out above them changes the
+  // hook count between renders and crashes the app ("rendered more hooks than
+  // during the previous render") when isLoading flips false on first sign-in.
+  // Splash screen already covers the initial load. Only show a spinner as a
+  // fallback for slow internet (>2 s).
+  if (isLoading && showSlowLoader) {
+    return (
+      <View style={styles.loadingRoot}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>Loading subscription options…</Text>
+      </View>
+    );
+  }
+
+  // If still loading but under the threshold, render nothing — splash screen covers it.
+  if (isLoading) {
+    return <View style={styles.root} />;
+  }
 
   return (
     <View style={styles.root}>

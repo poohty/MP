@@ -144,7 +144,10 @@ export function addSubscriptionListener(
   }
 
   const listener = (info: CustomerInfo): void => {
-    const isActive = info.entitlements.active[ENTITLEMENT_ID] !== undefined;
+    // Must use the same check as checkSubscriptionStatus/purchase — a stricter
+    // check here reported "not pro" right after a successful purchase and
+    // bounced subscribed users back to the paywall.
+    const isActive = isEntitlementActive(info);
     console.log('[RevenueCat] CustomerInfo updated, pro active:', isActive);
     onUpdate(isActive);
   };

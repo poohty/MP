@@ -8,13 +8,15 @@ const config = {
   scheme: ["mealplannerroulette"],
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
-  splash: {
-    image: "./assets/images/splash-icon.png",
-    resizeMode: "contain",
-    backgroundColor: "#FF6B6B",
-  },
   ios: {
-    buildNumber: "7",
+    buildNumber: "8",
+    // icon.png stays opaque — the App Store rejects light icons with alpha.
+    // The dark variant is transparent so iOS composites it on the system dark
+    // background. Omitting `tinted` lets iOS derive it from the light icon.
+    icon: {
+      light: "./assets/images/icon.png",
+      dark: "./assets/images/icon-dark.png",
+    },
     supportsTablet: true,
     bundleIdentifier: "com.mealplanner.roulette",
     infoPlist: {
@@ -52,6 +54,16 @@ const config = {
     favicon: "./assets/images/favicon.png",
   },
   plugins: [
+    [
+      "expo-splash-screen",
+      {
+        image: "./assets/images/splash-icon.png",
+        imageWidth: 220,
+        resizeMode: "contain",
+        backgroundColor: "#FFFFFF",
+        dark: { backgroundColor: "#000000" },
+      },
+    ],
     ["expo-router", { origin: "https://mealplannerroulette.com/" }],
     ["expo-image-picker", { photosPermission: "The app accesses your photos to let you share them with your friends." }],
     ["expo-document-picker", { iCloudContainerEnvironment: "Production" }],
