@@ -9,7 +9,7 @@ const config = {
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
   ios: {
-    buildNumber: "8",
+    buildNumber: "9",
     // icon.png stays opaque — the App Store rejects light icons with alpha.
     // The dark variant is transparent so iOS composites it on the system dark
     // background. Omitting `tinted` lets iOS derive it from the light icon.
