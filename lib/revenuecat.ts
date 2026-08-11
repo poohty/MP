@@ -57,25 +57,25 @@ export async function initializePurchases(userId: string): Promise<void> {
   }
 }
 
+function isEntitlementActive(customerInfo: CustomerInfo): boolean {
+  if (!customerInfo || !customerInfo.entitlements || !customerInfo.entitlements.active) {
+    return false;
+  }
+  const activeMap = customerInfo.entitlements.active;
+  if (activeMap[ENTITLEMENT_ID] !== undefined) {
+    return true;
+  }
+  // Fallback: If any active entitlement exists in RevenueCat customer profile
+  return Object.keys(activeMap).length > 0;
+}
+
 export async function checkSubscriptionStatus(): Promise<boolean> {
   if (!isRevenueCatEnabled()) return false;
 
   try {
     const customerInfo: CustomerInfo = await Purchases.getCustomerInfo();
-    const isActive = customerInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
-
-    if (__DEV__ && !isActive) {
-      const activeKeys = Object.keys(customerInfo.entitlements.active);
-      if (activeKeys.length > 0) {
-        console.warn(
-          `[RevenueCat] Entitlement "${ENTITLEMENT_ID}" not found but active entitlements exist:`,
-          activeKeys,
-          '— check that the entitlement ID matches the RevenueCat dashboard.',
-        );
-      }
-    }
-
-    console.log('[RevenueCat] Pro entitlement active:', isActive);
+    const isActive = isEntitlementActive(customerInfo);
+    console.log('[RevenueCat] Pro entitlement active status:', isActive);
     return isActive;
   } catch (error) {
     console.error('[RevenueCat] Failed to check subscription status:', error);
@@ -100,7 +100,7 @@ export async function getOfferings(): Promise<PurchasesPackage[]> {
 export async function purchasePackage(pkg: PurchasesPackage): Promise<boolean> {
   try {
     const { customerInfo } = await Purchases.purchasePackage(pkg);
-    const isActive = customerInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
+    const isActive = isEntitlementActive(customerInfo);
     console.log('[RevenueCat] Purchase complete, pro active:', isActive);
     return isActive;
   } catch (error: unknown) {
@@ -122,11 +122,11 @@ export async function restorePurchases(): Promise<boolean> {
 
   try {
     const customerInfo = await Purchases.restorePurchases();
-    const isActive = customerInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
+    const isActive = isEntitlementActive(customerInfo);
     console.log('[RevenueCat] Restore complete, pro active:', isActive);
     return isActive;
   } catch (error) {
-    console.error('[RevenueCat] Restore failed:', error);
+    console.error('[RevenueCat] Failed to restore purchases:', error);
     return false;
   }
 }

@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { Platform } from 'react-native';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { User } from '@/types';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
 import type { VoicePreference } from '@/constants/voice';
@@ -538,6 +540,107 @@ const result = createContextHook(() => {
     }
   }, [user, upsertUserProfileToSupabase]);
 
+  const loginWithApple = useCallback(async (): Promise<{ ok: boolean; reason?: string }> => {
+    if (Platform.OS !== 'ios') return { ok: false, reason: 'NOT_SUPPORTED' };
+    try {
+      console.log('🍎 Initiating Apple Sign-In...');
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (credential.identityToken) {
+        if (isSupabaseEnabled) {
+          const { data, error } = await supabase.auth.signInWithIdToken({
+            provider: 'apple',
+            token: credential.identityToken,
+          });
+
+          if (error) {
+            console.error('❌ Supabase Apple sign in error:', error.message);
+            return { ok: false, reason: 'LOGIN_FAILED' };
+          }
+
+          const supaUser = data.user;
+          if (supaUser) {
+            const appleName = credential.fullName?.givenName
+              ? `${credential.fullName.givenName} ${credential.fullName.familyName || ''}`.trim()
+              : undefined;
+            const userEmail = (credential.email || supaUser.email || `apple_${supaUser.id.substring(0, 8)}@privaterelay.appleid.com`).trim();
+            const baseName = appleName || (userEmail.includes('@') ? userEmail.split('@')[0] : 'User');
+            const cleanName = baseName.trim() || 'User';
+            const cleanUsername = (cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_') || 'user') + '_' + supaUser.id.substring(0, 4);
+
+            const newUser: User = {
+              id: supaUser.id,
+              email: userEmail,
+              name: cleanName,
+              username: cleanUsername,
+              shareCookbookWithFriends: false,
+            };
+
+            try {
+              await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
+              setUser(newUser);
+              await upsertUserProfileToSupabase(newUser);
+            } catch (storageErr) {
+              console.warn('⚠️ Non-critical user profile save error:', storageErr);
+            }
+            return { ok: true };
+          }
+        }
+      }
+      return { ok: false, reason: 'LOGIN_FAILED' };
+    } catch (e: any) {
+      if (e.code === 'ERR_REQUEST_CANCELED') {
+        console.log('🍎 Apple Sign-In cancelled by user');
+        return { ok: false, reason: 'CANCELLED' };
+      }
+      console.error('❌ Apple sign in error:', e);
+      return { ok: false, reason: 'LOGIN_FAILED' };
+    }
+  }, [upsertUserProfileToSupabase]);
+
+  const deleteAccount = useCallback(async (): Promise<{ ok: boolean; message?: string }> => {
+    try {
+      if (!user) return { ok: false, message: 'No authenticated user' };
+
+      console.log('🗑️ Initiating account deletion for user:', user.id);
+
+      if (isSupabaseEnabled) {
+        // 1. Delete user profile & user data from Supabase
+        const { error: profileErr } = await supabase
+          .from('user_profiles')
+          .delete()
+          .eq('id', user.id);
+
+        if (profileErr) {
+          console.warn('⚠️ Delete user_profiles error:', profileErr.message);
+        }
+
+        await supabase.from('recipes').delete().eq('user_id', user.id);
+        await supabase.from('meal_plans').delete().eq('user_id', user.id);
+
+        // 2. Sign out from Supabase Auth
+        await supabase.auth.signOut();
+      }
+
+      // 3. Clear local storage & state
+      await AsyncStorage.removeItem(USER_STORAGE_KEY);
+      await AsyncStorage.clear();
+      setUser(null);
+      lastUpsertIdRef.current = null;
+
+      console.log('✅ Account successfully deleted.');
+      return { ok: true };
+    } catch (error) {
+      console.error('❌ Account deletion error:', error);
+      return { ok: false, message: error instanceof Error ? error.message : 'Deletion failed' };
+    }
+  }, [user]);
+
   const logout = useCallback(async () => {
     try {
       if (isSupabaseEnabled) {
@@ -558,9 +661,11 @@ const result = createContextHook(() => {
     signup,
     logout,
     loginWithGoogle,
+    loginWithApple,
+    deleteAccount,
     updateProfile,
     isAuthenticated: !!user,
-  }), [user, isLoading, login, signup, logout, loginWithGoogle, updateProfile]);
+  }), [user, isLoading, login, signup, logout, loginWithGoogle, loginWithApple, deleteAccount, updateProfile]);
 });
 
 const AuthContext = result[0];

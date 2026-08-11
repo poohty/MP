@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Image, Alert } from 'react-native';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/auth-store';
 import { useTheme } from '@/hooks/theme-store';
@@ -12,7 +13,7 @@ import { ArrowLeft } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function LoginScreen() {
-  const { login, loginWithGoogle } = useAuth();
+  const { login, loginWithGoogle, loginWithApple } = useAuth();
   const { isDark } = useTheme();
   const themeColors = isDark ? Colors.dark : Colors.light;
   const [email, setEmail] = useState('');
@@ -20,6 +21,7 @@ export default function LoginScreen() {
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isAppleLoading, setIsAppleLoading] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
 
   const validate = () => {
@@ -221,10 +223,32 @@ export default function LoginScreen() {
             title="Continue with Google"
             onPress={handleGoogleLogin}
             isLoading={isGoogleLoading}
-            disabled={isLoading}
+            disabled={isLoading || isAppleLoading}
             variant="secondary"
             style={styles.googleButton}
           />
+
+          {Platform.OS === 'ios' && (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={12}
+              style={{ height: 48, width: '100%', marginTop: 12 }}
+              onPress={async () => {
+                setIsAppleLoading(true);
+                try {
+                  const res = await loginWithApple?.();
+                  if (!res?.ok && res?.reason !== 'CANCELLED') {
+                    Alert.alert('Login failed', 'Could not complete Apple Sign-In.');
+                  }
+                } catch (err) {
+                  console.error('Apple login error:', err);
+                } finally {
+                  setIsAppleLoading(false);
+                }
+              }}
+            />
+          )}
 
           <TouchableOpacity
             onPress={handleForgotPassword}

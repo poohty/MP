@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { router } from 'expo-router';
 import {
   ActivityIndicator,
   Alert,
@@ -77,8 +78,9 @@ export default function PaywallScreen() {
     setIsPurchasing(true);
     try {
       const success = await purchase(pkg);
-      if (!success) {
-        // User cancelled without completing — no error thrown.
+      if (success) {
+        console.log('[PaywallScreen] Purchase succeeded, navigating to tabs');
+        router.replace('/(tabs)');
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'An error occurred during purchase.';

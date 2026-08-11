@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/auth-store';
+import { useTheme } from '@/hooks/theme-store';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
@@ -10,7 +12,8 @@ import { ArrowLeft, MapPin } from 'lucide-react-native';
 import * as Location from 'expo-location';
 
 export default function SignupScreen() {
-  const { signup } = useAuth();
+  const { signup, loginWithGoogle, loginWithApple } = useAuth();
+  const { isDark } = useTheme();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,6 +26,7 @@ export default function SignupScreen() {
   }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isAppleLoading, setIsAppleLoading] = useState(false);
   const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
 
   const validate = () => {
@@ -231,10 +235,32 @@ export default function SignupScreen() {
             title="Continue with Google"
             onPress={handleGoogleLogin}
             isLoading={isGoogleLoading}
-            disabled={locationPermission === null || isLoading}
+            disabled={locationPermission === null || isLoading || isAppleLoading}
             variant="secondary"
             style={styles.googleButton}
           />
+
+          {Platform.OS === 'ios' && (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+              buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={12}
+              style={{ height: 48, width: '100%', marginTop: 12 }}
+              onPress={async () => {
+                setIsAppleLoading(true);
+                try {
+                  const res = await loginWithApple?.();
+                  if (!res?.ok && res?.reason !== 'CANCELLED') {
+                    Alert.alert('Signup failed', 'Could not complete Apple Sign-In.');
+                  }
+                } catch (err) {
+                  console.error('Apple signup error:', err);
+                } finally {
+                  setIsAppleLoading(false);
+                }
+              }}
+            />
+          )}
         </View>
         
         <View style={styles.footer}>

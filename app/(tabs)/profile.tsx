@@ -7,12 +7,13 @@ import { useSubscription } from '@/hooks/subscription-store';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
-import { User, Settings, Info, Heart, Users, Moon, Mic, Crown, RotateCcw } from 'lucide-react-native';
+import { User, Settings, Info, Heart, Users, Moon, Mic, Crown, RotateCcw, Shield, FileText, Trash2 } from 'lucide-react-native';
 import { VOICE_OPTIONS, type VoicePreference } from '@/constants/voice';
 import { router } from 'expo-router';
 
 export default function ProfileScreen() {
-  const { user, logout, updateProfile } = useAuth();
+  const { user, logout, updateProfile, deleteAccount } = useAuth();
+  const [isDeleting, setIsDeleting] = useState(false);
   const { currentUserProfile, updateShareCookbook } = useUser();
   const { toggleTheme, isDark } = useTheme();
   const { isProUser, restore } = useSubscription();
@@ -103,6 +104,33 @@ export default function ProfileScreen() {
       setIsSavingVoice(false);
     }
   }, [voicePreference, updateProfile]);
+
+  const handleDeleteAccount = (): void => {
+    Alert.alert(
+      'Delete Account',
+      'Are you sure you want to delete your account? All your recipes, meal plans, and saved preferences will be permanently deleted. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+              const res = await deleteAccount();
+              if (!res.ok) {
+                Alert.alert('Error', res.message || 'Could not delete account.');
+              }
+            } catch (err) {
+              Alert.alert('Error', 'An unexpected error occurred during account deletion.');
+            } finally {
+              setIsDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleLogout = (): void => {
     Alert.alert(
@@ -279,11 +307,11 @@ export default function ProfileScreen() {
         </View>
         
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>About</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Legal & Support</Text>
           
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => router.push('/help-support' as any)}
+            onPress={() => Linking.openURL('https://mealplannerroulette.com/support.html')}
           >
             <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
               <Info size={20} color={colors.primary} />
@@ -291,11 +319,39 @@ export default function ProfileScreen() {
             <Text style={[styles.menuText, { color: colors.text }]}>Help & Support</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => Linking.openURL('https://mealplannerroulette.com/privacy.html')}
+          >
             <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
-              <Heart size={20} color={colors.primary} />
+              <Shield size={20} color={colors.primary} />
             </View>
-            <Text style={[styles.menuText, { color: colors.text }]}>About Meal Planning Roulette</Text>
+            <Text style={[styles.menuText, { color: colors.text }]}>Privacy Policy</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => Linking.openURL('https://mealplannerroulette.com/terms.html')}
+          >
+            <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
+              <FileText size={20} color={colors.primary} />
+            </View>
+            <Text style={[styles.menuText, { color: colors.text }]}>Terms of Service</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={handleDeleteAccount}
+            disabled={isDeleting}
+          >
+            <View style={[styles.menuIconContainer, { backgroundColor: '#FF3B30' + '15' }]}>
+              {isDeleting ? (
+                <ActivityIndicator size="small" color="#FF3B30" />
+              ) : (
+                <Trash2 size={20} color="#FF3B30" />
+              )}
+            </View>
+            <Text style={[styles.menuText, { color: '#FF3B30', fontWeight: '600' }]}>Delete Account</Text>
           </TouchableOpacity>
         </View>
         

@@ -14,7 +14,7 @@ const config = {
     backgroundColor: "#FF6B6B",
   },
   ios: {
-    buildNumber: "5",
+    buildNumber: "7",
     supportsTablet: true,
     bundleIdentifier: "com.mealplanner.roulette",
     infoPlist: {
@@ -67,13 +67,14 @@ const config = {
     ["expo-av", { microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone" }],
     "expo-font",
     "expo-web-browser",
+    "expo-apple-authentication",
   ],
   experiments: {
     typedRoutes: true,
   },
   extra: {
     router: { origin: "https://mealplannerroulette.com/" },
-    eas: { projectId: "e36152c2-4d13-42cf-8583-ca804d6dae79" },
+    eas: { projectId: "fd4e8da8-2d8b-41f6-b6ed-6f1b9b885066" },
   },
 };
 
