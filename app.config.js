@@ -9,7 +9,7 @@ const config = {
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
   ios: {
-    buildNumber: "9",
+    buildNumber: "10",
     // icon.png stays opaque — the App Store rejects light icons with alpha.
     // The dark variant is transparent so iOS composites it on the system dark
     // background. Omitting `tinted` lets iOS derive it from the light icon.
@@ -43,9 +43,6 @@ const config = {
       "android.permission.WRITE_EXTERNAL_STORAGE",
       "android.permission.ACCESS_COARSE_LOCATION",
       "android.permission.ACCESS_FINE_LOCATION",
-      "android.permission.FOREGROUND_SERVICE",
-      "android.permission.FOREGROUND_SERVICE_LOCATION",
-      "android.permission.ACCESS_BACKGROUND_LOCATION",
       "android.permission.RECORD_AUDIO",
       "android.permission.MODIFY_AUDIO_SETTINGS",
     ],
@@ -70,9 +67,6 @@ const config = {
     [
       "expo-location",
       {
-        isAndroidForegroundServiceEnabled: true,
-        isAndroidBackgroundLocationEnabled: true,
-        isIosBackgroundLocationEnabled: true,
         locationAlwaysAndWhenInUsePermission: "Allow $(PRODUCT_NAME) to use your location.",
       },
     ],

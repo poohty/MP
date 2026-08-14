@@ -60,11 +60,11 @@ export default function AuthCallbackScreen() {
     if (didRun.current) return;
     didRun.current = true;
 
-    console.log('✅ Auth callback opened with params:', JSON.stringify(parsed));
-
     if (parsed.error) {
-      console.error('❌ Auth callback error from params:', parsed.error, parsed.errorDescription);
-      setErrorMessage(parsed.errorDescription || parsed.error || 'Verification failed');
+      const userFriendlyMsg = parsed.errorDescription?.includes('exchange external code')
+        ? 'Could not complete Google Sign-In. Please ensure Google Provider Client Secret is updated in Supabase.'
+        : (parsed.errorDescription || parsed.error || 'Authentication could not be completed.');
+      setErrorMessage(userFriendlyMsg);
       setStatus('error');
       return;
     }
@@ -72,7 +72,6 @@ export default function AuthCallbackScreen() {
     const timeoutId = setTimeout(() => {
       setStatus((current) => {
         if (current === 'checking') {
-          console.warn('⏰ Auth callback timed out after', CALLBACK_TIMEOUT_MS, 'ms');
           setErrorMessage('Verification is taking too long. Please try logging in — your email may already be verified.');
           return 'error';
         }
@@ -83,13 +82,11 @@ export default function AuthCallbackScreen() {
     async function cleanupAndMarkVerified() {
       try {
         await AsyncStorage.removeItem(USER_STORAGE_KEY);
-        console.log('🧹 Cleared stale local user after verification');
       } catch (e) {
         console.warn('⚠️ Could not clear local user storage:', e);
       }
       try {
         await supabase.auth.signOut();
-        console.log('🧹 Signed out Supabase session after verification');
       } catch (e) {
         console.warn('⚠️ Could not sign out after verification:', e);
       }
@@ -98,14 +95,12 @@ export default function AuthCallbackScreen() {
 
     async function handleCallback() {
       if (!isSupabaseEnabled) {
-        console.log('✅ Supabase not enabled, treating as verified');
         setStatus('verified');
         return;
       }
 
       try {
         if (parsed.tokenHash && parsed.type) {
-          console.log('🔑 Verifying OTP with token_hash...', { token_hash: parsed.tokenHash.substring(0, 8) + '...', type: parsed.type });
           const otpType = parsed.type as 'signup' | 'email' | 'recovery';
           const { data: otpData, error: otpError } = await supabase.auth.verifyOtp({
             token_hash: parsed.tokenHash,
@@ -119,7 +114,6 @@ export default function AuthCallbackScreen() {
               return;
             }
             if (otpError.message?.toLowerCase().includes('already') || otpError.message?.toLowerCase().includes('confirmed')) {
-              console.log('✅ Email was already verified');
               await cleanupAndMarkVerified();
               return;
             }
@@ -128,14 +122,13 @@ export default function AuthCallbackScreen() {
             return;
           }
 
-          console.log('✅ OTP verified successfully, user:', otpData?.user?.id);
-          console.log('✅ email_confirmed_at:', otpData?.user?.email_confirmed_at);
           await cleanupAndMarkVerified();
           return;
         }
 
+        const isEmailVerification = !!parsed.tokenHash || parsed.type === 'signup' || parsed.type === 'email' || parsed.type === 'recovery';
+
         if (parsed.accessToken && parsed.refreshToken) {
-          console.log('🔑 Setting session from access_token + refresh_token...');
           const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
             access_token: parsed.accessToken,
             refresh_token: parsed.refreshToken,
@@ -147,13 +140,15 @@ export default function AuthCallbackScreen() {
             return;
           }
 
-          console.log('✅ Session set, email_confirmed_at:', sessionData?.user?.email_confirmed_at);
-          await cleanupAndMarkVerified();
+          if (isEmailVerification) {
+            await cleanupAndMarkVerified();
+          } else {
+            router.replace('/(tabs)');
+          }
           return;
         }
 
         if (parsed.code) {
-          console.log('🔗 Found code param, exchanging for session...');
           const { data: codeData, error: codeError } = await supabase.auth.exchangeCodeForSession(parsed.code);
           if (codeError) {
             console.error('❌ Code exchange failed:', codeError.message);
@@ -162,14 +157,16 @@ export default function AuthCallbackScreen() {
             return;
           }
 
-          console.log('✅ Code exchanged, email_confirmed_at:', codeData?.user?.email_confirmed_at);
-          await cleanupAndMarkVerified();
+          if (isEmailVerification) {
+            await cleanupAndMarkVerified();
+          } else {
+            router.replace('/(tabs)');
+          }
           return;
         }
 
         const { data: existingSession } = await supabase.auth.getSession();
         if (existingSession?.session?.user?.email_confirmed_at) {
-          console.log('✅ Existing verified session found, treating as verified');
           await cleanupAndMarkVerified();
           return;
         }

@@ -214,6 +214,32 @@ const result = createContextHook(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('🔐 onAuthStateChange:', event, session?.user?.id ?? 'no-user');
 
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+        const supaUser = session.user;
+        const googleName = (supaUser.user_metadata?.full_name || supaUser.user_metadata?.name || '').trim();
+        const userEmail = (supaUser.email || `user_${supaUser.id.substring(0, 8)}@auth.com`).trim();
+        const baseName = googleName || (userEmail.includes('@') ? userEmail.split('@')[0] : 'User');
+        const cleanName = baseName.trim() || 'User';
+        const cleanUsername = (cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_') || 'user') + '_' + supaUser.id.substring(0, 4);
+
+        const newUser: User = {
+          id: supaUser.id,
+          email: userEmail,
+          name: cleanName,
+          username: cleanUsername,
+          shareCookbookWithFriends: false,
+        };
+
+        try {
+          console.log('🔐 Session signed in, setting local user:', newUser.id);
+          await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
+          setUser(newUser);
+          await upsertUserProfileToSupabase(newUser);
+        } catch (e) {
+          console.warn('⚠️ Error saving user on SIGNED_IN:', e);
+        }
+      }
+
       if (event === 'SIGNED_OUT') {
         console.log('🔐 Session signed out externally, clearing local user');
         await AsyncStorage.removeItem(USER_STORAGE_KEY);
@@ -235,7 +261,7 @@ const result = createContextHook(() => {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [upsertUserProfileToSupabase]);
 
   const login = useCallback(
     async (email: string, password: string): Promise<LoginResult> => {
@@ -512,14 +538,93 @@ const result = createContextHook(() => {
         return { ok: false, reason: 'LOGIN_FAILED' };
       }
       
-      await WebBrowser.openAuthSessionAsync(data.url, EMAIL_REDIRECT_URL);
+      const result = await WebBrowser.openAuthSessionAsync(data.url, EMAIL_REDIRECT_URL);
+      console.log('🔗 WebBrowser result type:', result.type);
+
+      if (result.type === 'success' && result.url) {
+        let supaSession = null;
+
+        const urlString = result.url;
+        const hashIndex = urlString.indexOf('#');
+        const queryIndex = urlString.indexOf('?');
+        
+        let paramsString = '';
+        if (hashIndex !== -1) {
+          paramsString = urlString.substring(hashIndex + 1);
+        } else if (queryIndex !== -1) {
+          paramsString = urlString.substring(queryIndex + 1);
+        }
+
+        if (paramsString) {
+          const params = new URLSearchParams(paramsString);
+          const accessToken = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+          const code = params.get('code');
+
+          if (accessToken && refreshToken) {
+            console.log('🔗 Setting session from OAuth access_token...');
+            const { data: sessionData, error: sessionErr } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            if (!sessionErr && sessionData?.session) {
+              supaSession = sessionData.session;
+            } else if (sessionErr) {
+              console.error('❌ Error setting OAuth session:', sessionErr.message);
+            }
+          } else if (code) {
+            console.log('🔗 Exchanging OAuth code for session...');
+            const { data: exchangeData, error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
+            if (!exchangeErr && exchangeData?.session) {
+              supaSession = exchangeData.session;
+            } else if (exchangeErr) {
+              console.error('❌ Error exchanging OAuth code:', exchangeErr.message);
+            }
+          }
+        }
+
+        if (!supaSession) {
+          const { data: currentSessionData } = await supabase.auth.getSession();
+          supaSession = currentSessionData?.session;
+        }
+
+        if (supaSession?.user) {
+          const supaUser = supaSession.user;
+          console.log('✅ Google OAuth session active, user ID:', supaUser.id);
+
+          const googleName = (
+            supaUser.user_metadata?.full_name ||
+            supaUser.user_metadata?.name ||
+            ''
+          ).trim();
+          const userEmail = (supaUser.email || `google_${supaUser.id.substring(0, 8)}@gmail.com`).trim();
+          const baseName = googleName || (userEmail.includes('@') ? userEmail.split('@')[0] : 'User');
+          const cleanName = baseName.trim() || 'User';
+          const cleanUsername = (cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_') || 'user') + '_' + supaUser.id.substring(0, 4);
+
+          const newUser: User = {
+            id: supaUser.id,
+            email: userEmail,
+            name: cleanName,
+            username: cleanUsername,
+            shareCookbookWithFriends: false,
+          };
+
+          console.log('🔑 Saving Google authenticated user to state:', newUser.id);
+          await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
+          setUser(newUser);
+
+          await upsertUserProfileToSupabase(newUser);
+          return { ok: true };
+        }
+      }
       
-      return { ok: true };
+      return { ok: false, reason: 'LOGIN_FAILED' };
     } catch (error) {
       console.error('❌ Google Login error:', error);
       return { ok: false, reason: 'LOGIN_FAILED' };
     }
-  }, []);
+  }, [upsertUserProfileToSupabase]);
 
   const updateProfile = useCallback(async (updates: Partial<User>) => {
     try {

@@ -97,19 +97,19 @@ export default function AddRecipePhotoScreen() {
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
+
     if (status !== 'granted') {
       Alert.alert('Permission Required', 'Please allow access to your photo library to upload recipes.');
       return;
     }
-    
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.7,
     });
-    
+
     if (!result.canceled) {
       setImageUri(result.assets[0].uri);
       void extractTextFromImage(result.assets[0].uri);
@@ -118,18 +118,18 @@ export default function AddRecipePhotoScreen() {
 
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    
+
     if (status !== 'granted') {
       Alert.alert('Permission Required', 'Please allow access to your camera to take photos.');
       return;
     }
-    
+
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.7,
     });
-    
+
     if (!result.canceled) {
       setImageUri(result.assets[0].uri);
       void extractTextFromImage(result.assets[0].uri);
@@ -138,7 +138,6 @@ export default function AddRecipePhotoScreen() {
 
   const resizeImageForExtraction = async (uri: string): Promise<string> => {
     const startTime = Date.now();
-    console.log(`[Resize] Starting image resize for extraction...`);
 
     try {
       if (Platform.OS === 'web') {
@@ -161,7 +160,6 @@ export default function AddRecipePhotoScreen() {
             ctx.drawImage(img, 0, 0, width, height);
             const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
             const b64 = dataUrl.split(',')[1] || '';
-            console.log(`[Resize] Web resize done in ${Date.now() - startTime}ms, base64 length: ${b64.length}`);
             resolve(b64);
           };
           img.onerror = () => reject(new Error('Failed to load image for resize'));
@@ -181,7 +179,6 @@ export default function AddRecipePhotoScreen() {
         const reader = new FileReader();
         reader.onload = () => {
           const b64 = (typeof reader.result === 'string' ? reader.result : '').split(',')[1] || '';
-          console.log(`[Resize] Native resize done in ${Date.now() - startTime}ms, base64 length: ${b64.length}`);
           resolve(b64);
         };
         reader.onerror = () => reject(new Error('Failed to read resized image'));
@@ -195,7 +192,6 @@ export default function AddRecipePhotoScreen() {
         const reader = new FileReader();
         reader.onload = () => {
           const b64 = (typeof reader.result === 'string' ? reader.result : '').split(',')[1] || '';
-          console.log(`[Resize] Fallback base64 length: ${b64.length}`);
           resolve(b64);
         };
         reader.onerror = () => reject(new Error('Failed to read image'));
@@ -209,7 +205,6 @@ export default function AddRecipePhotoScreen() {
     try {
       setIsExtracting(true);
       setExtractionProgress('📸 Preparing image...');
-      console.log('[PhotoExtraction] Starting recipe photo extraction...');
 
       const base64data = await resizeImageForExtraction(uri);
 
@@ -218,7 +213,6 @@ export default function AddRecipePhotoScreen() {
       }
 
       const imageSizeKB = Math.round(base64data.length / 1024);
-      console.log(`[PhotoExtraction] Image payload size: ${imageSizeKB} KB`);
 
       if (imageSizeKB > 4000) {
         console.warn(`[PhotoExtraction] Image still large (${imageSizeKB} KB), may be slow`);
@@ -230,7 +224,6 @@ export default function AddRecipePhotoScreen() {
       const timeoutId = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
       const aiStart = Date.now();
 
-      console.log('[PhotoExtraction] Sending to AI for extraction...');
       const aiResponse = await fetch('https://toolkit.rork.com/text/llm/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -271,7 +264,6 @@ Rules:
 
       clearTimeout(timeoutId);
       const aiElapsed = Date.now() - aiStart;
-      console.log(`[PhotoExtraction] AI response received in ${aiElapsed}ms, status: ${aiResponse.status}`);
 
       if (!aiResponse.ok) {
         throw new Error(`AI API error: ${aiResponse.status}`);
@@ -286,12 +278,10 @@ Rules:
       if (categoryMatch) {
         const suggestedCategory = categoryMatch[1] as RecipeCategory;
         setCategory(suggestedCategory);
-        console.log(`[PhotoExtraction] AI suggested category: ${suggestedCategory}`);
 
         const lowerCompletion = completion.toLowerCase();
         const soupKeywords = ['soup', 'stew', 'chili', 'bisque', 'chowder', 'broth', 'pho', 'ramen', 'gazpacho', 'minestrone'];
         if (soupKeywords.some(kw => lowerCompletion.includes(kw)) && suggestedCategory !== 'Salads & Soups') {
-          console.log('[PhotoExtraction] Soup keyword override applied');
           setCategory('Salads & Soups');
         }
       }
@@ -335,15 +325,12 @@ Rules:
       const instructionMatch = recipeText.match(/INSTRUCTIONS:[\s\S]*/i);
       const instructionBlock = instructionMatch ? instructionMatch[0] : '';
       const instructionLineCount = (instructionBlock.match(/^\d+\./gm) || []).length;
-      console.log(`[PhotoExtraction] Extracted text length: ${recipeText.length}`);
-      console.log(`[PhotoExtraction] Instruction steps found: ${instructionLineCount}`);
 
       setExtractedText(recipeText);
       setIsExtracting(false);
       setExtractionProgress('');
 
       const totalElapsed = Date.now() - totalStart;
-      console.log(`[PhotoExtraction] Total extraction time: ${totalElapsed}ms`);
 
       Alert.alert(
         '✅ Extraction Complete',
@@ -377,19 +364,19 @@ Rules:
 
   const pickThumbnail = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
+
     if (status !== 'granted') {
       Alert.alert('Permission Required', 'Please allow access to your photo library to upload thumbnail.');
       return;
     }
-    
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.7,
     });
-    
+
     if (!result.canceled) {
       const compressed = await compressImageUri(result.assets[0].uri);
       setThumbnailUri(compressed);
@@ -398,18 +385,18 @@ Rules:
 
   const takeThumbnailPhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    
+
     if (status !== 'granted') {
       Alert.alert('Permission Required', 'Please allow access to your camera to take photos.');
       return;
     }
-    
+
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.7,
     });
-    
+
     if (!result.canceled) {
       const compressed = await compressImageUri(result.assets[0].uri);
       setThumbnailUri(compressed);
@@ -421,7 +408,7 @@ Rules:
       Alert.alert('Error', 'Please enter a recipe name');
       return;
     }
-    
+
     setIsLoading(true);
     try {
       const contentToSave = extractedText.trim();
@@ -431,11 +418,7 @@ Rules:
         const block = instructionMatch[0];
         const stepCount = (block.match(/^\d+\./gm) || []).length;
         const sentenceCount = (block.match(/[.!?]\s/g) || []).length + 1;
-        console.log(`[SaveValidation] Content length: ${contentToSave.length}`);
-        console.log(`[SaveValidation] Instruction block length: ${block.length}`);
-        console.log(`[SaveValidation] Numbered steps: ${stepCount}, Approx sentences: ${sentenceCount}`);
       } else {
-        console.log(`[SaveValidation] No INSTRUCTIONS header found, saving full content (${contentToSave.length} chars)`);
       }
 
       const saved = await addRecipe({
@@ -452,8 +435,7 @@ Rules:
         );
         return;
       }
-      
-      console.log(`[SaveValidation] Recipe saved successfully with ${contentToSave.length} chars of content`);
+
       Alert.alert('Success', 'Recipe added successfully', [
         { text: 'OK', onPress: () => router.back() }
       ]);
@@ -503,27 +485,27 @@ Rules:
             </View>
           )}
         </View>
-        
+
         <Input
           label="Recipe Name"
           placeholder="Enter recipe name"
           value={name}
           onChangeText={setName}
         />
-        
+
         <DropdownSelect
           label="Category"
           options={categoryOptions}
           selectedValue={category}
           onSelect={(value) => setCategory(value as RecipeCategory)}
         />
-        
+
         <View style={styles.thumbnailSection}>
           <Text style={[styles.thumbnailLabel, themedStyles.thumbnailLabel]}>Recipe Thumbnail (Optional)</Text>
           <Text style={[styles.thumbnailDescription, themedStyles.thumbnailDescription]}>
             Upload a photo of the finished dish to use as the recipe thumbnail
           </Text>
-          
+
           {thumbnailUri ? (
             <View style={[styles.thumbnailContainer, themedStyles.thumbnailContainer]}>
               <Image source={{ uri: thumbnailUri }} style={styles.thumbnailImage} />
@@ -559,7 +541,7 @@ Rules:
             </View>
           )}
         </View>
-        
+
         {isExtracting ? (
           <View style={[styles.loadingContainer, themedStyles.loadingContainer]}>
             <Text style={[styles.loadingTitle, themedStyles.loadingTitle]}>✨ Extracting Recipe</Text>
@@ -574,7 +556,7 @@ Rules:
             <Text style={[styles.extractedText, themedStyles.extractedText]}>{extractedText}</Text>
           </View>
         ) : null}
-        
+
         <Button
           title="Save Recipe"
           onPress={handleSave}
@@ -608,7 +590,7 @@ const styles = StyleSheet.create({
   },
   uploadText: {
     color: Colors.textSecondary,
-    marginBottom:  16,
+    marginBottom: 16,
     fontSize: 16,
   },
   buttonRow: {

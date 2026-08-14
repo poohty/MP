@@ -161,6 +161,13 @@ export default function ProfileScreen() {
           </View>
           <Text style={[styles.name, { color: colors.text }]}>{user?.name || 'User'}</Text>
           <Text style={[styles.email, { color: colors.textSecondary }]}>{user?.email || 'user@example.com'}</Text>
+          <TouchableOpacity
+            style={[styles.editProfileBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            onPress={() => router.push('/edit-profile')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.editProfileBtnText, { color: colors.primary }]}>Edit Name / Profile</Text>
+          </TouchableOpacity>
         </View>
         
         <View style={styles.section}>
@@ -477,6 +484,17 @@ const styles = StyleSheet.create({
   logoutButton: {
     marginTop: 16,
     marginBottom: 24,
+  },
+  editProfileBtn: {
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  editProfileBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   version: {
     textAlign: 'center',

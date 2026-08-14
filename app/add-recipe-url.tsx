@@ -26,17 +26,17 @@ export default function AddRecipeUrlScreen() {
 
   const validate = () => {
     const newErrors: { name?: string; url?: string } = {};
-    
+
     if (!name.trim()) {
       newErrors.name = 'Recipe name is required';
     }
-    
+
     if (!url.trim()) {
       newErrors.url = 'Recipe URL is required';
     } else if (!url.startsWith('http://') && !url.startsWith('https://')) {
       newErrors.url = 'Please enter a valid URL starting with http:// or https://';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -44,13 +44,10 @@ export default function AddRecipeUrlScreen() {
 
   const handleSave = async () => {
     if (!validate()) return;
-    
+
     setIsLoading(true);
     try {
-      console.log('🔄 Starting recipe save process...');
-      console.log(`📁 User selected category: ${category}`);
-      console.log('💾 Saving recipe with user-selected category...');
-      
+
       const saved = await addRecipe({
         name: name.trim(),
         category: category,
@@ -64,9 +61,7 @@ export default function AddRecipeUrlScreen() {
         );
         return;
       }
-      
-      console.log('✅ Recipe saved successfully!');
-      
+
       Alert.alert('Success', `Recipe added to "${category}" successfully!`, [
         { text: 'OK', onPress: () => router.back() }
       ]);
@@ -87,7 +82,7 @@ export default function AddRecipeUrlScreen() {
             Add a link to a recipe from your favorite website
           </Text>
         </View>
-        
+
         <Input
           label="Recipe Name"
           placeholder="Enter recipe name"
@@ -95,7 +90,7 @@ export default function AddRecipeUrlScreen() {
           onChangeText={setName}
           error={errors.name}
         />
-        
+
         <Input
           label="Recipe URL"
           placeholder="https://example.com/recipe"
@@ -105,14 +100,14 @@ export default function AddRecipeUrlScreen() {
           keyboardType="url"
           error={errors.url}
         />
-        
+
         <DropdownSelect
           label="Category"
           options={categoryOptions}
           selectedValue={category}
           onSelect={(value) => setCategory(value as RecipeCategory)}
         />
-        
+
         {isLoading && (
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingTitle}>✨ Processing Recipe</Text>
@@ -120,7 +115,7 @@ export default function AddRecipeUrlScreen() {
             <Text style={styles.loadingSubtext}>This may take 15-30 seconds</Text>
           </View>
         )}
-        
+
         <Button
           title="Save Recipe"
           onPress={handleSave}

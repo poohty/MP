@@ -36,8 +36,6 @@ function extractParams(path: string): URLSearchParams {
 export function redirectSystemPath({
   path,
 }: { path: string; initial: boolean }) {
-  console.log('🔗 native-intent received path:', path);
-
   if (path.includes('auth-callback')) {
     const params = extractParams(path);
     const access_token = params.get('access_token') || '';
@@ -58,7 +56,6 @@ export function redirectSystemPath({
     if (error_description) queryParts.push(`error_description=${encodeURIComponent(error_description)}`);
 
     const query = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
-    console.log('🔗 native-intent routing to /auth-callback', query);
     return `/auth-callback${query}`;
   }
 
@@ -78,7 +75,6 @@ export function redirectSystemPath({
     if (code) queryParts.push(`code=${encodeURIComponent(code)}`);
 
     const query = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
-    console.log('🔗 native-intent routing to /reset-password', query);
     return `/reset-password${query}`;
   }
 
