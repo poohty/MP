@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Alert, Platform } from 'react-native';
 import { Audio } from 'expo-av';
+import * as Speech from 'expo-speech';
 import { getBackendBaseUrl } from '@/lib/trpc';
 import { resolveVoiceId, type VoicePreference } from '@/constants/voice';
 
@@ -183,8 +184,19 @@ async function playAudioUri(uri: string, soundRef: React.MutableRefObject<Audio.
 }
 
 async function speakText(text: string, soundRef: React.MutableRefObject<Audio.Sound | null>, voiceId: string, requestId?: string): Promise<void> {
-  const uri = await fetchTTSAudio(text, voiceId, requestId);
-  await playAudioUri(uri, soundRef);
+  try {
+    const uri = await fetchTTSAudio(text, voiceId, requestId);
+    await playAudioUri(uri, soundRef);
+  } catch (error) {
+    console.log('[CookAlong] TTS failed or not configured, falling back to expo-speech:', error);
+    return new Promise((resolve) => {
+      Speech.speak(text, {
+        onDone: () => resolve(),
+        onError: () => resolve(),
+        onStopped: () => resolve(),
+      });
+    });
+  }
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {

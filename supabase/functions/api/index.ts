@@ -1,0 +1,150 @@
+// Voice proxy — mirrors backend/trpc/routes/voice.ts, ported to run as a
+// Supabase Edge Function (Deno) instead of the Hono/Bun server.
+// Supabase strips "/functions/v1" but keeps the function-name segment, so
+// the app's `${apiBase}/api/voice/tts` calls need basePath("/api") here,
+// with apiBase = https://<project-ref>.supabase.co/functions/v1
+import { Hono } from "npm:hono@4";
+import { cors } from "npm:hono@4/cors";
+
+const ELEVENLABS_API_KEY = () => Deno.env.get("ELEVENLABS_API_KEY");
+
+function detectCommand(transcript: string): "STEP_COMPLETE" | "REPEAT_STEP" | "NONE" {
+  const lower = transcript.toLowerCase();
+  if (lower.includes("step complete")) return "STEP_COMPLETE";
+  if (lower.includes("repeat step")) return "REPEAT_STEP";
+  return "NONE";
+}
+
+const app = new Hono().basePath("/api");
+
+app.use("*", cors());
+
+app.get("/voice/health", (c) => c.json({ ok: true }));
+
+app.post("/voice/stt", async (c) => {
+  const apiKey = ELEVENLABS_API_KEY();
+  if (!apiKey) {
+    return c.json({ error: "ELEVENLABS_API_KEY not set" }, 500);
+  }
+
+  try {
+    const formData = await c.req.formData();
+    const audioFile = formData.get("audio");
+    if (!audioFile || !(audioFile instanceof File)) {
+      return c.json({ error: "Missing 'audio' file field" }, 400);
+    }
+
+    const callerKeyterms = formData.get("keyterms");
+    const baseKeyterms = ["step complete", "repeat step"];
+    let mergedKeyterms = [...baseKeyterms];
+
+    if (callerKeyterms && typeof callerKeyterms === "string") {
+      const extra = callerKeyterms.split(",").map((k) => k.trim()).filter(Boolean);
+      mergedKeyterms = [...new Set([...baseKeyterms, ...extra])];
+    }
+
+    const elevenLabsForm = new FormData();
+    elevenLabsForm.append("file", audioFile, audioFile.name || "audio.webm");
+    elevenLabsForm.append("model_id", "scribe_v2");
+
+    for (const term of mergedKeyterms) {
+      elevenLabsForm.append("keyterms", term);
+    }
+
+    console.log("[voice/stt] Calling ElevenLabs Scribe API...");
+
+    const response = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey,
+      },
+      body: elevenLabsForm,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[voice/stt] ElevenLabs error:", response.status, errorText);
+      let parsedError: string = errorText;
+      let param: string | undefined;
+      try {
+        const errJson = JSON.parse(errorText);
+        parsedError = errJson?.detail?.message || errJson?.detail || errorText;
+        param = errJson?.detail?.param;
+      } catch {
+        // errorText wasn't JSON — keep the raw text as parsedError.
+      }
+      return c.json({ error: `ElevenLabs STT error: ${parsedError}`, param, raw: errorText }, 502);
+    }
+
+    const result = await response.json() as { text?: string };
+    const transcript = result.text ?? "";
+    const command = detectCommand(transcript);
+
+    console.log("[voice/stt] Transcript:", transcript, "| Command:", command);
+
+    return c.json({ transcript, command });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[voice/stt] Unexpected error:", message);
+    return c.json({ error: message }, 500);
+  }
+});
+
+app.post("/voice/tts", async (c) => {
+  const apiKey = ELEVENLABS_API_KEY();
+  if (!apiKey) {
+    console.error("[voice/tts] ELEVENLABS_API_KEY not set");
+    return c.json({ error: "ELEVENLABS_API_KEY not set" }, 500);
+  }
+
+  try {
+    const body = await c.req.json<{ text?: string; voiceId?: string }>();
+    const { text, voiceId } = body;
+
+    if (!text || !voiceId) {
+      console.log("[voice/tts] Missing fields - text:", !!text, "voiceId:", !!voiceId);
+      return c.json({ error: "Missing 'text' or 'voiceId' in request body" }, 400);
+    }
+
+    console.log("[voice/tts] Calling ElevenLabs TTS for voice:", voiceId, "| text length:", text.length);
+
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": apiKey,
+          "Content-Type": "application/json",
+          Accept: "audio/mpeg",
+        },
+        body: JSON.stringify({
+          text,
+          model_id: "eleven_turbo_v2_5",
+          output_format: "mp3_22050_32",
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[voice/tts] ElevenLabs error:", response.status, errorText);
+      return c.json({ error: `ElevenLabs TTS error: ${errorText}` }, 502);
+    }
+
+    const audioBuffer = await response.arrayBuffer();
+
+    return new Response(audioBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "audio/mpeg",
+        "Content-Length": String(audioBuffer.byteLength),
+      },
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[voice/tts] Unexpected error:", message);
+    return c.json({ error: message }, 500);
+  }
+});
+
+Deno.serve(app.fetch);

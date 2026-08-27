@@ -94,7 +94,7 @@ export default function PaywallScreen() {
     if (selectedPlan === 'trial') {
       Alert.alert(
         'Start 7-Day Free Trial',
-        'You will lose access to all premium features after 7 days if you do not subscribe. Cancel anytime in your App Store Account Settings.',
+        `After your 7-day free trial, you will automatically be charged ${yearlyPrice} for an annual subscription. Cancel anytime in your App Store Account Settings before the trial ends to avoid being charged.`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -213,8 +213,8 @@ export default function PaywallScreen() {
                     {selectedPlan === 'trial' && <View style={styles.radioInner} />}
                   </View>
                   <View>
-                    <Text style={styles.planListLabel}>1 Free Week Trial</Text>
-                    <Text style={styles.planListSub}>7 Days Free, then {yearlyPrice}/year</Text>
+                    <Text style={styles.planListLabel}>Premium: 1 Week Free Trial</Text>
+                    <Text style={styles.planListSub}>7 Days Free, then auto-renews at {yearlyPrice}/year</Text>
                   </View>
                 </View>
                 <View style={styles.trialBadge}>
@@ -233,8 +233,8 @@ export default function PaywallScreen() {
                     {selectedPlan === 'monthly' && <View style={styles.radioInner} />}
                   </View>
                   <View>
-                    <Text style={styles.planListLabel}>Monthly Plan</Text>
-                    <Text style={styles.planListSub}>{monthlyPrice}/month, cancel anytime</Text>
+                    <Text style={styles.planListLabel}>Premium Monthly Plan</Text>
+                    <Text style={styles.planListSub}>{monthlyPrice}/month, auto-renews until canceled</Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -250,8 +250,8 @@ export default function PaywallScreen() {
                     {selectedPlan === 'yearly' && <View style={styles.radioInner} />}
                   </View>
                   <View>
-                    <Text style={styles.planListLabel}>Annual Plan</Text>
-                    <Text style={styles.planListSub}>{yearlyPrice}/year, save 17%</Text>
+                    <Text style={styles.planListLabel}>Premium Annual Plan</Text>
+                    <Text style={styles.planListSub}>{yearlyPrice}/year, auto-renews until canceled</Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -273,7 +273,25 @@ export default function PaywallScreen() {
               )}
             </TouchableOpacity>
 
-            <Text style={styles.trialNote}>Cancel anytime in App Store Settings</Text>
+            {/* Auto-renewing subscription trial disclosure for Apple Guideline 3.1.2(c) */}
+            <Text style={styles.trialNote}>
+              {selectedPlan === 'trial'
+                ? `A 7-day free trial is included. After the trial ends, a payment of ${yearlyPrice} will be automatically initiated for an annual subscription. Your subscription automatically renews unless canceled at least 24 hours before the end of the current period. Manage or cancel anytime in your Apple ID Account Settings.`
+                : selectedPlan === 'monthly'
+                ? `A payment of ${monthlyPrice} will be automatically initiated for a monthly subscription. Your subscription automatically renews unless canceled at least 24 hours before the end of the current period. Manage or cancel anytime in your Apple ID Account Settings.`
+                : `A payment of ${yearlyPrice} will be automatically initiated for an annual subscription. Your subscription automatically renews unless canceled at least 24 hours before the end of the current period. Manage or cancel anytime in your Apple ID Account Settings.`}
+            </Text>
+
+            {/* Legal Links (Terms & Privacy) immediately below the disclosure */}
+            <View style={[styles.legal, { marginTop: 10, marginBottom: 0 }]}>
+              <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)}>
+                <Text style={styles.legalLink}>Terms of Use (EULA)</Text>
+              </TouchableOpacity>
+              <Text style={styles.legalSep}>·</Text>
+              <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_URL)}>
+                <Text style={styles.legalLink}>Privacy Policy</Text>
+              </TouchableOpacity>
+            </View>
           </>
         )}
 
@@ -297,7 +315,7 @@ export default function PaywallScreen() {
         {/* Legal */}
         <View style={styles.legal}>
           <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)}>
-            <Text style={styles.legalLink}>Terms of Service</Text>
+            <Text style={styles.legalLink}>Terms of Use (EULA)</Text>
           </TouchableOpacity>
           <Text style={styles.legalSep}>·</Text>
           <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_URL)}>
