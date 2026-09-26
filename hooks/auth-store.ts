@@ -5,6 +5,7 @@ import { Platform } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { User } from '@/types';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
+import { getBackendBaseUrl } from '@/lib/trpc';
 import type { VoicePreference } from '@/constants/voice';
 import * as WebBrowser from 'expo-web-browser';
 
@@ -715,20 +716,23 @@ const result = createContextHook(() => {
       console.log('🗑️ Initiating account deletion for user:', user.id);
 
       if (isSupabaseEnabled) {
-        // 1. Delete user profile & user data from Supabase
-        const { error: profileErr } = await supabase
-          .from('user_profiles')
-          .delete()
-          .eq('id', user.id);
-
-        if (profileErr) {
-          console.warn('⚠️ Delete user_profiles error:', profileErr.message);
+        // Server-side: removes the auth user and (via cascade) all their data.
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        const apiBase = getBackendBaseUrl();
+        if (!accessToken || !apiBase) {
+          return { ok: false, message: 'Please sign in again and retry.' };
         }
 
-        await supabase.from('recipes').delete().eq('user_id', user.id);
-        await supabase.from('meal_plans').delete().eq('user_id', user.id);
+        const response = await fetch(`${apiBase}/api/account/delete`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!response.ok) {
+          console.error('❌ Account deletion failed:', response.status);
+          return { ok: false, message: 'We could not delete your account. Please try again or contact support.' };
+        }
 
-        // 2. Sign out from Supabase Auth
         await supabase.auth.signOut();
       }
 

@@ -5,6 +5,7 @@
 // with apiBase = https://<project-ref>.supabase.co/functions/v1
 import { Hono } from "npm:hono@4";
 import { cors } from "npm:hono@4/cors";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const ELEVENLABS_API_KEY = () => Deno.env.get("ELEVENLABS_API_KEY");
 
@@ -145,6 +146,38 @@ app.post("/voice/tts", async (c) => {
     console.error("[voice/tts] Unexpected error:", message);
     return c.json({ error: message }, 500);
   }
+});
+
+// Permanent account deletion (Apple guideline 5.1.1(v)). The client can't delete an auth user, so this
+// verifies the caller's own JWT and removes them with the service role. Recipes, profile and outgoing
+// friend links cascade from auth.users; incoming links (friend_user_id has no FK) are removed explicitly.
+app.post("/account/delete", async (c) => {
+  const token = (c.req.header("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  if (!token) return c.json({ error: "Missing bearer token" }, 401);
+
+  const admin = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  );
+
+  const { data, error } = await admin.auth.getUser(token);
+  if (error || !data.user) return c.json({ error: "Invalid session" }, 401);
+  const userId = data.user.id;
+
+  const { error: linkErr } = await admin.from("friend_links").delete().eq("friend_user_id", userId);
+  if (linkErr) {
+    console.error("[account/delete] friend_links cleanup failed:", linkErr.message);
+    return c.json({ error: "Could not remove friend links" }, 500);
+  }
+
+  const { error: delErr } = await admin.auth.admin.deleteUser(userId);
+  if (delErr) {
+    console.error("[account/delete] deleteUser failed:", delErr.message);
+    return c.json({ error: "Could not delete account" }, 500);
+  }
+
+  console.log("[account/delete] deleted user", userId);
+  return c.json({ ok: true });
 });
 
 Deno.serve(app.fetch);

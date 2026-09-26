@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { StyleSheet, View, Text, ScrollView, Image, TouchableOpacity, Linking, Alert, Platform, TextInput, Modal, ActivityIndicator } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useRecipes } from '@/hooks/recipe-store';
@@ -30,7 +30,7 @@ const RECIPE_DETAIL_WALKTHROUGH_STEPS: WalkthroughStep[] = [
 export default function RecipeDetailsScreen() {
   const { id, friendUserId } = useLocalSearchParams<{ id: string; friendUserId?: string }>();
   const { user } = useAuth();
-  const { recipes, updateRecipeStepProgress, changeRecipeCategory, updateRecipeImage, convertImageToBase64, importRecipeFromFriend, getRecipesForUser } = useRecipes();
+  const { recipes, extractIntoRecipe, updateRecipeStepProgress, changeRecipeCategory, updateRecipeImage, convertImageToBase64, importRecipeFromFriend, getRecipesForUser } = useRecipes();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [checkedSteps, setCheckedSteps] = useState<{ [stepIndex: number]: boolean }>({});
   const [isLoadingContent, setIsLoadingContent] = useState(false);
@@ -39,23 +39,44 @@ export default function RecipeDetailsScreen() {
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [, setIsImporting] = useState(false);
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [pastedText, setPastedText] = useState('');
+  const autoTriedIds = useRef<Set<string>>(new Set());
 
   const walkthrough = useWalkthrough('recipe-detail', RECIPE_DETAIL_WALKTHROUGH_STEPS);
 
 
-  const handleExtractRecipeContent = useCallback(async (recipeToUpdate: Recipe) => {
-    if (!recipeToUpdate.url) return;
-    
+  const handleExtractRecipeContent = useCallback(async (
+    recipeToUpdate: Recipe,
+    opts?: { silent?: boolean; pastedText?: string },
+  ) => {
+    if (!recipeToUpdate.url && !opts?.pastedText) return;
+
     setIsLoadingContent(true);
     try {
-      // For now, we'll just show a message that this feature is being updated
-      console.log('Recipe content extraction is being updated...');
+      const ok = await extractIntoRecipe(recipeToUpdate, opts?.pastedText);
+      if (ok) {
+        setShowPasteModal(false);
+        setPastedText('');
+      } else if (!opts?.silent) {
+        Alert.alert(
+          "Couldn't read this recipe",
+          opts?.pastedText
+            ? "We couldn't find a recipe in that text. Make sure it includes the ingredients and steps."
+            : "This website didn't let us read the recipe automatically. You can copy the recipe text from the page and paste it here instead.",
+          [
+            { text: 'Paste Recipe Text', onPress: () => setShowPasteModal(true) },
+            { text: 'Cancel', style: 'cancel' },
+          ],
+        );
+      }
     } catch (error) {
       console.error('Error extracting recipe content:', error);
+      if (!opts?.silent) Alert.alert('Error', 'Something went wrong extracting this recipe. Please try again.');
     } finally {
       setIsLoadingContent(false);
     }
-  }, []);
+  }, [extractIntoRecipe]);
 
   const loadRecipe = useCallback(async () => {
     if (friendUserId) {
@@ -73,8 +94,9 @@ export default function RecipeDetailsScreen() {
       if (foundRecipe) {
         setRecipe(foundRecipe);
         setCheckedSteps(foundRecipe.stepProgress || {});
-        if (!foundRecipe.content && foundRecipe.url) {
-          void handleExtractRecipeContent(foundRecipe);
+        if (!foundRecipe.content && foundRecipe.url && !autoTriedIds.current.has(foundRecipe.id)) {
+          autoTriedIds.current.add(foundRecipe.id);
+          void handleExtractRecipeContent(foundRecipe, { silent: true });
         }
       } else {
         Alert.alert('Error', 'Recipe not found');
@@ -864,6 +886,9 @@ export default function RecipeDetailsScreen() {
               >
                 <Text style={styles.extractButtonText}>🤖 Extract Recipe Content with AI</Text>
               </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowPasteModal(true)} style={{ marginTop: 12, alignItems: 'center' }}>
+                <Text style={styles.noContentText}>Or paste the recipe text</Text>
+              </TouchableOpacity>
             </View>
           ) : null}
         </View>
@@ -875,6 +900,44 @@ export default function RecipeDetailsScreen() {
           totalSteps={walkthrough.totalSteps}
           onNext={walkthrough.next}
         />
+        <Modal
+          visible={showPasteModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowPasteModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Paste Recipe Text</Text>
+              <Text style={styles.modalDescription}>
+                Copy the recipe from the website (ingredients and steps) and paste it below.
+              </Text>
+              <TextInput
+                style={[styles.urlInput, { flex: 0, height: 140, textAlignVertical: 'top', borderWidth: 1, borderColor: Colors.border, borderRadius: 12, padding: 12, marginBottom: 16 }]}
+                placeholder="Paste recipe text here..."
+                placeholderTextColor={Colors.textSecondary}
+                value={pastedText}
+                onChangeText={setPastedText}
+                multiline
+                editable={!isLoadingContent}
+              />
+              <TouchableOpacity
+                style={[styles.modalButton, styles.pasteButton]}
+                onPress={() => recipe && handleExtractRecipeContent(recipe, { pastedText: pastedText.trim() })}
+                disabled={isLoadingContent || pastedText.trim().length < 50}
+              >
+                {isLoadingContent ? (
+                  <ActivityIndicator color={Colors.primary} />
+                ) : (
+                  <Text style={styles.modalButtonText}>Extract Recipe</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setShowPasteModal(false)}>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
         <Modal
           visible={showImageModal}
           transparent

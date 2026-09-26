@@ -1,0 +1,24 @@
+-- ROLLBACK (restores the original wide-open policies). Run only if the tightened policies break something.
+do $$
+declare p record;
+begin
+  for p in select policyname, tablename from pg_policies
+           where schemaname = 'public' and tablename in ('user_profiles', 'recipes', 'friend_links') loop
+    execute format('drop policy %I on public.%I', p.policyname, p.tablename);
+  end loop;
+end $$;
+
+create policy "Allow public read access to user_profiles" on public.user_profiles for select to public using (true);
+create policy "Allow public insert access to user_profiles" on public.user_profiles for insert to public with check (true);
+create policy "Allow public update access to user_profiles" on public.user_profiles for update to public using (true);
+create policy "Allow public delete access to user_profiles" on public.user_profiles for delete to public using (true);
+
+create policy "Anyone can read recipes" on public.recipes for select to public using (true);
+create policy "Users can insert their own recipes" on public.recipes for insert to public with check (true);
+create policy "Users can update their own recipes" on public.recipes for update to public using (true);
+create policy "Users can delete their own recipes" on public.recipes for delete to public using (true);
+
+create policy "Allow public read access to friend_links" on public.friend_links for select to public using (true);
+create policy "Allow public insert access to friend_links" on public.friend_links for insert to public with check (true);
+create policy "Allow public update access to friend_links" on public.friend_links for update to public using (true);
+create policy "Allow public delete access to friend_links" on public.friend_links for delete to public using (true);

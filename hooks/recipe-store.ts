@@ -1,3 +1,4 @@
+import { fetchRecipePage } from '@/lib/recipe-page-fetcher';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
@@ -517,7 +518,7 @@ const [RecipeContext, useRecipes] = createContextHook(() => { // eslint-disable-
     }
   }, [convertImageToBase64]);
 
-  const extractRecipeContent = useCallback(async (recipeName: string, recipeUrl: string): Promise<{
+  const extractRecipeContent = useCallback(async (recipeName: string, recipeUrl: string, pastedText?: string): Promise<{
     ingredients?: string;
     nutritionalFacts?: string;
     times?: string;
@@ -532,33 +533,29 @@ const [RecipeContext, useRecipes] = createContextHook(() => { // eslint-disable-
     try {
       console.log(`🔍 Extracting complete recipe content for "${recipeName}" from ${recipeUrl}`);
       
-      const webpageController = new AbortController();
-      const webpageTimeoutId = setTimeout(() => webpageController.abort(), 10000);
-      
       let webpageHtml: string;
-      try {
-        const webpageResponse = await fetch(recipeUrl, {
-          method: 'GET',
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-          },
-          signal: webpageController.signal
-        });
-        
-        clearTimeout(webpageTimeoutId);
-        
-        if (!webpageResponse.ok) {
-          console.log(`❌ Failed to fetch webpage: ${webpageResponse.status}`);
+      if (pastedText) {
+        webpageHtml = pastedText.substring(0, 30000);
+      } else {
+        const page = await fetchRecipePage(recipeUrl);
+        if (!page) {
+          console.log(`❌ Could not load recipe page: ${recipeUrl}`);
           return undefined;
         }
-        
-        webpageHtml = await webpageResponse.text();
-        console.log(`✅ Successfully fetched webpage HTML (${webpageHtml.length} chars)`);
-      } catch (fetchError) {
-        console.log(`❌ Error fetching webpage:`, fetchError);
+        if (page.blocked && !page.recipeJson) {
+          console.log(`❌ Recipe site blocked the page: ${recipeUrl}`);
+          return undefined;
+        }
+        webpageHtml = page.recipeJson
+          ? `<script type="application/ld+json">${page.recipeJson.replace(/<\/script/gi, '<\\/script')}</script>`
+          : page.text;
+        console.log(`✅ Loaded recipe page (${page.recipeJson ? 'structured data' : 'page text'}, ${webpageHtml.length} chars)`);
+      }
+      if (webpageHtml.trim().length < 200) {
+        console.log('❌ Not enough page content to extract a recipe');
         return undefined;
       }
-      
+
       interface ScrapedRecipeMeta {
         prepTime?: string;
         cookTime?: string;
@@ -566,12 +563,20 @@ const [RecipeContext, useRecipes] = createContextHook(() => { // eslint-disable-
         calories?: string;
         nutritionalFacts?: string;
         instructions?: string;
+        ingredients?: string;
+        imageUrl?: string;
       }
       
       const scrapedMeta: ScrapedRecipeMeta = {};
 
+      const decodeHtmlText = (text: string): string =>
+        text.toString()
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'")
+          .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+
       const normalizeInstructionText = (text: string): string => {
-        return (text || '').toString().replace(/\s+/g, ' ').trim();
+        return decodeHtmlText(text || '').replace(/\s+/g, ' ').trim();
       };
 
       const buildCheckboxSteps = (steps: string[]): string => {
@@ -669,6 +674,19 @@ const [RecipeContext, useRecipes] = createContextHook(() => { // eslint-disable-
             
             console.log('✅ Found Recipe schema in JSON-LD');
             
+            if (!scrapedMeta.ingredients && Array.isArray(item.recipeIngredient)) {
+              const lines = item.recipeIngredient
+                .filter((v: unknown): v is string => typeof v === 'string')
+                .map((v: string) => decodeHtmlText(v).replace(/\s+/g, ' ').trim())
+                .filter(Boolean);
+              if (lines.length) scrapedMeta.ingredients = lines.join('\n');
+            }
+            if (!scrapedMeta.imageUrl) {
+              const img = Array.isArray(item.image) ? item.image[0] : item.image;
+              const imgUrl = typeof img === 'string' ? img : img?.url;
+              if (typeof imgUrl === 'string' && /^https?:\/\//.test(imgUrl)) scrapedMeta.imageUrl = imgUrl;
+            }
+
             if (!scrapedMeta.instructions) {
               const instructionsFromJsonLd = extractRecipeInstructionsFromJsonLd(item);
               if (instructionsFromJsonLd) {
@@ -720,6 +738,27 @@ const [RecipeContext, useRecipes] = createContextHook(() => { // eslint-disable-
         console.log('⚠️ No structured recipe metadata found in HTML, will rely on AI extraction');
       }
       
+      // Structured data is complete: no need for the (slow, external) AI call.
+      if (scrapedMeta.ingredients && scrapedMeta.instructions) {
+        const timeParts = [
+          scrapedMeta.prepTime && `Prep: ${scrapedMeta.prepTime}`,
+          scrapedMeta.cookTime && `Cook: ${scrapedMeta.cookTime}`,
+          scrapedMeta.totalTime && `Total: ${scrapedMeta.totalTime}`,
+        ].filter(Boolean);
+        console.log('✅ Using structured recipe data directly (skipping AI)');
+        return {
+          ingredients: scrapedMeta.ingredients,
+          instructions: scrapedMeta.instructions,
+          nutritionalFacts: scrapedMeta.nutritionalFacts,
+          times: timeParts.length ? timeParts.join(', ') : undefined,
+          prepTime: scrapedMeta.prepTime,
+          cookTime: scrapedMeta.cookTime,
+          totalTime: scrapedMeta.totalTime,
+          calories: scrapedMeta.calories,
+          imageUrl: scrapedMeta.imageUrl,
+        };
+      }
+
       console.log(`🤖 Analyzing HTML content with AI for complete recipe extraction...`);
       const aiController = new AbortController();
       const aiTimeoutId = setTimeout(() => aiController.abort(), 25000);
@@ -1280,6 +1319,28 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
       return false;
     }
   }, [recipes, saveRecipes]);
+
+  // Fills in an existing recipe's content from its URL (or from text the user pasted).
+  const extractIntoRecipe = useCallback(async (recipe: Recipe, pastedText?: string): Promise<boolean> => {
+    const extracted = await extractRecipeContent(recipe.name, recipe.url ?? '', pastedText);
+    if (!extracted || (!extracted.ingredients && !extracted.instructions)) return false;
+
+    let content = '';
+    if (extracted.ingredients) content += `**Ingredients:**\n${extracted.ingredients}\n\n`;
+    if (extracted.nutritionalFacts) content += `**Nutritional Facts:**\n${extracted.nutritionalFacts}\n\n`;
+    if (extracted.times) content += `**Times:**\n${extracted.times}\n\n`;
+    if (extracted.instructions) content += `**Instructions:**\n${extracted.instructions}\n\n`;
+
+    return updateRecipe({
+      ...recipe,
+      content: content.trim(),
+      prepTime: extracted.prepTime ?? recipe.prepTime,
+      cookTime: extracted.cookTime ?? recipe.cookTime,
+      totalTime: extracted.totalTime ?? recipe.totalTime,
+      calories: extracted.calories ?? recipe.calories,
+      nutritionalInfo: extracted.nutritionalFacts ?? recipe.nutritionalInfo,
+    });
+  }, [extractRecipeContent, updateRecipe]);
 
   const updateRecipeStepProgress = useCallback(async (recipeId: string, stepProgress: { [stepIndex: number]: boolean }) => {
     try {
@@ -1909,6 +1970,7 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
     isLoading,
     addRecipe,
     updateRecipe,
+    extractIntoRecipe,
     updateRecipeStepProgress,
     deleteRecipe,
     toggleFavorite,

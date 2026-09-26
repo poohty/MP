@@ -177,12 +177,14 @@ export default function FriendsScreen() {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Find Friends</Text>
             <View style={styles.headerButtons}>
-              <TouchableOpacity 
-                style={styles.refreshButton}
-                onPress={debugBackendUsers}
-              >
-                <Bug size={18} color={Colors.warning} />
-              </TouchableOpacity>
+              {__DEV__ && (
+                <TouchableOpacity 
+                  style={styles.refreshButton}
+                  onPress={debugBackendUsers}
+                >
+                  <Bug size={18} color={Colors.warning} />
+                </TouchableOpacity>
+              )}
               <TouchableOpacity 
                 style={styles.refreshButton}
                 onPress={loadFriendsAndRequests}

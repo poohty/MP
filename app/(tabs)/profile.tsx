@@ -318,7 +318,7 @@ export default function ProfileScreen() {
           
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => Linking.openURL('https://mealplannerroulette.com/support.html')}
+            onPress={() => Linking.openURL('https://pbandjcreationsllc.com/support.html')}
           >
             <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
               <Info size={20} color={colors.primary} />
@@ -328,7 +328,7 @@ export default function ProfileScreen() {
           
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => Linking.openURL('https://mealplannerroulette.com/privacy.html')}
+            onPress={() => Linking.openURL('https://pbandjcreationsllc.com/privacy.html')}
           >
             <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
               <Shield size={20} color={colors.primary} />
@@ -338,7 +338,7 @@ export default function ProfileScreen() {
 
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => Linking.openURL('https://mealplannerroulette.com/terms.html')}
+            onPress={() => Linking.openURL('https://pbandjcreationsllc.com/terms.html')}
           >
             <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
               <FileText size={20} color={colors.primary} />

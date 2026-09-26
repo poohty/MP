@@ -12,6 +12,7 @@ import { ThemeContext, useTheme } from "@/hooks/theme-store";
 import { SubscriptionContext, useSubscription } from "@/hooks/subscription-store";
 import Colors from "@/constants/colors";
 import { trpc, trpcClient } from "@/lib/trpc";
+import { RecipePageFetcherHost } from "@/lib/recipe-page-fetcher";
 
 const AUTH_ROUTES = ['login', 'signup', 'verify-email', 'auth-callback', 'reset-password'];
 
@@ -155,6 +156,7 @@ export default function RootLayout() {
                   <RecipeContext>
                     <MealPlanContext>
                       <StatusBar style="auto" />
+                      <RecipePageFetcherHost />
                       <RootLayoutNav />
                     </MealPlanContext>
                   </RecipeContext>

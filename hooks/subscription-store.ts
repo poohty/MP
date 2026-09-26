@@ -79,6 +79,21 @@ const result = createContextHook(() => {
             setOfferings(pkgs);
             lastInitUserId.current = userId;
           }
+          // App Review's sandbox is flaky: if plans came back empty, quietly retry in the background
+          // so the paywall fills in on its own instead of waiting for a manual tap.
+          if (pkgs.length === 0) {
+            void (async () => {
+              for (const delayMs of [2000, 4000, 8000]) {
+                await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+                if (cancelled) return;
+                const retried = await getOfferings();
+                if (retried.length > 0) {
+                  setOfferings(retried);
+                  return;
+                }
+              }
+            })();
+          }
         }
       } catch (error) {
         console.error('[Subscription] Initialization error:', error);

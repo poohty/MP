@@ -2,14 +2,14 @@
 const config = {
   name: "Meal Planner Roulette",
   slug: "meal-planner-roulette",
-  version: "1.0.0",
+  version: "1.0.1",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: ["mealplannerroulette"],
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
   ios: {
-    buildNumber: "13",
+    buildNumber: "14",
     // icon.png stays opaque — the App Store rejects light icons with alpha.
     // The dark variant is transparent so iOS composites it on the system dark
     // background. Omitting `tinted` lets iOS derive it from the light icon.
