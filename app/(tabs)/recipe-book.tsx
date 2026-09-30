@@ -24,6 +24,7 @@ export default function RecipeBookScreen() {
   const themeColors = isDark ? Colors.dark : Colors.light;
   const [selectedCategory, setSelectedCategory] = useState<RecipeCategory>('Breakfast');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortMode, setSortMode] = useState<'name' | 'newest'>('name');
   const walkthrough = useWalkthrough('recipe-book', RECIPE_BOOK_STEPS);
 
   const trimmedSearch = useMemo(() => searchQuery.trim(), [searchQuery]);
@@ -38,14 +39,16 @@ export default function RecipeBookScreen() {
         if (nameA && !nameB) return -1;
         return nameA.localeCompare(nameB);
       });
+    const sortNewest = (list: Recipe[]) => [...list].sort((a, b) => b.createdAt - a.createdAt);
+    const sortList = sortMode === 'newest' ? sortNewest : sortAlpha;
 
     if (!isSearching) {
-      return sortAlpha(recipes.filter((recipe) => recipe.category === selectedCategory));
+      return sortList(recipes.filter((recipe) => recipe.category === selectedCategory));
     }
 
     const q = trimmedSearch.toLowerCase();
-    return sortAlpha(recipes.filter((recipe) => (recipe.name ?? '').toLowerCase().includes(q)));
-  }, [isSearching, recipes, selectedCategory, trimmedSearch]);
+    return sortList(recipes.filter((recipe) => (recipe.name ?? '').toLowerCase().includes(q)));
+  }, [isSearching, recipes, selectedCategory, sortMode, trimmedSearch]);
 
   const emptyMessage = isSearching
     ? 'No matching recipes found'
@@ -94,7 +97,7 @@ export default function RecipeBookScreen() {
       </View>
       
       <View style={[styles.searchContainer, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
-        <View style={[styles.searchInputWrap, { backgroundColor: themeColors.background, borderColor: themeColors.border }]}
+        <View style={[styles.searchInputWrap, { backgroundColor: themeColors.background, borderColor: themeColors.border, flex: 1 }]}
           testID="cookbookSearchContainer"
         >
           <TextInput
@@ -109,6 +112,15 @@ export default function RecipeBookScreen() {
             testID="cookbookSearchInput"
           />
         </View>
+        <TouchableOpacity
+          style={[styles.sortButton, { backgroundColor: themeColors.background, borderColor: themeColors.border }]}
+          onPress={() => setSortMode((m) => (m === 'name' ? 'newest' : 'name'))}
+          testID="cookbookSortToggle"
+        >
+          <Text style={[styles.sortButtonText, { color: themeColors.text }]}>
+            {sortMode === 'name' ? 'A–Z' : 'Newest'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <View style={[styles.categoryContainer, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border }]}>
@@ -156,6 +168,9 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 10,
@@ -171,6 +186,18 @@ const styles = StyleSheet.create({
   searchInput: {
     fontSize: 16,
     height: '100%',
+  },
+  sortButton: {
+    borderWidth: 1,
+    borderRadius: 14,
+    height: 44,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sortButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   categoryContainer: {
     borderBottomWidth: 1,

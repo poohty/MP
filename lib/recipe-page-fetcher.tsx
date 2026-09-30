@@ -126,5 +126,7 @@ export function RecipePageFetcherHost(): React.ReactElement | null {
 }
 
 const styles = StyleSheet.create({
-  hidden: { position: 'absolute', width: 1, height: 1, opacity: 0, top: 0, left: 0 },
+  // Positioned off-screen entirely (not just zero-size/opacity) so a device that briefly
+  // renders the WebView at its natural page size before applying layout never shows it.
+  hidden: { position: 'absolute', width: 300, height: 300, top: -9999, left: -9999, opacity: 0 },
 });
