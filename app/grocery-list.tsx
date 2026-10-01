@@ -9,6 +9,7 @@ import * as Location from 'expo-location';
 import Button from '@/components/Button';
 import { useWalkthrough, WalkthroughStep } from '@/hooks/useWalkthrough';
 import WalkthroughModal from '@/components/WalkthroughModal';
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
 
 const GROCERY_LIST_STEPS: WalkthroughStep[] = [
   { title: 'Check items off', body: 'Tap the checkbox to mark items as you shop.' },
@@ -173,7 +174,7 @@ export default function GroceryListScreen() {
         console.log(`Searching for stores within ${radius} mile radius...`);
         
         // Use a more targeted approach to find real stores with Google search simulation
-        const response = await fetch('https://toolkit.rork.com/text/llm/', {
+        const response = await fetchWithTimeout('https://toolkit.rork.com/text/llm/', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -274,7 +275,7 @@ FORMAT: JSON array only, no explanations or markdown.`
               }
             ]
           })
-        });
+        }, 20000);
 
         const data = await response.json();
         console.log(`Raw AI response for ${radius} mile radius:`, data.completion);
@@ -473,7 +474,7 @@ FORMAT: JSON array only, no explanations or markdown.`
       // Generate pricing for the manual store using AI
       const itemNames = groceryList.items.map(item => item.name);
       
-      const response = await fetch('https://toolkit.rork.com/text/llm/', {
+      const response = await fetchWithTimeout('https://toolkit.rork.com/text/llm/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -502,7 +503,7 @@ Use realistic grocery store pricing. Consider the store type and location for pr
             }
           ]
         })
-      });
+      }, 20000);
 
       const data = await response.json();
       let pricingData;

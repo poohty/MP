@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { MealPlan, MealPlanRecipe, Recipe, RecipeCategory, GroceryList, CalendarAssignment, MealPlanCalendar } from '@/types';
 import { useAuth } from './auth-store';
 import { useRecipes } from './recipe-store';
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
 
 const MEAL_PLANS_STORAGE_KEY = 'meal-planner-meal-plans';
 
@@ -458,13 +459,13 @@ Categories to use: Produce, Meat & Seafood, Dairy & Eggs, Pantry, Bakery, Frozen
       ];
 
       console.log('Sending request to AI for grocery list generation...');
-      const response = await fetch('https://toolkit.rork.com/text/llm/', {
+      const response = await fetchWithTimeout('https://toolkit.rork.com/text/llm/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ messages }),
-      });
+      }, 30000);
 
       if (!response.ok) {
         throw new Error('Failed to generate grocery list');
