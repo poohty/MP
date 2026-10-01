@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Alert, Platform } from 'react-native';
-import { Audio } from 'expo-av';
+import { AudioModule, RecordingPresets, createAudioPlayer, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
+import type { AudioPlayer, AudioRecorder } from 'expo-audio';
 import * as Speech from 'expo-speech';
 import { getBackendBaseUrl } from '@/lib/trpc';
 import { resolveVoiceId, type VoicePreference } from '@/constants/voice';
@@ -115,29 +116,18 @@ async function fetchTTSAudio(text: string, voiceId: string, requestId?: string):
   throw new Error('TTS failed after retries. The voice server may be temporarily overloaded.');
 }
 
-async function playAudioUri(uri: string, soundRef: React.MutableRefObject<Audio.Sound | null>): Promise<void> {
-  await Audio.setAudioModeAsync({
-    playsInSilentModeIOS: true,
-    allowsRecordingIOS: false,
-    playThroughEarpieceAndroid: false,
-    shouldDuckAndroid: false,
+const PLAYBACK_SAFETY_TIMEOUT_MS = 35000;
+
+async function playAudioUri(uri: string, soundRef: React.MutableRefObject<AudioPlayer | null>): Promise<void> {
+  await setAudioModeAsync({
+    playsInSilentMode: true,
+    allowsRecording: false,
   });
 
-  const { sound, status: initialStatus } = await Audio.Sound.createAsync(
-    { uri },
-    { shouldPlay: false, volume: 1.0 }
-  );
-  soundRef.current = sound;
+  const player = createAudioPlayer(uri, { updateInterval: 250 });
+  soundRef.current = player;
 
-  if (!initialStatus.isLoaded) {
-    console.log('[CookAlong] playAudioUri: sound failed to load');
-    sound.unloadAsync().catch(() => {});
-    if (soundRef.current === sound) soundRef.current = null;
-    return;
-  }
-
-  const durationMs = initialStatus.durationMillis ?? 30000;
-  console.log('[CookAlong] playAudioUri: sound loaded, duration:', durationMs, 'ms, playing now');
+  console.log('[CookAlong] playAudioUri: player created, playing now');
 
   const playPromise = new Promise<void>((resolve) => {
     let done = false;
@@ -145,23 +135,18 @@ async function playAudioUri(uri: string, soundRef: React.MutableRefObject<Audio.
       if (done) return;
       done = true;
       clearTimeout(timeout);
-      sound.setOnPlaybackStatusUpdate(null);
-      sound.unloadAsync().catch(() => {});
-      if (soundRef.current === sound) soundRef.current = null;
+      subscription.remove();
+      player.remove();
+      if (soundRef.current === player) soundRef.current = null;
       resolve();
     };
 
     const timeout = setTimeout(() => {
       console.log('[CookAlong] playAudioUri: safety timeout reached');
       finish();
-    }, durationMs + 5000);
+    }, PLAYBACK_SAFETY_TIMEOUT_MS);
 
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (!status.isLoaded) {
-        console.log('[CookAlong] playAudioUri: sound unloaded during playback');
-        finish();
-        return;
-      }
+    const subscription = player.addListener('playbackStatusUpdate', (status) => {
       if (status.didJustFinish) {
         console.log('[CookAlong] playAudioUri: playback finished normally');
         finish();
@@ -170,20 +155,19 @@ async function playAudioUri(uri: string, soundRef: React.MutableRefObject<Audio.
   });
 
   try {
-    await sound.playAsync();
-    console.log('[CookAlong] playAudioUri: playAsync called successfully');
+    player.play();
+    console.log('[CookAlong] playAudioUri: play() called successfully');
   } catch (e) {
-    console.log('[CookAlong] playAudioUri: playAsync error:', e);
-    sound.setOnPlaybackStatusUpdate(null);
-    sound.unloadAsync().catch(() => {});
-    if (soundRef.current === sound) soundRef.current = null;
+    console.log('[CookAlong] playAudioUri: play() error:', e);
+    player.remove();
+    if (soundRef.current === player) soundRef.current = null;
     return;
   }
 
   return playPromise;
 }
 
-async function speakText(text: string, soundRef: React.MutableRefObject<Audio.Sound | null>, voiceId: string, requestId?: string): Promise<void> {
+async function speakText(text: string, soundRef: React.MutableRefObject<AudioPlayer | null>, voiceId: string, requestId?: string): Promise<void> {
   try {
     const uri = await fetchTTSAudio(text, voiceId, requestId);
     await playAudioUri(uri, soundRef);
@@ -209,7 +193,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 async function listenForCommand(
-  recordingRef: React.MutableRefObject<Audio.Recording | null>,
+  recordingRef: React.MutableRefObject<AudioRecorder | null>,
   activeRef: React.MutableRefObject<boolean>
 ): Promise<{ command: VoiceCommand; transcript: string }> {
   const apiBase = getBackendBaseUrl();
@@ -219,20 +203,20 @@ async function listenForCommand(
   }
 
   if (Platform.OS !== 'web') {
-    const permResult = await Audio.requestPermissionsAsync();
+    const permResult = await requestRecordingPermissionsAsync();
     if (!permResult.granted) {
       throw new Error('Microphone permission denied');
     }
   }
 
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: true,
-    playsInSilentModeIOS: true,
+  await setAudioModeAsync({
+    allowsRecording: true,
+    playsInSilentMode: true,
   });
 
-  const { recording } = await Audio.Recording.createAsync(
-    Audio.RecordingOptionsPresets.HIGH_QUALITY
-  );
+  const recording = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+  await recording.prepareToRecordAsync();
+  recording.record();
   recordingRef.current = recording;
 
   console.log('[CookAlong] Recording started...');
@@ -241,16 +225,16 @@ async function listenForCommand(
 
   if (!activeRef.current) {
     try {
-      await recording.stopAndUnloadAsync();
+      await recording.stop();
     } catch {}
     recordingRef.current = null;
     return { command: 'NONE', transcript: '' };
   }
 
-  await recording.stopAndUnloadAsync();
-  await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+  await recording.stop();
+  await setAudioModeAsync({ allowsRecording: false });
 
-  const uri = recording.getURI();
+  const uri = recording.uri;
   recordingRef.current = null;
 
   if (!uri) {
@@ -305,8 +289,8 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
   });
 
   const activeRef = useRef(false);
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const soundRef = useRef<AudioPlayer | null>(null);
+  const recordingRef = useRef<AudioRecorder | null>(null);
   const loopRunningRef = useRef(false);
   const resolvedVoiceId = resolveVoiceId(voicePreference);
 
@@ -317,15 +301,15 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
 
     if (recordingRef.current) {
       try {
-        await recordingRef.current.stopAndUnloadAsync();
+        await recordingRef.current.stop();
       } catch {}
       recordingRef.current = null;
     }
 
     if (soundRef.current) {
       try {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
+        soundRef.current.pause();
+        soundRef.current.remove();
       } catch {}
       soundRef.current = null;
     }
@@ -344,12 +328,14 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
       activeRef.current = false;
       loopRunningRef.current = false;
       if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync().catch(() => {});
+        recordingRef.current.stop().catch(() => {});
         recordingRef.current = null;
       }
       if (soundRef.current) {
-        soundRef.current.stopAsync().catch(() => {});
-        soundRef.current.unloadAsync().catch(() => {});
+        try {
+          soundRef.current.pause();
+          soundRef.current.remove();
+        } catch {}
         soundRef.current = null;
       }
     };
@@ -597,7 +583,7 @@ export function useCookAlong(instructions: string[], voicePreference?: VoicePref
       });
 
     const permPromise = Platform.OS !== 'web'
-      ? Audio.requestPermissionsAsync().then(r => {
+      ? requestRecordingPermissionsAsync().then(r => {
           console.log('[CookAlong] Permission done in', Date.now() - tapTime, 'ms, granted:', r.granted);
           return r.granted;
         })

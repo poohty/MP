@@ -37,7 +37,7 @@ export default function GroceryListScreen() {
   const [newStoreDistance, setNewStoreDistance] = useState('');
 
   const walkthrough = useWalkthrough('grocery-list', GROCERY_LIST_STEPS);
-  const scrollViewRef = useRef<ScrollView | null>(null);
+  const scrollViewRef = useRef<React.ComponentRef<typeof ScrollView> | null>(null);
   const [groceryItemsAnchorY, setGroceryItemsAnchorY] = useState<number>(0);
 
   const handleBackToGroceryList = useCallback(() => {

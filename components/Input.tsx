@@ -7,6 +7,7 @@ import {
   TextInputProps,
   ViewStyle,
   TextStyle,
+  StyleProp,
   TouchableOpacity
 } from 'react-native';
 import Colors from '@/constants/colors';
@@ -15,9 +16,9 @@ import { Eye, EyeOff } from 'lucide-react-native';
 interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
-  containerStyle?: ViewStyle;
-  inputStyle?: TextStyle;
-  labelStyle?: TextStyle;
+  containerStyle?: StyleProp<ViewStyle>;
+  inputStyle?: StyleProp<TextStyle>;
+  labelStyle?: StyleProp<TextStyle>;
   isPassword?: boolean;
 }
 
@@ -34,7 +35,7 @@ export default function Input({
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <View style={[styles.container, containerStyle]}>
+    <View style={[styles.container, containerStyle] as any}>
       {label && (
         <Text style={[styles.label, labelStyle]}>
           {label}
@@ -47,7 +48,7 @@ export default function Input({
         error ? styles.errorInput : null
       ]}>
         <TextInput
-          style={[styles.input, inputStyle]}
+          style={[styles.input, inputStyle] as any}
           placeholderTextColor={Colors.textSecondary}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}

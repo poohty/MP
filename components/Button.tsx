@@ -5,6 +5,7 @@ import {
   TouchableOpacity, 
   ActivityIndicator,
   ViewStyle,
+  StyleProp,
   TextStyle,
   TouchableOpacityProps
 } from 'react-native';
@@ -12,13 +13,13 @@ import {
 import Colors from '@/constants/colors';
 import { useTheme } from '@/hooks/theme-store';
 
-interface ButtonProps extends TouchableOpacityProps {
+interface ButtonProps extends Omit<TouchableOpacityProps, 'style'> {
   title: string;
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'outline';
   size?: 'small' | 'medium' | 'large';
   isLoading?: boolean;
-  style?: ViewStyle | ViewStyle[];
+  style?: StyleProp<ViewStyle>;
   textStyle?: TextStyle | TextStyle[];
   disabled?: boolean;
   icon?: React.ReactNode;
@@ -116,7 +117,7 @@ export default function Button({
         getSizeStyle(),
         style,
         disabled && styles.disabledButton
-      ]}
+      ] as any}
       activeOpacity={0.8}
       testID="button"
       {...rest}

@@ -7,7 +7,8 @@ import {
   Modal, 
   FlatList,
   ViewStyle,
-  TextStyle
+  TextStyle,
+  StyleProp
 } from 'react-native';
 import Colors from '@/constants/colors';
 import { ChevronDown, X } from 'lucide-react-native';
@@ -23,8 +24,8 @@ interface DropdownSelectProps {
   selectedValue?: string | number;
   onSelect: (value: string | number) => void;
   placeholder?: string;
-  containerStyle?: ViewStyle;
-  labelStyle?: TextStyle;
+  containerStyle?: StyleProp<ViewStyle>;
+  labelStyle?: StyleProp<TextStyle>;
   error?: string;
 }
 
@@ -43,7 +44,7 @@ export default function DropdownSelect({
   const selectedOption = options.find(option => option.value === selectedValue);
 
   return (
-    <View style={[styles.container, containerStyle]}>
+    <View style={[styles.container, containerStyle] as any}>
       {label && (
         <Text style={[styles.label, labelStyle]}>
           {label}

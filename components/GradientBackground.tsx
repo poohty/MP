@@ -1,12 +1,12 @@
 import React from 'react';
-import { ViewStyle, View } from 'react-native';
+import { ViewStyle, StyleProp, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/hooks/theme-store';
 import Colors from '@/constants/colors';
 
 interface GradientBackgroundProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 export default function GradientBackground({ children, style }: GradientBackgroundProps) {
@@ -18,7 +18,7 @@ export default function GradientBackground({ children, style }: GradientBackgrou
     : ['#F5F5F5', '#FFFFFF'];
   
   return (
-    <View style={[{ flex: 1, backgroundColor: colors.background }, style]}>
+    <View style={[{ flex: 1, backgroundColor: colors.background }, style] as any}>
       <LinearGradient
         colors={gradientColors}
         locations={[0, 1]}

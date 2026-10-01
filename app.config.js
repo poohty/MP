@@ -63,10 +63,12 @@ const config = {
     ["expo-image-picker", { photosPermission: "The app accesses your photos to let you share them with your friends." }],
     "expo-document-picker",
     "expo-location",
-    ["expo-av", { microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone" }],
+    ["expo-audio", { microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone" }],
     "expo-font",
     "expo-web-browser",
     "expo-apple-authentication",
+    "expo-image",
+    "expo-status-bar",
   ],
   experiments: {
     typedRoutes: true,
