@@ -10,7 +10,7 @@
     "start-web-dev": "DEBUG=expo* expo start --web",
     "build:android": "npx eas-cli build --platform android --profile preview",
     "build:ios": "npx eas-cli build --platform ios --profile preview",
-    "build:android:release": "npx eas-cli build --platform android --profile production",
+    "build:android:release": "npx eas-cli build --platform android --profile production --non-interactive",
     "build:ios:release": "npx eas-cli build --platform ios --profile production",
     "android": "expo run:android",
     "ios": "expo run:ios"

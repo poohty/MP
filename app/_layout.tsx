@@ -14,7 +14,7 @@ import Colors from "@/constants/colors";
 import { trpc, trpcClient } from "@/lib/trpc";
 import { RecipePageFetcherHost } from "@/lib/recipe-page-fetcher";
 
-const AUTH_ROUTES = ['login', 'signup', 'verify-email', 'auth-callback', 'reset-password'];
+const AUTH_ROUTES = ['login', 'signup', 'verify-email', 'auth-callback'];
 
 /**
  * Single unified navigation gate that atomically decides the correct route.
@@ -31,6 +31,14 @@ function NavigationGate({ children }: { children: React.ReactNode }) {
     if (isAuthLoading || isSubLoading) return;
 
     const currentSegment = (segments[0] as string) ?? '';
+
+    // Verifying a recovery link signs the user in (Supabase needs an active
+    // session to let updateUser({ password }) run), which would otherwise make
+    // this gate treat it as "authenticated on an auth route" and redirect away
+    // before the password fields ever show. This screen manages its own
+    // navigation (Back to Login / Go to Login), so the gate leaves it alone.
+    if (currentSegment === 'reset-password') return;
+
     const isOnAuthRoute = AUTH_ROUTES.includes(currentSegment);
     const isOnPaywall = currentSegment === 'paywall';
 
