@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, KeyboardAvoidingView, Platfor
 import { router, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/hooks/theme-store';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
+import { friendlyAuthErrorMessage, withNetworkRetry } from '@/lib/auth-error-message';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
@@ -51,10 +52,12 @@ export default function ResetPasswordScreen() {
             const accessToken = hashParams.get('access_token');
             const refreshToken = hashParams.get('refresh_token');
             if (accessToken && refreshToken) {
-              const { error } = await supabase.auth.setSession({
-                access_token: accessToken,
-                refresh_token: refreshToken,
-              });
+              const { error } = await withNetworkRetry(() =>
+                supabase.auth.setSession({
+                  access_token: accessToken,
+                  refresh_token: refreshToken,
+                })
+              );
               if (error) {
                 console.error('🔑 Web session restore error:', error);
                 restoreError = error.message;
@@ -67,10 +70,12 @@ export default function ResetPasswordScreen() {
 
         if (currentParams.token_hash && currentParams.type) {
           console.log('🔑 Native: verifying OTP with token_hash for recovery');
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash: currentParams.token_hash as string,
-            type: (currentParams.type as string) as 'recovery',
-          });
+          const { error } = await withNetworkRetry(() =>
+            supabase.auth.verifyOtp({
+              token_hash: currentParams.token_hash as string,
+              type: (currentParams.type as string) as 'recovery',
+            })
+          );
           if (error) {
             console.error('🔑 OTP verify error:', error);
             restoreError = error.message;
@@ -79,7 +84,9 @@ export default function ResetPasswordScreen() {
           }
         } else if (currentParams.code) {
           console.log('🔑 Native: exchanging code for session (PKCE)');
-          const { error } = await supabase.auth.exchangeCodeForSession(currentParams.code as string);
+          const { error } = await withNetworkRetry(() =>
+            supabase.auth.exchangeCodeForSession(currentParams.code as string)
+          );
           if (error) {
             console.error('🔑 Code exchange error:', error);
             restoreError = error.message;
@@ -88,10 +95,12 @@ export default function ResetPasswordScreen() {
           }
         } else if (currentParams.access_token && currentParams.refresh_token) {
           console.log('🔑 Native: restoring session from deep link params');
-          const { error } = await supabase.auth.setSession({
-            access_token: currentParams.access_token as string,
-            refresh_token: currentParams.refresh_token as string,
-          });
+          const { error } = await withNetworkRetry(() =>
+            supabase.auth.setSession({
+              access_token: currentParams.access_token as string,
+              refresh_token: currentParams.refresh_token as string,
+            })
+          );
           if (error) {
             console.error('🔑 Native session restore error:', error);
             restoreError = error.message;
@@ -213,7 +222,7 @@ export default function ResetPasswordScreen() {
       if (error) {
         console.error('🔑 Password update error:', error);
         setScreenState('ready');
-        Alert.alert('Could not reset password', error.message || 'Please try again.', [{ text: 'OK' }]);
+        Alert.alert('Could not reset password', friendlyAuthErrorMessage(error.message, 'Please try again.'), [{ text: 'OK' }]);
         return;
       }
 

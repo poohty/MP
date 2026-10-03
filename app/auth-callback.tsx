@@ -7,6 +7,7 @@ import Colors from '@/constants/colors';
 import Button from '@/components/Button';
 import { BadgeCheck, AlertCircle } from 'lucide-react-native';
 import { supabase, isSupabaseEnabled } from '@/lib/supabase';
+import { friendlyAuthErrorMessage, withNetworkRetry } from '@/lib/auth-error-message';
 
 const USER_STORAGE_KEY = 'meal-planner-user';
 const CALLBACK_TIMEOUT_MS = 20000;
@@ -102,10 +103,12 @@ export default function AuthCallbackScreen() {
       try {
         if (parsed.tokenHash && parsed.type) {
           const otpType = parsed.type as 'signup' | 'email' | 'recovery';
-          const { data: otpData, error: otpError } = await supabase.auth.verifyOtp({
-            token_hash: parsed.tokenHash,
-            type: otpType,
-          });
+          const { data: otpData, error: otpError } = await withNetworkRetry(() =>
+            supabase.auth.verifyOtp({
+              token_hash: parsed.tokenHash,
+              type: otpType,
+            })
+          );
           if (otpError) {
             console.error('❌ verifyOtp failed:', otpError.message);
             if (otpError.message?.toLowerCase().includes('expired') || otpError.message?.toLowerCase().includes('otp_expired')) {
@@ -117,7 +120,7 @@ export default function AuthCallbackScreen() {
               await cleanupAndMarkVerified();
               return;
             }
-            setErrorMessage(otpError.message || 'Verification failed. Please try again.');
+            setErrorMessage(friendlyAuthErrorMessage(otpError.message, 'Verification failed. Please try again.'));
             setStatus('error');
             return;
           }
@@ -129,13 +132,15 @@ export default function AuthCallbackScreen() {
         const isEmailVerification = !!parsed.tokenHash || parsed.type === 'signup' || parsed.type === 'email' || parsed.type === 'recovery';
 
         if (parsed.accessToken && parsed.refreshToken) {
-          const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-            access_token: parsed.accessToken,
-            refresh_token: parsed.refreshToken,
-          });
+          const { data: sessionData, error: sessionError } = await withNetworkRetry(() =>
+            supabase.auth.setSession({
+              access_token: parsed.accessToken,
+              refresh_token: parsed.refreshToken,
+            })
+          );
           if (sessionError) {
             console.error('❌ setSession failed:', sessionError.message);
-            setErrorMessage(sessionError.message || 'Could not complete verification.');
+            setErrorMessage(friendlyAuthErrorMessage(sessionError.message, 'Could not complete verification.'));
             setStatus('error');
             return;
           }
@@ -149,10 +154,12 @@ export default function AuthCallbackScreen() {
         }
 
         if (parsed.code) {
-          const { data: codeData, error: codeError } = await supabase.auth.exchangeCodeForSession(parsed.code);
+          const { data: codeData, error: codeError } = await withNetworkRetry(() =>
+            supabase.auth.exchangeCodeForSession(parsed.code)
+          );
           if (codeError) {
             console.error('❌ Code exchange failed:', codeError.message);
-            setErrorMessage(codeError.message || 'Could not complete verification.');
+            setErrorMessage(friendlyAuthErrorMessage(codeError.message, 'Could not complete verification.'));
             setStatus('error');
             return;
           }
