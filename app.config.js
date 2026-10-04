@@ -2,7 +2,7 @@
 const config = {
   name: "Meal Planner Roulette",
   slug: "meal-planner-roulette",
-  version: "1.2.0",
+  version: "1.2.1",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: ["mealplannerroulette"],
