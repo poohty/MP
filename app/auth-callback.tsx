@@ -6,7 +6,7 @@ import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
 import Button from '@/components/Button';
 import { BadgeCheck, AlertCircle } from 'lucide-react-native';
-import { supabase, isSupabaseEnabled } from '@/lib/supabase';
+import { supabase, isSupabaseEnabled, signOutSafely } from '@/lib/supabase';
 import { friendlyAuthErrorMessage, withNetworkRetry } from '@/lib/auth-error-message';
 
 const USER_STORAGE_KEY = 'meal-planner-user';
@@ -87,7 +87,7 @@ export default function AuthCallbackScreen() {
         console.warn('⚠️ Could not clear local user storage:', e);
       }
       try {
-        await supabase.auth.signOut();
+        await signOutSafely();
       } catch (e) {
         console.warn('⚠️ Could not sign out after verification:', e);
       }

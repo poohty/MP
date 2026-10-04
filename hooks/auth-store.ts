@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Platform } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { User } from '@/types';
-import { supabase, isSupabaseEnabled } from '@/lib/supabase';
+import { supabase, isSupabaseEnabled, signOutSafely } from '@/lib/supabase';
 import { getBackendBaseUrl } from '@/lib/trpc';
 import type { VoicePreference } from '@/constants/voice';
 import * as WebBrowser from 'expo-web-browser';
@@ -176,7 +176,7 @@ const result = createContextHook(() => {
 
               if (!confirmedAt) {
                 console.warn('🔐 Hydration: email NOT verified, clearing stored user');
-                await supabase.auth.signOut();
+                await signOutSafely();
                 await AsyncStorage.removeItem(USER_STORAGE_KEY);
                 setUser(null);
                 return;
@@ -256,7 +256,7 @@ const result = createContextHook(() => {
         const confirmedAt = session.user.email_confirmed_at ?? null;
         if (!confirmedAt) {
           console.warn('🔐 Token refreshed but email still not verified, signing out');
-          await supabase.auth.signOut();
+          await signOutSafely();
           await AsyncStorage.removeItem(USER_STORAGE_KEY);
           setUser(null);
         }
@@ -335,7 +335,7 @@ const result = createContextHook(() => {
 
         if (!confirmedAt) {
           console.warn('🔐 Email not verified. Signing out.');
-          await supabase.auth.signOut();
+          await signOutSafely();
           return { ok: false, reason: 'EMAIL_NOT_VERIFIED' };
         }
 
@@ -498,7 +498,7 @@ const result = createContextHook(() => {
         const confirmedAt = supaUser.email_confirmed_at ?? null;
         if (!confirmedAt) {
           console.log('🧾 User created with session but email not confirmed. Signing out.');
-          await supabase.auth.signOut();
+          await signOutSafely();
           return { ok: true, reason: 'VERIFY_EMAIL_REQUIRED' };
         }
 
@@ -738,7 +738,7 @@ const result = createContextHook(() => {
           return { ok: false, message: 'We could not delete your account. Please try again or contact support.' };
         }
 
-        await supabase.auth.signOut();
+        await signOutSafely();
       }
 
       // 3. Clear local storage & state
@@ -758,7 +758,7 @@ const result = createContextHook(() => {
   const logout = useCallback(async () => {
     try {
       if (isSupabaseEnabled) {
-        await supabase.auth.signOut();
+        await signOutSafely();
       }
       await AsyncStorage.removeItem(USER_STORAGE_KEY);
       setUser(null);

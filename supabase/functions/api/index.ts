@@ -148,6 +148,18 @@ app.post("/voice/tts", async (c) => {
   }
 });
 
+// Gmail strips custom-scheme links (mealplannerroulette://) out of emails, so the password-reset
+// email links here over https and this bounces into the app, like Supabase's own /verify redirect.
+// The token is passed through unused — the app verifies it. Destination is fixed: no open redirect.
+app.get("/auth/reset-password", (c) => {
+  const tokenHash = c.req.query("token_hash") ?? "";
+  if (!/^[A-Za-z0-9_-]{10,200}$/.test(tokenHash)) return c.text("This reset link is invalid.", 400);
+  return c.redirect(
+    `mealplannerroulette://reset-password?token_hash=${encodeURIComponent(tokenHash)}&type=recovery`,
+    302,
+  );
+});
+
 // Permanent account deletion (Apple guideline 5.1.1(v)). The client can't delete an auth user, so this
 // verifies the caller's own JWT and removes them with the service role. Recipes, profile and outgoing
 // friend links cascade from auth.users; incoming links (friend_user_id has no FK) are removed explicitly.

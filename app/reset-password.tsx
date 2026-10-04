@@ -1,180 +1,40 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert, Linking, ActivityIndicator } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/hooks/theme-store';
-import { supabase, isSupabaseEnabled } from '@/lib/supabase';
-import { friendlyAuthErrorMessage, withNetworkRetry } from '@/lib/auth-error-message';
+import { supabase, isSupabaseEnabled, signOutSafely } from '@/lib/supabase';
+import { friendlyAuthErrorMessage, isNetworkErrorMessage, withNetworkRetry } from '@/lib/auth-error-message';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
 import GradientBackground from '@/components/GradientBackground';
 import Colors from '@/constants/colors';
 import { ArrowLeft, Lock, ShieldCheck, AlertTriangle } from 'lucide-react-native';
 
-type ScreenState = 'restoring' | 'ready' | 'invalid' | 'updating' | 'done';
+type ScreenState = 'ready' | 'invalid' | 'updating' | 'done';
+
+const EXPIRED_LINK_MESSAGE = 'This reset link has expired or was already used. Please request a new one from the login screen.';
+const MISSING_LINK_MESSAGE = 'This reset link appears to be invalid. Please request a new one from the login screen.';
 
 export default function ResetPasswordScreen() {
   const { isDark } = useTheme();
   const themeColors = isDark ? Colors.dark : Colors.light;
-  const params = useLocalSearchParams<{ access_token?: string; refresh_token?: string; code?: string; token_hash?: string; type?: string }>();
+  const params = useLocalSearchParams<{ token_hash?: string | string[] }>();
+  const tokenHash = (Array.isArray(params.token_hash) ? params.token_hash[0] : params.token_hash) ?? '';
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState<{ newPassword?: string; confirmPassword?: string }>({});
-  const [screenState, setScreenState] = useState<ScreenState>('restoring');
-  const [invalidReason, setInvalidReason] = useState('');
-  const restoredRef = useRef(false);
+  const [screenState, setScreenState] = useState<ScreenState>(tokenHash ? 'ready' : 'invalid');
+  const [invalidReason, setInvalidReason] = useState(tokenHash ? '' : MISSING_LINK_MESSAGE);
 
-  useEffect(() => {
-    if (restoredRef.current) return;
-    restoredRef.current = true;
+  // The link is verified only when the new password is submitted. Verifying it on open signs the
+  // user in immediately, so leaving without setting a password left them logged in. Any recovery
+  // session this screen does create is ended when the screen goes away.
+  const hasRecoverySessionRef = useRef(false);
 
-    const currentParams = { ...params };
-
-    async function restoreSession() {
-      console.log('🔑 Reset password screen opened');
-      console.log('🔑 Params:', JSON.stringify(params));
-
-      if (!isSupabaseEnabled) {
-        console.warn('🔑 Supabase not enabled, cannot reset password');
-        setInvalidReason('Password reset is unavailable in offline mode.');
-        setScreenState('invalid');
-        return;
-      }
-
-      try {
-        let restoreError: string | null = null;
-
-        if (Platform.OS === 'web') {
-          const hash = window.location.hash;
-          if (hash) {
-            console.log('🔑 Web: found hash fragment, attempting session restore');
-            const hashParams = new URLSearchParams(hash.replace('#', ''));
-            const accessToken = hashParams.get('access_token');
-            const refreshToken = hashParams.get('refresh_token');
-            if (accessToken && refreshToken) {
-              const { error } = await withNetworkRetry(() =>
-                supabase.auth.setSession({
-                  access_token: accessToken,
-                  refresh_token: refreshToken,
-                })
-              );
-              if (error) {
-                console.error('🔑 Web session restore error:', error);
-                restoreError = error.message;
-              } else {
-                console.log('🔑 Web session restored successfully');
-              }
-            }
-          }
-        }
-
-        if (currentParams.token_hash && currentParams.type) {
-          console.log('🔑 Native: verifying OTP with token_hash for recovery');
-          const { error } = await withNetworkRetry(() =>
-            supabase.auth.verifyOtp({
-              token_hash: currentParams.token_hash as string,
-              type: (currentParams.type as string) as 'recovery',
-            })
-          );
-          if (error) {
-            console.error('🔑 OTP verify error:', error);
-            restoreError = error.message;
-          } else {
-            console.log('🔑 OTP verified, session should be active');
-          }
-        } else if (currentParams.code) {
-          console.log('🔑 Native: exchanging code for session (PKCE)');
-          const { error } = await withNetworkRetry(() =>
-            supabase.auth.exchangeCodeForSession(currentParams.code as string)
-          );
-          if (error) {
-            console.error('🔑 Code exchange error:', error);
-            restoreError = error.message;
-          } else {
-            console.log('🔑 Code exchanged for session successfully');
-          }
-        } else if (currentParams.access_token && currentParams.refresh_token) {
-          console.log('🔑 Native: restoring session from deep link params');
-          const { error } = await withNetworkRetry(() =>
-            supabase.auth.setSession({
-              access_token: currentParams.access_token as string,
-              refresh_token: currentParams.refresh_token as string,
-            })
-          );
-          if (error) {
-            console.error('🔑 Native session restore error:', error);
-            restoreError = error.message;
-          } else {
-            console.log('🔑 Native session restored successfully');
-          }
-        } else {
-          console.warn('🔑 No reset params found in URL');
-          restoreError = 'no_params';
-        }
-
-        const { data } = await supabase.auth.getSession();
-        if (data?.session) {
-          console.log('🔑 Valid recovery session active, ready to reset password');
-          setScreenState('ready');
-        } else if (restoreError) {
-          console.warn('🔑 Session restore failed:', restoreError);
-          if (restoreError.toLowerCase().includes('expired') || restoreError.toLowerCase().includes('otp')) {
-            setInvalidReason('This reset link has expired. Please request a new one from the login screen.');
-          } else if (restoreError === 'no_params') {
-            setInvalidReason('This reset link appears to be invalid. Please request a new one from the login screen.');
-          } else {
-            setInvalidReason('Could not restore your reset session. The link may have expired or already been used. Please request a new one.');
-          }
-          setScreenState('invalid');
-        } else {
-          console.warn('🔑 No active session after restore attempt');
-          setInvalidReason('This reset link is no longer valid. Please request a new password reset from the login screen.');
-          setScreenState('invalid');
-        }
-      } catch (e) {
-        console.error('🔑 Session restore unexpected error:', e);
-        setInvalidReason('Something went wrong while processing your reset link. Please try requesting a new one.');
-        setScreenState('invalid');
-      }
-    }
-
-    void restoreSession();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => {
+    if (hasRecoverySessionRef.current) void signOutSafely();
   }, []);
-
-  useEffect(() => {
-    if (screenState !== 'restoring') return;
-
-    const handleDeepLink = async (event: { url: string }) => {
-      console.log('🔑 Deep link received while on reset screen:', event.url);
-      try {
-        const url = new URL(event.url);
-        const hash = url.hash;
-        if (hash) {
-          const hashParams = new URLSearchParams(hash.replace('#', ''));
-          const accessToken = hashParams.get('access_token');
-          const refreshToken = hashParams.get('refresh_token');
-          if (accessToken && refreshToken) {
-            const { error } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            });
-            if (error) {
-              console.error('🔑 Deep link session restore error:', error);
-            } else {
-              console.log('🔑 Deep link session restored');
-              setScreenState('ready');
-            }
-          }
-        }
-      } catch (e) {
-        console.error('🔑 Deep link parse error:', e);
-      }
-    };
-
-    const sub = Linking.addEventListener('url', handleDeepLink);
-    return () => sub.remove();
-  }, [screenState]);
 
   const validate = () => {
     const newErrors: { newPassword?: string; confirmPassword?: string } = {};
@@ -196,59 +56,52 @@ export default function ResetPasswordScreen() {
   };
 
   const handleResetPassword = async () => {
-    if (screenState !== 'ready') {
-      console.warn('🔑 Attempted password reset without valid session');
-      return;
-    }
-    if (!validate()) return;
+    if (screenState !== 'ready' || !validate()) return;
 
     if (!isSupabaseEnabled) {
       Alert.alert('Unavailable', 'Password reset is unavailable in offline mode.', [{ text: 'OK' }]);
       return;
     }
 
-    const { data: sessionCheck } = await supabase.auth.getSession();
-    if (!sessionCheck?.session) {
-      console.warn('🔑 Session expired before password submit');
-      setInvalidReason('Your reset session has expired. Please request a new password reset link.');
-      setScreenState('invalid');
-      return;
-    }
-
     setScreenState('updating');
     try {
-      console.log('🔑 Updating password...');
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) {
-        console.error('🔑 Password update error:', error);
+      // Skipped on a second attempt (e.g. the first new password was rejected): the token is
+      // single-use and the recovery session from the first attempt is still active.
+      if (!hasRecoverySessionRef.current) {
+        const { error: verifyError } = await withNetworkRetry(() =>
+          supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' })
+        );
+        if (verifyError) {
+          console.error('🔑 Reset link verification failed:', verifyError.message);
+          if (isNetworkErrorMessage(verifyError.message)) {
+            setScreenState('ready');
+            Alert.alert('Connection problem', friendlyAuthErrorMessage(verifyError.message, 'Please try again.'), [{ text: 'OK' }]);
+          } else {
+            setInvalidReason(EXPIRED_LINK_MESSAGE);
+            setScreenState('invalid');
+          }
+          return;
+        }
+        hasRecoverySessionRef.current = true;
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) {
+        console.error('🔑 Password update failed:', updateError.message);
         setScreenState('ready');
-        Alert.alert('Could not reset password', friendlyAuthErrorMessage(error.message, 'Please try again.'), [{ text: 'OK' }]);
+        Alert.alert('Could not reset password', friendlyAuthErrorMessage(updateError.message, 'Please try again.'), [{ text: 'OK' }]);
         return;
       }
 
-      console.log('🔑 Password updated successfully, signing out for clean login');
-      await supabase.auth.signOut();
+      hasRecoverySessionRef.current = false;
+      await signOutSafely();
       setScreenState('done');
     } catch (e) {
-      console.error('🔑 Password update unexpected error:', e);
+      console.error('🔑 Password reset unexpected error:', e);
       setScreenState('ready');
-      Alert.alert('Could not reset password', 'An unexpected error occurred. Please try again.', [{ text: 'OK' }]);
+      Alert.alert('Could not reset password', 'Something went wrong. Please try again.', [{ text: 'OK' }]);
     }
   };
-
-  if (screenState === 'restoring') {
-    return (
-      <GradientBackground>
-        <View style={[styles.container, styles.centeredContent]}>
-          <View style={[styles.card, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
-            <ActivityIndicator size="large" color={themeColors.primary} />
-            <Text style={[styles.loadingText, { color: themeColors.text }]}>Verifying your reset link...</Text>
-            <Text style={[styles.loadingSubtext, { color: themeColors.textSecondary }]}>This should only take a moment</Text>
-          </View>
-        </View>
-      </GradientBackground>
-    );
-  }
 
   if (screenState === 'invalid') {
     return (
@@ -437,17 +290,6 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center' as const,
     ...Colors.shadowMd,
-  },
-  loadingText: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    marginTop: 20,
-    textAlign: 'center' as const,
-  },
-  loadingSubtext: {
-    fontSize: 14,
-    marginTop: 8,
-    textAlign: 'center' as const,
   },
   invalidIcon: {
     width: 56,

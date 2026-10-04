@@ -3,7 +3,9 @@
     "allow": [
       "Bash(eas whoami *)",
       "WebSearch",
-      "WebFetch(domain:www.revenuecat.com)"
+      "WebFetch(domain:www.revenuecat.com)",
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "ClaudeInChromeDomain(supabase.com)"
     ]
   }
 }
