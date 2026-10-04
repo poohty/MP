@@ -212,7 +212,11 @@ const result = createContextHook(() => {
   useEffect(() => {
     if (!isSupabaseEnabled) return;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // auth-js runs this callback while holding its auth lock. Awaiting any other
+    // Supabase call in here (a query, getSession, signOut) waits on that same lock
+    // and deadlocks the client, so the work is deferred until the lock is released.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+     setTimeout(async () => {
       console.log('🔐 onAuthStateChange:', event, session?.user?.id ?? 'no-user');
 
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
@@ -257,6 +261,7 @@ const result = createContextHook(() => {
           setUser(null);
         }
       }
+     }, 0);
     });
 
     return () => {
