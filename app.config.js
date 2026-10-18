@@ -20,7 +20,7 @@ const config = {
     bundleIdentifier: "com.mealplanner.roulette",
     infoPlist: {
       NSPhotoLibraryUsageDescription: "Allow $(PRODUCT_NAME) to access your photos",
-      NSCameraUsageDescription: "Allow $(PRODUCT_NAME) to access your camera",
+      NSCameraUsageDescription: "Meal Planner Roulette uses your camera so you can take a photo of a recipe, such as a cookbook page or a handwritten recipe card, and add it to your recipe book. The camera only opens when you tap the camera button.",
       NSMicrophoneUsageDescription: "Allow $(PRODUCT_NAME) to access your microphone",
       NSLocationWhenInUseUsageDescription: "Allow $(PRODUCT_NAME) to use your location.",
       UIBackgroundModes: ["audio"],
@@ -59,7 +59,7 @@ const config = {
       },
     ],
     ["expo-router", { origin: "https://mealplannerroulette.com/" }],
-    ["expo-image-picker", { photosPermission: "The app accesses your photos to let you share them with your friends." }],
+    ["expo-image-picker", { photosPermission: "The app accesses your photos to let you share them with your friends.", cameraPermission: "Meal Planner Roulette uses your camera so you can take a photo of a recipe, such as a cookbook page or a handwritten recipe card, and add it to your recipe book. The camera only opens when you tap the camera button." }],
     "expo-document-picker",
     "expo-location",
     ["expo-audio", { microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone" }],
