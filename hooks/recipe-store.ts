@@ -1,4 +1,5 @@
 import { fetchRecipePage } from '@/lib/recipe-page-fetcher';
+import { fetchWithRetry } from '@/lib/fetch-with-timeout';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
@@ -316,22 +317,16 @@ const [RecipeContext, useRecipes] = createContextHook(() => { // eslint-disable-
         ? `Photorealistic, high-quality food photography of a dish called "${safeName}", in the "${safeCategory}" category. Bright natural lighting, shallow depth of field, appetizing, realistic.`
         : `Photorealistic, high-quality food photography of a dish called "${safeName}". Bright natural lighting, shallow depth of field, appetizing, realistic.`;
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-      const response = await fetch("https://toolkit.rork.com/images/generate/", {
+      const response = await fetchWithRetry("https://toolkit.rork.com/images/generate/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        signal: controller.signal,
         body: JSON.stringify({
           prompt: promptText,
           size: "1024x1024",
         }),
       });
-
-      clearTimeout(timeoutId);
 
       if (response.ok) {
         const data: any = await response.json();
@@ -760,15 +755,11 @@ const [RecipeContext, useRecipes] = createContextHook(() => { // eslint-disable-
       }
 
       console.log(`🤖 Analyzing HTML content with AI for complete recipe extraction...`);
-      const aiController = new AbortController();
-      const aiTimeoutId = setTimeout(() => aiController.abort(), 25000);
-      
-      const response = await fetch('https://toolkit.rork.com/text/llm/', {
+      const response = await fetchWithRetry('https://toolkit.rork.com/text/llm/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        signal: aiController.signal,
         body: JSON.stringify({
           messages: [
             {
@@ -927,8 +918,6 @@ Extract all fields. If missing, use empty string. Convert ISO durations to reada
           ]
         })
       });
-      
-      clearTimeout(aiTimeoutId);
       
       if (!response.ok) {
         console.log(`❌ AI API error for recipe extraction: ${response.status}`);

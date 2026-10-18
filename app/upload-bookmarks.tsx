@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { fetchWithRetry } from '@/lib/fetch-with-timeout';
 import {
   StyleSheet,
   Text,
@@ -462,15 +463,11 @@ export default function UploadBookmarksScreen() {
       
       // Step 2: Use AI to analyze the HTML content for recipe validation and image extraction
       console.log(`🤖 Analyzing HTML content with AI...`);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // Reduced to 10s for faster import
-      
-      const response = await fetch('https://toolkit.rork.com/text/llm/', {
+      const response = await fetchWithRetry('https://toolkit.rork.com/text/llm/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        signal: controller.signal,
         body: JSON.stringify({
           messages: [
             {
@@ -483,9 +480,7 @@ export default function UploadBookmarksScreen() {
             }
           ]
         })
-      });
-      
-      clearTimeout(timeoutId);
+      }, 30000, 2);
 
       if (!response.ok) {
         console.log(`⚠️ API error (${response.status}) for "${name}"`);
@@ -587,7 +582,7 @@ export default function UploadBookmarksScreen() {
         return { isRecipe: false };
       }
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (error instanceof Error && (error.name === 'AbortError' || /timed out/i.test(error.message))) {
         console.log(`⏰ AI timeout for "${name}"`);
       } else {
         console.log(`⚠️ AI error for "${name}":`, error);

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { fetchWithRetry } from '@/lib/fetch-with-timeout';
 import { StyleSheet, View, Text, Image, ScrollView, Alert, Platform } from 'react-native';
 import { router, Stack } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -14,7 +15,6 @@ import { compressImageUri } from '@/utils/image-compression';
 import { RecipeCategory } from '@/types';
 
 const MAX_IMAGE_DIMENSION = 1024;
-const AI_REQUEST_TIMEOUT_MS = 30000;
 
 export default function AddRecipePhotoScreen() {
   const { addRecipe } = useRecipes();
@@ -220,14 +220,11 @@ export default function AddRecipePhotoScreen() {
 
       setExtractionProgress('🤖 AI is reading the recipe...');
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
       const aiStart = Date.now();
 
-      const aiResponse = await fetch('https://toolkit.rork.com/text/llm/', {
+      const aiResponse = await fetchWithRetry('https://toolkit.rork.com/text/llm/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
         body: JSON.stringify({
           messages: [
             {
@@ -262,7 +259,6 @@ Rules:
         }),
       });
 
-      clearTimeout(timeoutId);
       const aiElapsed = Date.now() - aiStart;
 
       if (!aiResponse.ok) {
@@ -339,7 +335,7 @@ Rules:
       );
     } catch (error: any) {
       const totalElapsed = Date.now() - totalStart;
-      const isTimeout = error?.name === 'AbortError';
+      const isTimeout = error?.name === 'AbortError' || /timed out/i.test(error?.message ?? '');
       console.error(`[PhotoExtraction] Extraction failed after ${totalElapsed}ms:`, isTimeout ? 'Request timed out' : error);
 
       setIsExtracting(false);
