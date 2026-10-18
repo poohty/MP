@@ -64,10 +64,9 @@ function NavigationGate({ children }: { children: React.ReactNode }) {
     if (!hasAccess && !isOnPaywall) {
       console.log('[NavigationGate] No access → /paywall');
       router.replace('/paywall' as Href);
-    } else if (hasAccess && isOnPaywall) {
-      console.log('[NavigationGate] Access granted → /(tabs)');
-      router.replace('/(tabs)');
     }
+    // Someone with access may stay on the paywall: a free-week user opens it to subscribe early.
+    // Purchase, restore and starting the free week each navigate to the app themselves.
   }, [isAuthenticated, isAuthLoading, isSubLoading, hasAccess, segments]);
 
   return <>{children}</>;

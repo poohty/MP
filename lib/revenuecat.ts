@@ -74,17 +74,32 @@ export type AccessInfo = {
   isPro: boolean;
   /** Never had any access before, so the one free week is still available. */
   canStartTrial: boolean;
+  /** End time (ms) while the user is on the free week; null for paid or lifetime access. */
+  freeWeekEndsAt: number | null;
 };
+
+// The free week is a RevenueCat promotional grant WITH an end date. Lifetime grants (family, reviewer)
+// are promotional too but have no end date, so they stay "Pro".
+function getFreeWeekEndsAt(info: CustomerInfo): number | null {
+  const active = info?.entitlements?.active ?? {};
+  const entitlement = active[ENTITLEMENT_ID] ?? Object.values(active)[0];
+  if (!entitlement || entitlement.store !== 'PROMOTIONAL') return null;
+  return entitlement.expirationDateMillis ?? null;
+}
 
 function toAccessInfo(info: CustomerInfo): AccessInfo {
   const everHadAccess =
     Object.keys(info?.entitlements?.all ?? {}).length > 0 ||
     (info?.allPurchasedProductIdentifiers?.length ?? 0) > 0;
-  return { isPro: isEntitlementActive(info), canStartTrial: !everHadAccess };
+  return {
+    isPro: isEntitlementActive(info),
+    canStartTrial: !everHadAccess,
+    freeWeekEndsAt: getFreeWeekEndsAt(info),
+  };
 }
 
 export async function getAccessInfo(options: { forceRefresh?: boolean } = {}): Promise<AccessInfo> {
-  if (!isRevenueCatEnabled()) return { isPro: false, canStartTrial: false };
+  if (!isRevenueCatEnabled()) return { isPro: false, canStartTrial: false, freeWeekEndsAt: null };
 
   try {
     // RevenueCat doesn't push server-side changes (like the free-week grant) to the phone.
@@ -94,7 +109,7 @@ export async function getAccessInfo(options: { forceRefresh?: boolean } = {}): P
     return access;
   } catch (error) {
     console.error('[RevenueCat] Failed to check subscription status:', error);
-    return { isPro: false, canStartTrial: false };
+    return { isPro: false, canStartTrial: false, freeWeekEndsAt: null };
   }
 }
 

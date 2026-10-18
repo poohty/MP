@@ -26,7 +26,7 @@ const SLOW_LOAD_THRESHOLD_MS = 2000;
 type PlanId = 'trial' | 'monthly' | 'yearly';
 
 export default function PaywallScreen() {
-  const { offerings, purchase, restore, isLoading, refetchOfferings, canStartTrial, startFreeTrial } = useSubscription();
+  const { offerings, purchase, restore, isLoading, refetchOfferings, canStartTrial, startFreeTrial, isProUser } = useSubscription();
   const { logout } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<PlanId>('trial');
   const [isPurchasing, setIsPurchasing] = useState(false);
@@ -120,6 +120,7 @@ export default function PaywallScreen() {
       const success = await restore();
       if (success) {
         Alert.alert('Restored', 'Your subscription has been restored successfully.');
+        router.replace('/(tabs)');
       } else {
         Alert.alert('Not Found', 'No active subscription found for this account.');
       }
@@ -327,6 +328,13 @@ export default function PaywallScreen() {
             <Text style={styles.legalLink}>Privacy Policy</Text>
           </TouchableOpacity>
         </View>
+
+        {/* A free-week user can open this screen to subscribe early; this screen has no back gesture. */}
+        {isProUser && (
+          <TouchableOpacity style={styles.signOutButton} onPress={() => router.replace('/(tabs)')}>
+            <Text style={styles.signOutText}>Back to the app</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Sign out */}
         <TouchableOpacity style={styles.signOutButton} onPress={logout}>

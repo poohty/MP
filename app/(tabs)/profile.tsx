@@ -11,12 +11,20 @@ import { User, Settings, Info, Heart, Users, Moon, Mic, Crown, RotateCcw, Shield
 import { VOICE_OPTIONS, type VoicePreference } from '@/constants/voice';
 import { router } from 'expo-router';
 
+function timeLeft(endsAtMs: number | null): string {
+  const minutes = Math.max(1, Math.ceil(((endsAtMs ?? 0) - Date.now()) / 60000));
+  if (minutes >= 2 * 24 * 60) return `${Math.floor(minutes / (24 * 60))} days`;
+  if (minutes >= 60) return `${Math.floor(minutes / 60)} hr`;
+  return `${minutes} min`;
+}
+
 export default function ProfileScreen() {
   const { user, logout, updateProfile, deleteAccount } = useAuth();
   const [isDeleting, setIsDeleting] = useState(false);
   const { currentUserProfile, updateShareCookbook } = useUser();
   const { toggleTheme, isDark } = useTheme();
-  const { isProUser, restore } = useSubscription();
+  const { isProUser, freeWeekEndsAt, restore } = useSubscription();
+  const onFreeWeek = isProUser && freeWeekEndsAt !== null;
   const [shareToggle, setShareToggle] = useState<boolean | null>(null);
   const [isSavingShare, setIsSavingShare] = useState(false);
   const [voicePreference, setVoicePreference] = useState<VoicePreference>(user?.voicePreference ?? 'female');
@@ -252,16 +260,16 @@ export default function ProfileScreen() {
               <Crown size={20} color={isProUser ? '#FFD700' : colors.primary} />
             </View>
             <Text style={[styles.menuText, { color: colors.text }]}>
-              Current Tier: <Text style={{ fontWeight: 'bold', color: isProUser ? colors.primary : colors.textSecondary }}>{isProUser ? 'Pro Plan' : 'Free Plan'}</Text>
+              Current Tier: <Text style={{ fontWeight: 'bold', color: isProUser ? colors.primary : colors.textSecondary }}>{onFreeWeek ? `Free Week (${timeLeft(freeWeekEndsAt)} left)` : isProUser ? 'Pro Plan' : 'Free Plan'}</Text>
             </Text>
-            {isProUser && (
+            {isProUser && !onFreeWeek && (
               <TouchableOpacity onPress={handleManageSubscription}>
                 <Text style={{ color: colors.primary, fontWeight: '600', fontSize: 14 }}>Manage</Text>
               </TouchableOpacity>
             )}
           </View>
 
-          {!isProUser && (
+          {(!isProUser || onFreeWeek) && (
             <TouchableOpacity
               style={styles.menuItem}
               onPress={() => {
@@ -271,7 +279,7 @@ export default function ProfileScreen() {
               <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
                 <Crown size={20} color={colors.primary} />
               </View>
-              <Text style={[styles.menuText, { color: colors.text }]}>Upgrade to Pro</Text>
+              <Text style={[styles.menuText, { color: colors.text }]}>{onFreeWeek ? 'Subscribe' : 'Upgrade to Pro'}</Text>
             </TouchableOpacity>
           )}
 

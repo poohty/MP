@@ -27,6 +27,7 @@ const result = createContextHook(() => {
   const { user, isAuthenticated } = useAuth();
   const [isProUser, setIsProUser] = useState(false);
   const [canStartTrial, setCanStartTrial] = useState(false);
+  const [freeWeekEndsAt, setFreeWeekEndsAt] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [offerings, setOfferings] = useState<PurchasesPackage[]>([]);
 
@@ -38,6 +39,7 @@ const result = createContextHook(() => {
     const access = await getAccessInfo();
     setIsProUser(access.isPro);
     setCanStartTrial(access.canStartTrial);
+    setFreeWeekEndsAt(access.freeWeekEndsAt);
     return access.isPro;
   }, []);
 
@@ -82,6 +84,7 @@ const result = createContextHook(() => {
           if (!cancelled) {
             setIsProUser(access.isPro);
             setCanStartTrial(access.canStartTrial);
+            setFreeWeekEndsAt(access.freeWeekEndsAt);
             setOfferings(pkgs);
             lastInitUserId.current = userId;
           }
@@ -124,6 +127,7 @@ const result = createContextHook(() => {
       console.log('[Subscription] Real-time update:', access);
       setIsProUser(access.isPro);
       setCanStartTrial(access.canStartTrial);
+      setFreeWeekEndsAt(access.freeWeekEndsAt);
     });
 
     return removeListener;
@@ -135,6 +139,7 @@ const result = createContextHook(() => {
     if (success) {
       setIsProUser(true);
       setCanStartTrial(false);
+      setFreeWeekEndsAt(null);
     }
     return success;
   }, []);
@@ -144,6 +149,7 @@ const result = createContextHook(() => {
     if (success) {
       setIsProUser(true);
       setCanStartTrial(false);
+      setFreeWeekEndsAt(null);
     }
     return success;
   }, []);
@@ -174,6 +180,7 @@ const result = createContextHook(() => {
     const access = await getAccessInfo({ forceRefresh: true });
     setIsProUser(access.isPro);
     setCanStartTrial(access.canStartTrial);
+    setFreeWeekEndsAt(access.freeWeekEndsAt);
     if (!access.isPro) {
       throw new Error('Your free week is being set up. Please try again in a moment.');
     }
@@ -188,6 +195,7 @@ const result = createContextHook(() => {
     offerings,
     hasAccess,
     canStartTrial,
+    freeWeekEndsAt,
     startFreeTrial,
     purchase,
     restore,
@@ -199,6 +207,7 @@ const result = createContextHook(() => {
     offerings,
     hasAccess,
     canStartTrial,
+    freeWeekEndsAt,
     startFreeTrial,
     purchase,
     restore,
