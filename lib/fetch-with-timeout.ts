@@ -21,3 +21,25 @@ export async function fetchWithTimeout(
     clearTimeout(timeoutId);
   }
 }
+
+// toolkit.rork.com answers the same request in anywhere from ~7s to 60s+ (and sometimes not at all), so a
+// single short attempt fails often. Two patient attempts before giving up fixes most of those failures.
+export async function fetchWithRetry(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs: number = 45000,
+  attempts: number = 2
+): Promise<Response> {
+  let lastError: unknown = new Error('Request failed');
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const response = await fetchWithTimeout(input, init, timeoutMs);
+      if (response.status < 500) return response;
+      lastError = new Error(`HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    console.log(`[fetchWithRetry] attempt ${attempt}/${attempts} failed:`, lastError);
+  }
+  throw lastError;
+}

@@ -9,7 +9,7 @@ import * as Location from 'expo-location';
 import Button from '@/components/Button';
 import { useWalkthrough, WalkthroughStep } from '@/hooks/useWalkthrough';
 import WalkthroughModal from '@/components/WalkthroughModal';
-import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
+import { fetchWithRetry } from '@/lib/fetch-with-timeout';
 
 const GROCERY_LIST_STEPS: WalkthroughStep[] = [
   { title: 'Check items off', body: 'Tap the checkbox to mark items as you shop.' },
@@ -151,7 +151,7 @@ export default function GroceryListScreen() {
         );
       }
 
-      const itemNames = groceryList.items.map(item => item.name);
+      const itemNames = (groceryList.items ?? []).map(item => item.name);
       
       // Get location details for better search context
       let locationContext = '';
@@ -166,15 +166,18 @@ export default function GroceryListScreen() {
         console.log('Reverse geocoding failed:', e);
       }
       
-      // Progressive radius search: 2, 5, 10, 20 miles
-      const searchRadii = [2, 5, 10, 20];
+      // Each radius is one slow AI call, so search 5 miles first and widen to 20 only if needed.
+      const searchRadii = [5, 20];
       let finalComparisons: any[] = [];
+      let searchRequestFailed = false;
       
       for (const radius of searchRadii) {
         console.log(`Searching for stores within ${radius} mile radius...`);
         
         // Use a more targeted approach to find real stores with Google search simulation
-        const response = await fetchWithTimeout('https://toolkit.rork.com/text/llm/', {
+        let response: Response;
+        try {
+        response = await fetchWithRetry('https://toolkit.rork.com/text/llm/', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -275,7 +278,12 @@ FORMAT: JSON array only, no explanations or markdown.`
               }
             ]
           })
-        }, 20000);
+        });
+        } catch (requestError) {
+          console.log(`Store search for ${radius} miles failed:`, requestError);
+          searchRequestFailed = true;
+          continue;
+        }
 
         const data = await response.json();
         console.log(`Raw AI response for ${radius} mile radius:`, data.completion);
@@ -391,6 +399,15 @@ FORMAT: JSON array only, no explanations or markdown.`
       }
       
       // If no real stores found after all radii, show detailed error
+      if (finalComparisons.length === 0 && searchRequestFailed) {
+        Alert.alert(
+          'Store search is busy',
+          'The price service took too long to answer. Please try again in a moment.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
       if (finalComparisons.length === 0) {
         console.log('No verified stores found in any radius');
         
@@ -472,9 +489,9 @@ FORMAT: JSON array only, no explanations or markdown.`
     setIsLoadingStores(true);
     try {
       // Generate pricing for the manual store using AI
-      const itemNames = groceryList.items.map(item => item.name);
+      const itemNames = (groceryList.items ?? []).map(item => item.name);
       
-      const response = await fetchWithTimeout('https://toolkit.rork.com/text/llm/', {
+      const response = await fetchWithRetry('https://toolkit.rork.com/text/llm/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -503,7 +520,7 @@ Use realistic grocery store pricing. Consider the store type and location for pr
             }
           ]
         })
-      }, 20000);
+      });
 
       const data = await response.json();
       let pricingData;
@@ -644,7 +661,7 @@ Use realistic grocery store pricing. Consider the store type and location for pr
       <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.storeSection}>
           <Button
-            title={isLoadingStores ? 'Finding Stores...' : 'Find Cheapest Store Near Me'}
+            title={isLoadingStores ? 'Finding Stores... (can take up to a minute)' : 'Find Cheapest Store Near Me'}
             onPress={requestLocationPermission}
             disabled={isLoadingStores}
             style={styles.storeButton}
