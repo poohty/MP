@@ -526,10 +526,14 @@ export default function RecipeDetailsScreen() {
 
   const cookAlong = useCookAlong(parsedInstructions, user?.voicePreference, clearAllChecks);
 
+  // Start the cook-along at the first step that isn't checked off yet (0 when none or all are checked).
+  const firstUncheckedStep = Math.max(0, parsedInstructions.findIndex((_, i) => !checkedSteps[i]));
+
   useEffect(() => {
     if (cookAlong.cookAlongActive && cookAlong.currentStepIndex >= 0) {
       const newChecked = { ...checkedSteps };
-      for (let i = 0; i <= cookAlong.currentStepIndex; i++) {
+      // currentStepIndex is the step being read; only the steps before it are finished.
+      for (let i = 0; i < cookAlong.currentStepIndex; i++) {
         newChecked[i] = true;
       }
       setCheckedSteps(newChecked);
@@ -707,7 +711,7 @@ export default function RecipeDetailsScreen() {
                             styles.micButton,
                             (cookAlong.cookAlongActive || cookAlong.phase === 'starting') && styles.micButtonActive,
                           ]}
-                          onPress={(cookAlong.cookAlongActive || cookAlong.phase === 'starting') ? cookAlong.stopCookAlong : cookAlong.startCookAlong}
+                          onPress={(cookAlong.cookAlongActive || cookAlong.phase === 'starting') ? cookAlong.stopCookAlong : () => cookAlong.startCookAlong(firstUncheckedStep)}
                           activeOpacity={0.7}
                           testID="cook-along-mic-button"
                         >

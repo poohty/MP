@@ -5,7 +5,9 @@
       "WebSearch",
       "WebFetch(domain:www.revenuecat.com)",
       "mcp__claude-in-chrome__tabs_context_mcp",
-      "ClaudeInChromeDomain(supabase.com)"
+      "ClaudeInChromeDomain(supabase.com)",
+      "ClaudeInChromeDomain(app.revenuecat.com)",
+      "ClaudeInChromeDomain(appstoreconnect.apple.com)"
     ]
   }
 }

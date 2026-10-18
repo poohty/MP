@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, useSegments, router, type Href } from "expo-router";
+import { Stack, useSegments, useGlobalSearchParams, router, type Href } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -25,6 +25,9 @@ function NavigationGate({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { hasAccess, isLoading: isSubLoading } = useSubscription();
   const segments = useSegments();
+  // A free-week user opens the paywall on purpose from Profile (?subscribe=1) to subscribe early.
+  const { subscribe } = useGlobalSearchParams<{ subscribe?: string }>();
+  const openedOnPurpose = subscribe === '1';
 
   useEffect(() => {
     // Wait until both stores have finished loading before making any decision.
@@ -64,10 +67,13 @@ function NavigationGate({ children }: { children: React.ReactNode }) {
     if (!hasAccess && !isOnPaywall) {
       console.log('[NavigationGate] No access → /paywall');
       router.replace('/paywall' as Href);
+    } else if (hasAccess && isOnPaywall && !openedOnPurpose) {
+      // Also fixes the brief startup moment when subscription info hasn't loaded yet and a
+      // subscribed user was sent to the paywall.
+      console.log('[NavigationGate] Access granted → /(tabs)');
+      router.replace('/(tabs)');
     }
-    // Someone with access may stay on the paywall: a free-week user opens it to subscribe early.
-    // Purchase, restore and starting the free week each navigate to the app themselves.
-  }, [isAuthenticated, isAuthLoading, isSubLoading, hasAccess, segments]);
+  }, [isAuthenticated, isAuthLoading, isSubLoading, hasAccess, segments, openedOnPurpose]);
 
   return <>{children}</>;
 }

@@ -273,7 +273,7 @@ export default function ProfileScreen() {
             <TouchableOpacity
               style={styles.menuItem}
               onPress={() => {
-                router.push('/paywall');
+                router.push({ pathname: '/paywall', params: { subscribe: '1' } });
               }}
             >
               <View style={[styles.menuIconContainer, { backgroundColor: colors.surface }]}>
