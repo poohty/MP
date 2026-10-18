@@ -69,17 +69,32 @@ function isEntitlementActive(customerInfo: CustomerInfo): boolean {
   return Object.keys(activeMap).length > 0;
 }
 
-export async function checkSubscriptionStatus(): Promise<boolean> {
-  if (!isRevenueCatEnabled()) return false;
+export type AccessInfo = {
+  /** Has an active entitlement: paid, a store trial, a lifetime grant, or the free week. */
+  isPro: boolean;
+  /** Never had any access before, so the one free week is still available. */
+  canStartTrial: boolean;
+};
+
+function toAccessInfo(info: CustomerInfo): AccessInfo {
+  const everHadAccess =
+    Object.keys(info?.entitlements?.all ?? {}).length > 0 ||
+    (info?.allPurchasedProductIdentifiers?.length ?? 0) > 0;
+  return { isPro: isEntitlementActive(info), canStartTrial: !everHadAccess };
+}
+
+export async function getAccessInfo(options: { forceRefresh?: boolean } = {}): Promise<AccessInfo> {
+  if (!isRevenueCatEnabled()) return { isPro: false, canStartTrial: false };
 
   try {
-    const customerInfo: CustomerInfo = await Purchases.getCustomerInfo();
-    const isActive = isEntitlementActive(customerInfo);
-    console.log('[RevenueCat] Pro entitlement active status:', isActive);
-    return isActive;
+    // RevenueCat doesn't push server-side changes (like the free-week grant) to the phone.
+    if (options.forceRefresh) await Purchases.invalidateCustomerInfoCache();
+    const access = toAccessInfo(await Purchases.getCustomerInfo());
+    console.log('[RevenueCat] Access info:', access);
+    return access;
   } catch (error) {
     console.error('[RevenueCat] Failed to check subscription status:', error);
-    return false;
+    return { isPro: false, canStartTrial: false };
   }
 }
 
@@ -137,7 +152,7 @@ export async function restorePurchases(): Promise<boolean> {
  * Returns a cleanup function to remove the listener.
  */
 export function addSubscriptionListener(
-  onUpdate: (isPro: boolean) => void,
+  onUpdate: (access: AccessInfo) => void,
 ): () => void {
   if (!isRevenueCatEnabled()) {
     return () => {};
@@ -147,9 +162,9 @@ export function addSubscriptionListener(
     // Must use the same check as checkSubscriptionStatus/purchase — a stricter
     // check here reported "not pro" right after a successful purchase and
     // bounced subscribed users back to the paywall.
-    const isActive = isEntitlementActive(info);
-    console.log('[RevenueCat] CustomerInfo updated, pro active:', isActive);
-    onUpdate(isActive);
+    const access = toAccessInfo(info);
+    console.log('[RevenueCat] CustomerInfo updated:', access);
+    onUpdate(access);
   };
 
   Purchases.addCustomerInfoUpdateListener(listener);

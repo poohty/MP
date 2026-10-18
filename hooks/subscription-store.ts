@@ -1,9 +1,12 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from './auth-store';
+import { supabase } from '@/lib/supabase';
+import { getBackendBaseUrl } from '@/lib/trpc';
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
 import {
   initializePurchases,
-  checkSubscriptionStatus,
+  getAccessInfo,
   getOfferings,
   purchasePackage,
   restorePurchases,
@@ -23,6 +26,7 @@ const SIM_MODE = process.env.EXPO_PUBLIC_SIMULATE_SUBSCRIPTION as
 const result = createContextHook(() => {
   const { user, isAuthenticated } = useAuth();
   const [isProUser, setIsProUser] = useState(false);
+  const [canStartTrial, setCanStartTrial] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [offerings, setOfferings] = useState<PurchasesPackage[]>([]);
 
@@ -31,9 +35,10 @@ const result = createContextHook(() => {
   const lastInitUserId = useRef<string | null>(null);
 
   const refreshSubscriptionStatus = useCallback(async (): Promise<boolean> => {
-    const isPro = await checkSubscriptionStatus();
-    setIsProUser(isPro);
-    return isPro;
+    const access = await getAccessInfo();
+    setIsProUser(access.isPro);
+    setCanStartTrial(access.canStartTrial);
+    return access.isPro;
   }, []);
 
   const refetchOfferings = useCallback(async (): Promise<void> => {
@@ -70,12 +75,13 @@ const result = createContextHook(() => {
         // Initialize RevenueCat and check subscription
         if (isRevenueCatEnabled()) {
           await initializePurchases(userId!);
-          const [isPro, pkgs] = await Promise.all([
-            checkSubscriptionStatus(),
+          const [access, pkgs] = await Promise.all([
+            getAccessInfo(),
             getOfferings(),
           ]);
           if (!cancelled) {
-            setIsProUser(isPro);
+            setIsProUser(access.isPro);
+            setCanStartTrial(access.canStartTrial);
             setOfferings(pkgs);
             lastInitUserId.current = userId;
           }
@@ -114,9 +120,10 @@ const result = createContextHook(() => {
   useEffect(() => {
     if (!isAuthenticated || !isRevenueCatEnabled()) return;
 
-    const removeListener = addSubscriptionListener((isPro) => {
-      console.log('[Subscription] Real-time update — isPro:', isPro);
-      setIsProUser(isPro);
+    const removeListener = addSubscriptionListener((access) => {
+      console.log('[Subscription] Real-time update:', access);
+      setIsProUser(access.isPro);
+      setCanStartTrial(access.canStartTrial);
     });
 
     return removeListener;
@@ -127,6 +134,7 @@ const result = createContextHook(() => {
     const success = await purchasePackage(pkg);
     if (success) {
       setIsProUser(true);
+      setCanStartTrial(false);
     }
     return success;
   }, []);
@@ -135,8 +143,40 @@ const result = createContextHook(() => {
     const success = await restorePurchases();
     if (success) {
       setIsProUser(true);
+      setCanStartTrial(false);
     }
     return success;
+  }, []);
+
+  // The one free week is granted by our server (RevenueCat promotional access) so it can't be
+  // faked from the phone, isn't tied to Apple/Google billing, and ends on its own after 7 days.
+  const startFreeTrial = useCallback(async (): Promise<void> => {
+    const { data } = await supabase.auth.getSession();
+    const accessToken = data.session?.access_token;
+    const apiBase = getBackendBaseUrl();
+    if (!accessToken || !apiBase) {
+      throw new Error('Please sign in again and retry.');
+    }
+
+    const response = await fetchWithTimeout(`${apiBase}/api/trial/start`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }, 20000);
+
+    if (response.status === 409) {
+      setCanStartTrial(false);
+      throw new Error('Your free week has already been used. Please choose a plan below.');
+    }
+    if (!response.ok) {
+      throw new Error('We could not start your free week. Please try again.');
+    }
+
+    const access = await getAccessInfo({ forceRefresh: true });
+    setIsProUser(access.isPro);
+    setCanStartTrial(access.canStartTrial);
+    if (!access.isPro) {
+      throw new Error('Your free week is being set up. Please try again in a moment.');
+    }
   }, []);
 
   // Whether the user can access app features
@@ -147,6 +187,8 @@ const result = createContextHook(() => {
     isLoading,
     offerings,
     hasAccess,
+    canStartTrial,
+    startFreeTrial,
     purchase,
     restore,
     refreshSubscriptionStatus,
@@ -156,6 +198,8 @@ const result = createContextHook(() => {
     isLoading,
     offerings,
     hasAccess,
+    canStartTrial,
+    startFreeTrial,
     purchase,
     restore,
     refreshSubscriptionStatus,

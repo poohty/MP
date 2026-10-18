@@ -160,6 +160,73 @@ app.get("/auth/reset-password", (c) => {
   );
 });
 
+// One free 7-day week per account, granted as a RevenueCat promotional entitlement. It never touches the
+// App Store / Google Play, so no payment method is attached and nothing is charged when it ends.
+// "Used before" is read from RevenueCat itself (paid, store trial or an earlier free week all leave a
+// record there), keyed by the same Supabase user id the app logs into RevenueCat with.
+const RC_API = "https://api.revenuecat.com/v1";
+const PRO_ENTITLEMENT = "Meal Planner Roulette Pro";
+const DEFAULT_TRIAL_MINUTES = 7 * 24 * 60;
+
+// Test builds can shorten the free week with the TRIAL_DURATION_MINUTES secret; unset = 7 days.
+// Read per request so changing the secret needs no redeploy or app rebuild.
+function trialMinutes(): number {
+  const minutes = Number(Deno.env.get("TRIAL_DURATION_MINUTES"));
+  return Number.isFinite(minutes) && minutes >= 1 ? minutes : DEFAULT_TRIAL_MINUTES;
+}
+
+app.post("/trial/start", async (c) => {
+  const token = (c.req.header("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  if (!token) return c.json({ error: "Missing bearer token" }, 401);
+
+  const rcKey = Deno.env.get("REVENUECAT_SECRET_KEY");
+  if (!rcKey) {
+    console.error("[trial/start] REVENUECAT_SECRET_KEY not set");
+    return c.json({ error: "Free trial is unavailable right now" }, 500);
+  }
+
+  const admin = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  );
+  const { data, error } = await admin.auth.getUser(token);
+  if (error || !data.user) return c.json({ error: "Invalid session" }, 401);
+
+  const headers = { Authorization: `Bearer ${rcKey}`, "Content-Type": "application/json" };
+  const customerUrl = `${RC_API}/subscribers/${encodeURIComponent(data.user.id)}`;
+
+  try {
+    const lookup = await fetch(customerUrl, { headers, signal: AbortSignal.timeout(10000) });
+    if (!lookup.ok) {
+      console.error("[trial/start] RevenueCat lookup failed:", lookup.status);
+      return c.json({ error: "Could not start your free trial. Please try again." }, 502);
+    }
+    const { subscriber } = await lookup.json() as {
+      subscriber?: { entitlements?: object; subscriptions?: object; non_subscriptions?: object };
+    };
+    const everHadAccess = [subscriber?.entitlements, subscriber?.subscriptions, subscriber?.non_subscriptions]
+      .some((record) => Object.keys(record ?? {}).length > 0);
+    if (everHadAccess) return c.json({ error: "Free trial already used" }, 409);
+
+    const minutes = trialMinutes();
+    const endsAt = Date.now() + minutes * 60 * 1000;
+    const grant = await fetch(
+      `${customerUrl}/entitlements/${encodeURIComponent(PRO_ENTITLEMENT)}/promotional`,
+      { method: "POST", headers, body: JSON.stringify({ end_time_ms: endsAt }), signal: AbortSignal.timeout(10000) },
+    );
+    if (!grant.ok) {
+      console.error("[trial/start] RevenueCat grant failed:", grant.status, await grant.text());
+      return c.json({ error: "Could not start your free trial. Please try again." }, 502);
+    }
+
+    console.log("[trial/start] granted", minutes, "minutes to", data.user.id);
+    return c.json({ ok: true, endsAt });
+  } catch (err) {
+    console.error("[trial/start] unexpected error:", err instanceof Error ? err.message : String(err));
+    return c.json({ error: "Could not start your free trial. Please try again." }, 502);
+  }
+});
+
 // Permanent account deletion (Apple guideline 5.1.1(v)). The client can't delete an auth user, so this
 // verifies the caller's own JWT and removes them with the service role. Recipes, profile and outgoing
 // friend links cascade from auth.users; incoming links (friend_user_id has no FK) are removed explicitly.

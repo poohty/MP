@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -25,7 +26,7 @@ const SLOW_LOAD_THRESHOLD_MS = 2000;
 type PlanId = 'trial' | 'monthly' | 'yearly';
 
 export default function PaywallScreen() {
-  const { offerings, purchase, restore, isLoading, refetchOfferings } = useSubscription();
+  const { offerings, purchase, restore, isLoading, refetchOfferings, canStartTrial, startFreeTrial } = useSubscription();
   const { logout } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<PlanId>('trial');
   const [isPurchasing, setIsPurchasing] = useState(false);
@@ -52,8 +53,12 @@ export default function PaywallScreen() {
     (p) => p.packageType === 'ANNUAL' || p.identifier.toLowerCase().includes('yearly') || p.identifier.toLowerCase().includes('annual')
   );
 
+  // The free week can only be used once per account; after that only the paid plans remain.
+  const plan: PlanId = selectedPlan === 'trial' && !canStartTrial ? 'yearly' : selectedPlan;
+  const storeAccount = Platform.OS === 'ios' ? 'Apple ID account' : 'Google Play account';
+
   const selectedPackage: PurchasesPackage | undefined =
-    selectedPlan === 'monthly' ? monthlyPkg : yearlyPkg;
+    plan === 'monthly' ? monthlyPkg : yearlyPkg;
 
   const monthlyPrice = monthlyPkg?.product.priceString ?? '$9.00';
   const yearlyPrice = yearlyPkg?.product.priceString ?? '$90.00';
@@ -85,31 +90,29 @@ export default function PaywallScreen() {
     }
   }, [refetchOfferings]);
 
+  const handleStartFreeWeek = useCallback(async (): Promise<void> => {
+    setIsPurchasing(true);
+    try {
+      await startFreeTrial();
+      router.replace('/(tabs)');
+    } catch (err) {
+      Alert.alert('Free Week', err instanceof Error ? err.message : 'We could not start your free week. Please try again.');
+    } finally {
+      setIsPurchasing(false);
+    }
+  }, [startFreeTrial]);
+
   const handleSubscribe = useCallback(async (): Promise<void> => {
+    if (plan === 'trial') {
+      await handleStartFreeWeek();
+      return;
+    }
     if (!selectedPackage) {
       Alert.alert('Not Available', 'Subscription packages are not loaded yet. Please try again shortly.');
       return;
     }
-
-    if (selectedPlan === 'trial') {
-      Alert.alert(
-        'Start 7-Day Free Trial',
-        `After your 7-day free trial, you will automatically be charged ${yearlyPrice} for an annual subscription. Cancel anytime in your App Store Account Settings before the trial ends to avoid being charged.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Continue',
-            style: 'default',
-            onPress: () => {
-              void executeSubscribe(selectedPackage);
-            },
-          },
-        ]
-      );
-    } else {
-      await executeSubscribe(selectedPackage);
-    }
-  }, [selectedPlan, selectedPackage, executeSubscribe]);
+    await executeSubscribe(selectedPackage);
+  }, [plan, selectedPackage, executeSubscribe, handleStartFreeWeek]);
 
   const handleRestore = useCallback(async (): Promise<void> => {
     setIsRestoring(true);
@@ -155,7 +158,9 @@ export default function PaywallScreen() {
           </View>
           <Text style={styles.title}>Meal Planner Roulette</Text>
           <Text style={styles.subtitle}>
-            Choose a plan to get started. Cancel anytime.
+            {canStartTrial
+              ? 'Try everything free for 7 days, then choose a plan.'
+              : 'Choose a plan to keep using Meal Planner Roulette.'}
           </Text>
         </View>
 
@@ -202,35 +207,37 @@ export default function PaywallScreen() {
           <>
             {/* Plan Cards Stack */}
             <View style={styles.plansColumn}>
-              {/* Trial */}
-              <TouchableOpacity
-                style={[styles.planListItem, selectedPlan === 'trial' && styles.planListItemSelected]}
-                onPress={() => setSelectedPlan('trial')}
-                activeOpacity={0.8}
-              >
-                <View style={styles.planListLeft}>
-                  <View style={[styles.radio, selectedPlan === 'trial' && styles.radioSelected]}>
-                    {selectedPlan === 'trial' && <View style={styles.radioInner} />}
+              {/* Free week: granted by our server, no store purchase, no payment method */}
+              {canStartTrial && (
+                <TouchableOpacity
+                  style={[styles.planListItem, plan === 'trial' && styles.planListItemSelected]}
+                  onPress={() => setSelectedPlan('trial')}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.planListLeft}>
+                    <View style={[styles.radio, plan === 'trial' && styles.radioSelected]}>
+                      {plan === 'trial' && <View style={styles.radioInner} />}
+                    </View>
+                    <View style={styles.planListText}>
+                      <Text style={styles.planListLabel}>7-Day Free Week</Text>
+                      <Text style={styles.planListSub}>Full access. No payment needed, nothing to cancel.</Text>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={styles.planListLabel}>Premium: 1 Week Free Trial</Text>
-                    <Text style={styles.planListSub}>7 Days Free, then auto-renews at {yearlyPrice}/year</Text>
+                  <View style={styles.trialBadge}>
+                    <Text style={styles.trialBadgeText}>Free</Text>
                   </View>
-                </View>
-                <View style={styles.trialBadge}>
-                  <Text style={styles.trialBadgeText}>Try Free</Text>
-                </View>
-              </TouchableOpacity>
+                </TouchableOpacity>
+              )}
 
               {/* Monthly */}
               <TouchableOpacity
-                style={[styles.planListItem, selectedPlan === 'monthly' && styles.planListItemSelected]}
+                style={[styles.planListItem, plan === 'monthly' && styles.planListItemSelected]}
                 onPress={() => setSelectedPlan('monthly')}
                 activeOpacity={0.8}
               >
                 <View style={styles.planListLeft}>
-                  <View style={[styles.radio, selectedPlan === 'monthly' && styles.radioSelected]}>
-                    {selectedPlan === 'monthly' && <View style={styles.radioInner} />}
+                  <View style={[styles.radio, plan === 'monthly' && styles.radioSelected]}>
+                    {plan === 'monthly' && <View style={styles.radioInner} />}
                   </View>
                   <View>
                     <Text style={styles.planListLabel}>Premium Monthly Plan</Text>
@@ -241,13 +248,13 @@ export default function PaywallScreen() {
 
               {/* Yearly (Pay Upfront) */}
               <TouchableOpacity
-                style={[styles.planListItem, selectedPlan === 'yearly' && styles.planListItemSelected]}
+                style={[styles.planListItem, plan === 'yearly' && styles.planListItemSelected]}
                 onPress={() => setSelectedPlan('yearly')}
                 activeOpacity={0.8}
               >
                 <View style={styles.planListLeft}>
-                  <View style={[styles.radio, selectedPlan === 'yearly' && styles.radioSelected]}>
-                    {selectedPlan === 'yearly' && <View style={styles.radioInner} />}
+                  <View style={[styles.radio, plan === 'yearly' && styles.radioSelected]}>
+                    {plan === 'yearly' && <View style={styles.radioInner} />}
                   </View>
                   <View>
                     <Text style={styles.planListLabel}>Premium Annual Plan</Text>
@@ -268,18 +275,16 @@ export default function PaywallScreen() {
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <Text style={styles.ctaText}>
-                  {selectedPlan === 'trial' ? 'Start Free Trial' : 'Subscribe Now'}
+                  {plan === 'trial' ? 'Start Free Week' : 'Subscribe Now'}
                 </Text>
               )}
             </TouchableOpacity>
 
-            {/* Auto-renewing subscription trial disclosure for Apple Guideline 3.1.2(c) */}
+            {/* Free-week terms (Apple 3.1.1) and auto-renewal disclosure (Apple 3.1.2) */}
             <Text style={styles.trialNote}>
-              {selectedPlan === 'trial'
-                ? `A 7-day free trial is included. After the trial ends, a payment of ${yearlyPrice} will be automatically initiated for an annual subscription. Your subscription automatically renews unless canceled at least 24 hours before the end of the current period. Manage or cancel anytime in your Apple ID Account Settings.`
-                : selectedPlan === 'monthly'
-                ? `A payment of ${monthlyPrice} will be automatically initiated for a monthly subscription. Your subscription automatically renews unless canceled at least 24 hours before the end of the current period. Manage or cancel anytime in your Apple ID Account Settings.`
-                : `A payment of ${yearlyPrice} will be automatically initiated for an annual subscription. Your subscription automatically renews unless canceled at least 24 hours before the end of the current period. Manage or cancel anytime in your Apple ID Account Settings.`}
+              {plan === 'trial'
+                ? `Free for 7 days with full access. No payment method is needed and there is nothing to cancel. When the 7 days end, the app locks until you choose Monthly (${monthlyPrice}/month) or Yearly (${yearlyPrice}/year), paid through your ${storeAccount}.`
+                : `A payment of ${plan === 'monthly' ? monthlyPrice : yearlyPrice} will be charged to your ${storeAccount} at confirmation of purchase. Your subscription renews automatically every ${plan === 'monthly' ? 'month' : 'year'} from the day you subscribe, unless canceled at least 24 hours before the end of the current period. Manage or cancel anytime in your ${storeAccount} settings.`}
             </Text>
 
             {/* Legal Links (Terms & Privacy) immediately below the disclosure */}
@@ -448,6 +453,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
+  },
+  planListText: {
     flex: 1,
   },
   radio: {
