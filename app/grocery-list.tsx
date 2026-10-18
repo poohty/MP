@@ -10,6 +10,7 @@ import Button from '@/components/Button';
 import { useWalkthrough, WalkthroughStep } from '@/hooks/useWalkthrough';
 import WalkthroughModal from '@/components/WalkthroughModal';
 import { fetchWithRetry } from '@/lib/fetch-with-timeout';
+import { findNearbyStores, estimateStorePrices } from '@/lib/nearby-stores';
 
 const GROCERY_LIST_STEPS: WalkthroughStep[] = [
   { title: 'Check items off', body: 'Tap the checkbox to mark items as you shop.' },
@@ -166,236 +167,18 @@ export default function GroceryListScreen() {
         console.log('Reverse geocoding failed:', e);
       }
       
-      // Each radius is one slow AI call, so search 5 miles first and widen to 20 only if needed.
-      const searchRadii = [5, 20];
+      // Real stores come from OpenStreetMap; the AI only estimates prices for them.
       let finalComparisons: any[] = [];
       let searchRequestFailed = false;
-      
-      for (const radius of searchRadii) {
-        console.log(`Searching for stores within ${radius} mile radius...`);
-        
-        // Use a more targeted approach to find real stores with Google search simulation
-        let response: Response;
-        try {
-        response = await fetchWithRetry('https://toolkit.rork.com/text/llm/', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messages: [
-              {
-                role: 'system',
-                content: `You are a Google Maps Places API simulator that finds REAL grocery stores. You must act as if you have direct access to Google Maps data and return only stores that actually exist.
-
-Your task: Simulate a Google Places API search for "grocery stores" near the exact coordinates provided.
-
-COORDINATES: ${latitude}, ${longitude}
-SEARCH RADIUS: ${radius} miles
-GPS ACCURACY: ${accuracy || 'unknown'} meters
-
-MAJOR GROCERY CHAINS TO SEARCH FOR:
-- Walmart Supercenter, Walmart Neighborhood Market
-- Kroger, King Soopers, Ralphs, Fred Meyer, Harris Teeter
-- Safeway, Albertsons, Vons, Pavilions, Tom Thumb
-- Publix Super Markets
-- H-E-B, Central Market
-- Meijer
-- Target (with grocery)
-- Whole Foods Market
-- Trader Joe's
-- Aldi
-- Food Lion, Giant Food, Stop & Shop
-- Wegmans, ShopRite, Giant Eagle
-- IGA (Independent Grocers Alliance)
-- Piggly Wiggly
-- Winn-Dixie, BI-LO
-- Food 4 Less, Save-A-Lot
-- Price Chopper, Market Basket, Hannaford
-- Regional chains and independent stores
-
-SEARCH METHODOLOGY:
-1. Start with major chains that have widespread coverage
-2. Look for regional chains specific to the area (based on coordinates)
-3. Include independent grocery stores and markets
-4. Calculate precise distances from ${latitude}, ${longitude}
-5. Only include stores within ${radius} miles
-
-RETURN FORMAT (JSON array only):
-[
-  {
-    "storeName": "[Chain Name + Location Identifier]",
-    "address": "[Street Number] [Street Name], [City], [State] [ZIP]",
-    "distance": [miles from coordinates as decimal],
-    "drivingTime": "[X] min",
-    "phone": "(XXX) XXX-XXXX" or "Not available",
-    "totalPrice": [realistic total for grocery list],
-    "items": [{"name": "item", "price": X.XX, "available": true}]
-  }
-]
-
-IMPORTANT: If you cannot find any real stores within ${radius} miles of ${latitude}, ${longitude}, return an empty array: []`
-              },
-              {
-                role: 'user',
-                content: `GOOGLE SEARCH SIMULATION:
-
-EXACT SEARCH QUERY: "grocery stores near ${locationContext || `${latitude}, ${longitude}`}"
-COORDINATES: ${latitude}, ${longitude}
-RADIUS: ${radius} miles maximum
-LOCATION CONTEXT: ${locationContext || 'Unknown location'}
-GPS ACCURACY: ${accuracy || 'unknown'}m
-
-You must simulate what would appear if someone searched Google Maps for "grocery stores" at these exact coordinates.
-
-METHODOLOGY:
-1. Use the coordinates ${latitude}, ${longitude} as the center point
-2. Search for major grocery chains that have locations in this area
-3. Include regional chains common to this geographic region
-4. Find independent grocery stores and markets
-5. Calculate precise distances from the coordinates
-6. Only include stores within ${radius} miles
-
-STORE TYPES TO SEARCH:
-• Major chains: Walmart, Kroger, Safeway, Albertsons, Publix, H-E-B, Meijer, Target
-• Warehouse clubs: Costco, Sam's Club, BJ's Wholesale
-• Premium: Whole Foods, Fresh Market, Harris Teeter
-• Discount: Aldi, Food 4 Less, Save-A-Lot, WinCo
-• Regional chains based on location
-• Independent grocery stores and markets
-
-PRICING FOR ITEMS:
-${itemNames.join(', ')}
-
-Provide realistic pricing variations:
-- Discount stores: 10-20% below average
-- Premium stores: 15-30% above average  
-- Regular chains: Market average pricing
-
-CRITICAL: Only return stores that would actually exist at coordinates ${latitude}, ${longitude}. If this is a remote area, return empty array [].
-
-FORMAT: JSON array only, no explanations or markdown.`
-              }
-            ]
-          })
-        });
-        } catch (requestError) {
-          console.log(`Store search for ${radius} miles failed:`, requestError);
-          searchRequestFailed = true;
-          continue;
+      try {
+        const nearby = await findNearbyStores(latitude, longitude);
+        console.log(`Found ${nearby.length} real stores near ${latitude}, ${longitude}`);
+        if (nearby.length > 0) {
+          finalComparisons = await estimateStorePrices(nearby, itemNames);
         }
-
-        const data = await response.json();
-        console.log(`Raw AI response for ${radius} mile radius:`, data.completion);
-        
-        let comparisons;
-        try {
-          // Clean the response to ensure it's valid JSON
-          let cleanedResponse = data.completion.trim();
-          
-          // Remove markdown code blocks if present
-          if (cleanedResponse.startsWith('```json')) {
-            cleanedResponse = cleanedResponse.replace(/```json\n?/, '').replace(/\n?```$/, '');
-          } else if (cleanedResponse.startsWith('```')) {
-            cleanedResponse = cleanedResponse.replace(/```\n?/, '').replace(/\n?```$/, '');
-          }
-          
-          // Remove any leading/trailing whitespace and newlines
-          cleanedResponse = cleanedResponse.trim();
-          
-          console.log(`Cleaned response for ${radius} miles:`, cleanedResponse);
-          
-          comparisons = JSON.parse(cleanedResponse);
-          
-          // Validate the structure
-          if (!Array.isArray(comparisons)) {
-            console.log(`Invalid response format for ${radius} miles - not an array`);
-            comparisons = [];
-          }
-          
-          // Validate and filter stores with strict criteria
-          comparisons = comparisons.filter((store: any) => {
-            // Validate store has required fields
-            if (!store || !store.storeName || !store.address) {
-              console.log('Rejected store: missing name or address', store);
-              return false;
-            }
-            
-            // Validate distance is reasonable and within radius
-            if (!store.distance || typeof store.distance !== 'number' || 
-                store.distance <= 0 || store.distance > radius) {
-              console.log(`Rejected store: invalid distance ${store.distance} (radius: ${radius})`, store.storeName);
-              return false;
-            }
-            
-            // Validate items array exists and has content
-            if (!Array.isArray(store.items) || store.items.length === 0) {
-              console.log('Rejected store: no items array', store.storeName);
-              return false;
-            }
-            
-            // Validate address looks real and specific
-            if (store.address.includes('estimated') || 
-                store.address.includes('Local area') ||
-                store.address.includes('nearby') ||
-                store.address.includes('approximate') ||
-                !store.address.includes(',') || // Must have city/state
-                store.address.length < 20) { // Must be reasonably detailed
-              console.log('Rejected store: invalid/estimated address', store.storeName, store.address);
-              return false;
-            }
-            
-            // Validate store name is not generic
-            if (store.storeName.includes('Local') || 
-                store.storeName.includes('Nearby') ||
-                store.storeName.includes('Area') ||
-                store.storeName.length < 3) {
-              console.log('Rejected store: generic name', store.storeName);
-              return false;
-            }
-            
-            return true;
-          }).map((store: any, index: number) => ({
-            storeName: store.storeName,
-            address: store.address,
-            distance: Math.round(store.distance * 10) / 10, // Round to 1 decimal
-            drivingTime: store.drivingTime || `${Math.ceil(store.distance * 2)} min`,
-            phone: store.phone || 'Phone not available',
-            totalPrice: typeof store.totalPrice === 'number' ? store.totalPrice : 
-                       store.items.reduce((sum: number, item: any) => sum + (item.price || 0), 0),
-            items: store.items.map((item: any) => ({
-              name: item.name || 'Unknown item',
-              price: typeof item.price === 'number' ? item.price : 0,
-              available: item.available !== false
-            }))
-          }));
-          
-          console.log(`Found ${comparisons.length} valid stores within ${radius} miles`);
-          
-          // If we found at least 3 stores, we're done
-          if (comparisons.length >= 3) {
-            finalComparisons = comparisons.slice(0, 3); // Take only first 3
-            break;
-          }
-          // If we found some stores but less than 3, continue to next radius
-          else if (comparisons.length > 0) {
-            finalComparisons = comparisons;
-            // Continue searching for more stores in larger radius
-          }
-          
-        } catch (parseError) {
-          console.error(`Failed to parse store response for ${radius} miles:`, parseError);
-          console.error('Raw response that failed:', data.completion);
-          
-          // Try to extract any useful information from malformed response
-          if (data.completion && typeof data.completion === 'string') {
-            const storeNameMatches = data.completion.match(/"storeName":\s*"([^"]+)"/g);
-            if (storeNameMatches && storeNameMatches.length > 0) {
-              console.log(`Found ${storeNameMatches.length} store names in malformed response`);
-            }
-          }
-          // Continue to next radius
-        }
+      } catch (searchError) {
+        console.log('Store search failed:', searchError);
+        searchRequestFailed = true;
       }
       
       // If no real stores found after all radii, show detailed error
