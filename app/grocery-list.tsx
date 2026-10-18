@@ -457,9 +457,11 @@ FORMAT: JSON array only, no explanations or markdown.`
         console.log('Reverse geocoding failed:', e);
       }
       
+      const closestStore = [...finalComparisons].sort((x, y) => x.distance - y.distance)[0];
+
       Alert.alert(
         'Stores Found! 🛒',
-        `Found ${finalComparisons.length} verified grocery store${finalComparisons.length === 1 ? '' : 's'} near your exact location:\n\n📍 ${locationDescription}\n🎯 ${latitude.toFixed(4)}, ${longitude.toFixed(4)}\n📏 GPS Accuracy: ${accuracy ? Math.round(accuracy) : 'unknown'}m\n\nStores are sorted by total price (lowest first).\n\nClosest store: ${finalComparisons[0].storeName} (${finalComparisons[0].distance} miles)`,
+        `Found ${finalComparisons.length} verified grocery store${finalComparisons.length === 1 ? '' : 's'} near your exact location:\n\n📍 ${locationDescription}\n🎯 ${latitude.toFixed(4)}, ${longitude.toFixed(4)}\n📏 GPS Accuracy: ${accuracy ? Math.round(accuracy) : 'unknown'}m\n\nStores are sorted by total price (lowest first).\n\nClosest store: ${closestStore.storeName} (${closestStore.distance} miles)`,
         [{ text: 'OK' }]
       );
     } catch (error) {
